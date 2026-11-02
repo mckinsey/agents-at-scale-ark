@@ -28,7 +28,16 @@ from ark_sdk.labels import (
     validate_updated_tags,
 )
 from ark_sdk.impersonation_patch import apply as _apply_impersonation_patch
-from ark_sdk.secret_scope import SecretScope, validate_secret_name
+from ark_sdk.secret_scope import (
+    SCOPE_LABEL,
+    SHARED_SCOPE,
+    SecretScope,
+    SecretScopeChangeError,
+    SecretScopeKind,
+    display_name,
+    scope_kind,
+    validate_secret_name,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -254,13 +263,49 @@ def _build_labels_and_annotations(
 
 
 def _to_secret_metadata(metadata) -> Dict:
-    """Extract description/alias/labels shared by all Secret client responses."""
+    """Extract the metadata shared by all Secret client responses."""
     annotations = metadata.annotations or {}
     return {
+        "display_name": display_name(metadata.name),
+        "scope": scope_kind(metadata.labels),
         "description": annotations.get(DESCRIPTION_ANNOTATION),
         "alias": annotations.get(ALIAS_ANNOTATION),
         "labels": labels_to_tags(metadata.labels),
     }
+
+
+def _scope_change_labels(
+    client_scope: SecretScope, labels: Optional[Dict[str, str]], scope: Optional[SecretScopeKind]
+) -> Optional[Dict[str, str]]:
+    """Labels that move a Secret to scope; personal secrets can be shared, never the reverse."""
+    current = scope_kind(labels)
+    if scope is None or scope == current:
+        return None
+    if scope == "shared" and current == "personal":
+        if not client_scope.includes_shared:
+            raise SecretScopeChangeError("This scope cannot share secrets")
+        return {SCOPE_LABEL: SHARED_SCOPE}
+    if scope == "personal":
+        raise SecretScopeChangeError("A shared secret cannot be made personal")
+    raise SecretScopeChangeError(f"Invalid secret scope '{scope}'")
+
+
+async def read_secret_labels(namespace: str, name: str) -> Optional[Dict[str, str]]:
+    """Read the labels of a Secret as the service account, ignoring any scope.
+
+    Returns None when the Secret does not exist. Callers use this to decide
+    whether a reference to the Secret is allowed, so it never impersonates.
+    """
+    await init_k8s()
+    async with create_api_client() as api:
+        v1 = client.CoreV1Api(api)
+        try:
+            secret = await v1.read_namespaced_secret(name=name, namespace=namespace)
+        except ApiException as e:
+            if e.status == 404:
+                return None
+            raise
+        return dict(secret.metadata.labels or {})
 
 
 class SecretClient:
@@ -346,9 +391,17 @@ class SecretClient:
         description: Optional[str] = None,
         alias: Optional[str] = None,
         labels: Optional[List[str]] = None,
+        personal: bool = False,
     ):
-        """Create a new secret."""
+        """Create a new secret.
+
+        A personal secret is stored as u-<owner hash>-<name> and is only
+        visible to its owner, so the scope must carry a personal scope.
+        """
         validate_secret_name(name)
+        system_labels = self.scope.create_labels(personal=personal)
+        if personal:
+            name = self.scope.personal_name(name)
         validated_data = self.validate_and_encode_token(string_data)
         await init_k8s()
         async with create_api_client() as api:
@@ -359,7 +412,7 @@ class SecretClient:
                 description,
                 alias,
                 [validate_tag(tag) for tag in (labels or [])],
-                system_labels=self.scope.create_labels(),
+                system_labels=system_labels,
             )
             secret = client.V1Secret(
                 api_version="v1",
@@ -436,11 +489,14 @@ class SecretClient:
         description: Optional[str] = None,
         alias: Optional[str] = None,
         labels: Optional[List[str]] = None,
+        scope: Optional[SecretScopeKind] = None,
     ):
         """Update an existing secret.
 
-        string_data is the one partial field: omit it to leave the secret's
-        value unchanged. description, alias and labels are a full replace,
+        string_data and scope are partial: omit them to leave the secret's
+        value and scope unchanged. scope="shared" promotes a personal secret
+        and keeps its name; making a shared secret personal raises
+        SecretScopeChangeError. description, alias and labels are a full replace,
         same contract as ConfigurationClient.update_configuration - omitting
         any of them clears it, so callers must send the complete desired
         state for those fields on every call.
@@ -451,6 +507,7 @@ class SecretClient:
             v1 = client.CoreV1Api(api)
 
             existing_secret = await self._read_secret_in_scope(v1, name)
+            system_labels = _scope_change_labels(self.scope, existing_secret.metadata.labels, scope)
 
             if string_data is not None:
                 existing_secret.string_data = self.validate_and_encode_token(string_data)
@@ -462,6 +519,7 @@ class SecretClient:
                 validate_updated_tags(labels or [], existing_tags),
                 existing_labels=existing_secret.metadata.labels,
                 existing_annotations=existing_secret.metadata.annotations,
+                system_labels=system_labels,
             )
             existing_secret.metadata.labels = k8s_labels
             existing_secret.metadata.annotations = annotations

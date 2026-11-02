@@ -4884,6 +4884,8 @@ export interface components {
             } | null;
             /** Description */
             description?: string | null;
+            /** Display Name */
+            display_name: string;
             /** Id */
             id: string;
             /**
@@ -4898,6 +4900,11 @@ export interface components {
             labels: string[];
             /** Name */
             name: string;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "shared" | "personal";
             /** Secret Length */
             secret_length: number;
             /** Type */
@@ -4926,6 +4933,8 @@ export interface components {
             } | null;
             /** Description */
             description?: string | null;
+            /** Display Name */
+            display_name: string;
             /** Id */
             id: string;
             /**
@@ -4935,6 +4944,11 @@ export interface components {
             labels: string[];
             /** Name */
             name: string;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "shared" | "personal";
         };
         /**
          * SecretUpdateRequest
