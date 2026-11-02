@@ -10,6 +10,7 @@ import (
 
 	"github.com/openai/openai-go"
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/crossns"
 	"mckinsey.com/ark/internal/eventing"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -120,6 +121,10 @@ func NewMemoryForQuery(ctx context.Context, k8sClient client.Client, memoryRef *
 		memoryNamespace = resolveNamespace(memoryRef.Namespace, namespace)
 	}
 
+	if err := checkCrossNamespaceMemory(ctx, k8sClient, memoryName, memoryNamespace, namespace); err != nil {
+		return nil, err
+	}
+
 	memory, err := NewMemoryWithConfig(ctx, k8sClient, memoryName, memoryNamespace, config, memoryRecorder)
 	if err != nil {
 		return nil, err
@@ -140,6 +145,17 @@ func getMemoryResource(ctx context.Context, k8sClient client.Client, name, names
 	}
 
 	return &memory, nil
+}
+
+func checkCrossNamespaceMemory(ctx context.Context, k8sClient client.Client, name, memoryNamespace, fromNamespace string) error {
+	if memoryNamespace == fromNamespace {
+		return nil
+	}
+	memory, err := getMemoryResource(ctx, k8sClient, name, memoryNamespace)
+	if err != nil || !crossns.Allowed(memory, fromNamespace) {
+		return crossns.DeniedError("Memory", memoryNamespace, name, fromNamespace)
+	}
+	return nil
 }
 
 func resolveNamespace(refNamespace, defaultNamespace string) string {

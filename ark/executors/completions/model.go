@@ -11,6 +11,7 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/common"
+	"mckinsey.com/ark/internal/crossns"
 	"mckinsey.com/ark/internal/eventing"
 	"mckinsey.com/ark/internal/telemetry"
 )
@@ -52,6 +53,9 @@ func LoadModel(ctx context.Context, k8sClient client.Client, modelSpec interface
 		return nil, fmt.Errorf("failed to resolve model spec: %w", err)
 	}
 	modelCRD, err := loadModelCRD(ctx, k8sClient, modelName, namespace)
+	if namespace != defaultNamespace && (err != nil || !crossns.Allowed(modelCRD, defaultNamespace)) {
+		return nil, crossns.DeniedError("Model", namespace, modelName, defaultNamespace)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to load model CRD %s in namespace %s: %w", modelName, namespace, err)
 	}
