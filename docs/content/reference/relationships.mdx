@@ -70,11 +70,31 @@ References resolve within a single namespace unless the reference type carries i
 
 | Reference | Cross-namespace? |
 | --- | --- |
-| `Agent.spec.modelRef` | Yes — honours `modelRef.namespace` (defaults to the agent's namespace). |
+| `Agent.spec.modelRef` | Only with opt-in — `modelRef.namespace` (defaults to the agent's namespace) may name another namespace only when the target `Model` lists the agent's namespace in the `ark.mckinsey.com/allowed-namespaces` annotation. |
 | `Agent.spec.executionEngine` | Yes — honours `executionEngine.namespace` (except the built-in `a2a` engine, which needs no resource). |
-| `Query.spec.memory` | Yes — honours `memory.namespace` (resolved by the execution engine). Don't use it to reach a `Memory` backed by another namespace's ark-broker: the broker serves only its own namespace (see [Broker storage isolation](/operations-guide/tenant-namespace-management#broker-storage-isolation)). |
+| `Query.spec.memory` | Only with opt-in — `memory.namespace` may name another namespace only when the target `Memory` lists the query's namespace in the `ark.mckinsey.com/allowed-namespaces` annotation. Don't use it to reach a `Memory` backed by another namespace's ark-broker: the broker serves only its own namespace (see [Broker storage isolation](/operations-guide/tenant-namespace-management#broker-storage-isolation)). |
 | `Query.spec.target` / `spec.selector` | **No** — resolved in the query's namespace. There is no namespace field on a target. |
 | `Team.spec.members[]` | **No** — members must live in the team's namespace. |
+
+The owner of the target decides who may use it. The annotation value is a comma-separated list of namespaces, or `*` for every namespace; entries are matched exactly, with surrounding spaces ignored:
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Model
+metadata:
+  name: shared-gpt
+  namespace: platform
+  annotations:
+    ark.mckinsey.com/allowed-namespaces: "team-a, team-b"
+```
+
+Without the annotation, the admission webhook rejects an `Agent` or `Query` whose reference names another namespace, and the completions executor refuses to load the target at run time, which also covers objects created before the check existed. The rejection reads the same whether the target is missing or does not list the namespace:
+
+```text
+cross-namespace reference to Model platform/shared-gpt is not allowed: the Model must list namespace team-c in annotation ark.mckinsey.com/allowed-namespaces
+```
+
+Removing a namespace from the annotation stops new queries from that namespace using the target. Existing `Agent` and `Query` objects are not rewritten, updates that leave the reference unchanged are still accepted, and an existing agent's `Available` condition reflects the change only at its next reconcile. Deleting a `Query` whose `Memory` no longer lists its namespace skips the broker message cleanup for that query.
 
 Because every resource is namespaced, a namespace acts as a tenant boundary. See [Tenant and Namespace Management](/operations-guide/tenant-namespace-management).
 
