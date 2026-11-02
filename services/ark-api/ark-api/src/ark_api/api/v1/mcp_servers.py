@@ -6,6 +6,7 @@ from typing import Optional
 from ark_sdk.models.mcp_server_v1alpha1 import MCPServerV1alpha1
 from ark_sdk.models.mcp_server_v1alpha1_spec import MCPServerV1alpha1Spec
 from ark_sdk.impersonation import ImpersonationConfig
+from ark_sdk.labels import with_name_label
 from ark_sdk.secret_scope import SecretScope
 
 from ark_sdk.client import with_ark_client
@@ -163,7 +164,7 @@ async def create_mcp_server(request: Request, body: MCPServerCreateRequest, name
             metadata={
                 "name": body.name,
                 "namespace": namespace,
-                "labels": body.labels,
+                "labels": with_name_label(body.labels, body.name),
                 "annotations": body.annotations
             },
             spec=MCPServerV1alpha1Spec(**mcp_server_spec)
@@ -219,6 +220,9 @@ async def update_mcp_server(request: Request, mcp_server_name: str, body: MCPSer
             existing_dict["metadata"]["labels"] = body.labels
         if body.annotations is not None:
             existing_dict["metadata"]["annotations"] = body.annotations
+        existing_dict["metadata"]["labels"] = with_name_label(
+            existing_dict["metadata"].get("labels"), mcp_server_name
+        )
             
         # Update spec if provided
         if body.spec is not None:
