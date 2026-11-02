@@ -1291,6 +1291,21 @@ class TokenSecretLabelGateTests(_AuthBase):
                 self.assertTrue(response.json()["noop"])
                 self._assert_untouched(v1)
 
+    @patch("ark_api.api.v1.mcp_auth.strip_mcpserver_auth_annotations", new_callable=AsyncMock)
+    def test_logout_reports_a_secret_replaced_during_the_request(self, mock_strip):
+        from kubernetes_asyncio.client.rest import ApiException
+
+        v1 = _core_v1_with(_stored_secret(self.LABELLED))
+        v1.delete_namespaced_secret = AsyncMock(side_effect=ApiException(status=409))
+
+        response = self._call(
+            v1, "post", "/v1/mcp-servers/notion-mcp/auth/logout", json={"delete_secret": True}
+        )
+
+        self.assertEqual(response.status_code, 409, response.text)
+        self.assertIn("changed while ark-api was updating it", response.json()["detail"])
+        mock_strip.assert_not_awaited()
+
     def test_status_rejects_an_unlabelled_secret(self):
         v1 = _core_v1_with(_stored_secret(self.UNLABELLED))
         api_patch, core_patch = _patch_persistence_k8s(v1)

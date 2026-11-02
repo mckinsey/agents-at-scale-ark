@@ -134,7 +134,11 @@ class FlowState:
             return True
 
 
-class NotATokenSecretError(Exception):
+class TokenSecretError(Exception):
+    pass
+
+
+class NotATokenSecretError(TokenSecretError):
     def __init__(self, namespace: str, secret_name: str) -> None:
         self.namespace = namespace
         self.secret_name = secret_name
@@ -142,6 +146,16 @@ class NotATokenSecretError(Exception):
             f"Secret {secret_name!r} in namespace {namespace!r} is not an MCP token "
             f"Secret managed by Ark. Label it {TOKEN_SECRET_LABEL}=true or point "
             f"spec.authorization.tokenSecretRef at another Secret."
+        )
+
+
+class TokenSecretChangedError(TokenSecretError):
+    def __init__(self, namespace: str, secret_name: str) -> None:
+        self.namespace = namespace
+        self.secret_name = secret_name
+        super().__init__(
+            f"Secret {secret_name!r} in namespace {namespace!r} changed while ark-api "
+            f"was updating it. Retry the request."
         )
 
 
@@ -166,14 +180,27 @@ async def _read_token_secret(v1, namespace: str, secret_name: str):
 async def _require_token_secret(v1, namespace: str, secret_name: str):
     secret = await _read_token_secret(v1, namespace, secret_name)
     if secret is None:
-        raise ApiException(status=404, reason="Not Found")
+        raise TokenSecretChangedError(namespace, secret_name)
     return secret
 
 
-def _pinned_patch(secret, body: dict) -> dict:
+def _is_uid_mismatch(e: ApiException) -> bool:
+    if e.status == 409:
+        return True
+    return e.status == 422 and "metadata.uid" in str(e.body or "")
+
+
+async def _patch_pinned(v1, namespace: str, secret_name: str, secret, body: dict) -> None:
     metadata = dict(body.get("metadata") or {})
     metadata["uid"] = secret.metadata.uid
-    return {**body, "metadata": metadata}
+    try:
+        await v1.patch_namespaced_secret(
+            name=secret_name, namespace=namespace, body={**body, "metadata": metadata}
+        )
+    except ApiException as e:
+        if _is_uid_mismatch(e):
+            raise TokenSecretChangedError(namespace, secret_name) from e
+        raise
 
 
 def _decode_b64(value: Optional[str]) -> Optional[str]:
@@ -270,9 +297,7 @@ async def write_flow_state(
                 raise
 
         existing = await _require_token_secret(v1, namespace, secret_name)
-        await v1.patch_namespaced_secret(
-            name=secret_name, namespace=namespace, body=_pinned_patch(existing, body)
-        )
+        await _patch_pinned(v1, namespace, secret_name, existing, body)
         logger.info("Patched flow-state into Secret %s/%s", namespace, secret_name)
 
 
@@ -345,9 +370,7 @@ async def mark_flow_authorized(
     async with create_api_client() as api:
         v1 = client.CoreV1Api(api)
         existing = await _require_token_secret(v1, namespace, secret_name)
-        await v1.patch_namespaced_secret(
-            name=secret_name, namespace=namespace, body=_pinned_patch(existing, body)
-        )
+        await _patch_pinned(v1, namespace, secret_name, existing, body)
 
 
 async def mark_flow_failed(namespace: str, secret_name: str, message: str) -> None:
@@ -362,9 +385,7 @@ async def mark_flow_failed(namespace: str, secret_name: str, message: str) -> No
     async with create_api_client() as api:
         v1 = client.CoreV1Api(api)
         existing = await _require_token_secret(v1, namespace, secret_name)
-        await v1.patch_namespaced_secret(
-            name=secret_name, namespace=namespace, body=_pinned_patch(existing, body)
-        )
+        await _patch_pinned(v1, namespace, secret_name, existing, body)
 
 
 def compute_expires_at(expires_in: Optional[int], now: Optional[datetime] = None) -> Optional[str]:
@@ -429,9 +450,7 @@ async def write_token_secret(
             "stringData": string_data,
         }
         existing = await _require_token_secret(v1, namespace, secret_name)
-        await v1.patch_namespaced_secret(
-            name=secret_name, namespace=namespace, body=_pinned_patch(existing, body)
-        )
+        await _patch_pinned(v1, namespace, secret_name, existing, body)
         logger.info("Patched MCP token secret %s/%s", namespace, secret_name)
 
 
@@ -460,16 +479,15 @@ async def clear_token_secret(
         if existing is None:
             return None
         try:
-            await v1.patch_namespaced_secret(
-                name=secret_name,
-                namespace=namespace,
-                body=_pinned_patch(
-                    existing,
-                    {
-                        "metadata": {"labels": {FLOW_STATE_LABEL: None}},
-                        "stringData": cleared,
-                    },
-                ),
+            await _patch_pinned(
+                v1,
+                namespace,
+                secret_name,
+                existing,
+                {
+                    "metadata": {"labels": {FLOW_STATE_LABEL: None}},
+                    "stringData": cleared,
+                },
             )
         except ApiException as e:
             if e.status == 404:
@@ -497,6 +515,8 @@ async def delete_token_secret(*, namespace: str, secret_name: str) -> bool:
         except ApiException as e:
             if e.status == 404:
                 return False
+            if e.status == 409:
+                raise TokenSecretChangedError(namespace, secret_name) from e
             raise
 
 

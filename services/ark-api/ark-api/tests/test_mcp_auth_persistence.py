@@ -23,6 +23,7 @@ from ark_api.services.mcp_auth_persistence import (
     FLOW_STATE_LABEL,
     FlowState,
     NotATokenSecretError,
+    TokenSecretChangedError,
     SecretKeys,
     SecretPatchPayload,
     TOKEN_EXPIRY_SAFETY_MARGIN_SECONDS,
@@ -406,16 +407,38 @@ class TestMarkFlow(unittest.TestCase):
 
                 _assert_untouched(v1)
 
-    def test_missing_secret_raises_not_found(self):
+    def test_missing_secret_raises_changed(self):
         for status, call in self._cases():
             with self.subTest(status=status):
                 v1 = _core_v1(read=ApiException(status=404))
 
-                with self.assertRaises(ApiException) as ctx:
+                with self.assertRaises(TokenSecretChangedError):
                     _run(v1, call())
 
-                self.assertEqual(ctx.exception.status, 404)
                 _assert_untouched(v1)
+
+    def test_replaced_secret_raises_changed(self):
+        for status, call in self._cases():
+            with self.subTest(status=status):
+                v1 = _core_v1(read=_stored_secret())
+                v1.patch_namespaced_secret.side_effect = ApiException(
+                    status=422, reason="Unprocessable Entity"
+                )
+                v1.patch_namespaced_secret.side_effect.body = (
+                    '{"message":"metadata.uid: Invalid value: field is immutable"}'
+                )
+
+                with self.assertRaises(TokenSecretChangedError):
+                    _run(v1, call())
+
+    def test_other_validation_error_propagates(self):
+        v1 = _core_v1(read=_stored_secret())
+        v1.patch_namespaced_secret.side_effect = ApiException(status=422)
+
+        with self.assertRaises(ApiException) as ctx:
+            _run(v1, mark_flow_failed("ns", "tok", "denied"))
+
+        self.assertEqual(ctx.exception.status, 422)
 
 
 class TestComputeExpiresAt(unittest.TestCase):
@@ -506,14 +529,13 @@ class TestWriteTokenSecret(unittest.TestCase):
 
         v1.patch_namespaced_secret.assert_not_called()
 
-    def test_secret_gone_after_conflict_raises_not_found(self):
+    def test_secret_gone_after_conflict_raises_changed(self):
         v1 = _core_v1(read=ApiException(status=404))
         v1.create_namespaced_secret.side_effect = ApiException(status=409)
 
-        with self.assertRaises(ApiException) as ctx:
+        with self.assertRaises(TokenSecretChangedError):
             self._write(v1)
 
-        self.assertEqual(ctx.exception.status, 404)
         v1.patch_namespaced_secret.assert_not_called()
 
 
@@ -599,6 +621,13 @@ class TestDeleteTokenSecret(unittest.TestCase):
         result = _run(v1, delete_token_secret(namespace="ns", secret_name="tok"))
 
         self.assertFalse(result)
+
+    def test_replaced_secret_raises_changed(self):
+        v1 = _core_v1(read=_stored_secret())
+        v1.delete_namespaced_secret.side_effect = ApiException(status=409)
+
+        with self.assertRaises(TokenSecretChangedError):
+            _run(v1, delete_token_secret(namespace="ns", secret_name="tok"))
 
     def test_missing_secret_returns_false_without_delete(self):
         v1 = _core_v1(read=ApiException(status=404))

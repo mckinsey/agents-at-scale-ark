@@ -23,9 +23,9 @@ from ...models.mcp_auth import (
     AuthStatusResponse,
 )
 from ...services.mcp_auth_persistence import (
-    NotATokenSecretError,
     SecretKeys,
     SecretPatchPayload,
+    TokenSecretError,
     clear_token_secret,
     compute_expires_at,
     delete_token_secret,
@@ -65,7 +65,7 @@ def _token_secret_conflict(func: Callable) -> Callable:
     async def wrapper(*args: Any, **kwargs: Any) -> Any:
         try:
             return await func(*args, **kwargs)
-        except NotATokenSecretError as exc:
+        except TokenSecretError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
     return wrapper
 
@@ -485,7 +485,7 @@ async def mcp_auth_callback(
                     client_secret=flow.client_secret,
                 ),
             )
-        except NotATokenSecretError as exc:
+        except TokenSecretError as exc:
             await mark_flow_failed(secret_ns, secret_name_for_flow, str(exc))
             if use_redirect:
                 return _dashboard_error_redirect(
