@@ -8,7 +8,7 @@ from ark_sdk.annotations import (
     ARK_RESOURCE_TYPE_ANNOTATION,
     CONFIGURATION_RESOURCE_TYPE,
 )
-from ark_sdk.k8s import ConfigurationClient
+from ark_sdk.k8s import RESERVED_CONFIGURATION_NAMES, ConfigurationClient
 from ark_sdk.labels import (
     labels_to_tags,
     strip_tag_labels,
@@ -429,6 +429,76 @@ class TestConfigurationClient(unittest.IsolatedAsyncioTestCase):
 
         body = mock_api_instance.delete_namespaced_config_map.call_args.kwargs["body"]
         self.assertEqual(body.preconditions.uid, "uuid-verified")
+
+
+class TestReservedConfigurationNames(unittest.IsolatedAsyncioTestCase):
+    """ConfigMaps that ark-api owns for its own features are not configurations."""
+
+    def setUp(self):
+        self.client = ConfigurationClient(namespace="test-namespace")
+        patcher = patch('ark_sdk.k8s.init_k8s', new=AsyncMock())
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        api_patcher = patch('ark_sdk.k8s.ApiClient')
+        api_patcher.start().return_value.__aenter__.return_value = AsyncMock()
+        self.addCleanup(api_patcher.stop)
+        v1_patcher = patch('ark_sdk.k8s.client.CoreV1Api')
+        self.v1 = v1_patcher.start().return_value
+        self.addCleanup(v1_patcher.stop)
+        self.v1.read_namespaced_config_map = AsyncMock(return_value=_config_map())
+        self.v1.create_namespaced_config_map = AsyncMock(return_value=_config_map())
+        self.v1.replace_namespaced_config_map = AsyncMock(return_value=_config_map())
+        self.v1.delete_namespaced_config_map = AsyncMock(return_value=None)
+
+    def test_reserved_names(self):
+        self.assertEqual(
+            RESERVED_CONFIGURATION_NAMES, {"marketplace-sources", "ark-export-metadata"}
+        )
+
+    async def test_create_rejects_reserved_names(self):
+        for name in RESERVED_CONFIGURATION_NAMES:
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                await self.client.create_configuration(name=name, value="{}")
+        self.v1.create_namespaced_config_map.assert_not_called()
+
+    async def test_update_rejects_reserved_names(self):
+        for name in RESERVED_CONFIGURATION_NAMES:
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                await self.client.update_configuration(name, value="{}")
+        self.v1.read_namespaced_config_map.assert_not_called()
+        self.v1.replace_namespaced_config_map.assert_not_called()
+
+    async def test_delete_rejects_reserved_names(self):
+        for name in RESERVED_CONFIGURATION_NAMES:
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                await self.client.delete_configuration(name)
+        self.v1.read_namespaced_config_map.assert_not_called()
+        self.v1.delete_namespaced_config_map.assert_not_called()
+
+    async def test_create_accepts_names_that_only_resemble_reserved_ones(self):
+        await self.client.create_configuration(name="marketplace-sources-url", value="{}")
+        self.v1.create_namespaced_config_map.assert_called_once()
+
+    async def test_list_hides_marketplace_sources_configmap(self):
+        marketplace = _config_map(name="marketplace-sources")
+        marketplace.metadata.annotations = {}
+        self.v1.list_namespaced_config_map = AsyncMock(
+            return_value=Mock(items=[_config_map(name="github-mcp-url"), marketplace])
+        )
+
+        result = await self.client.list_configurations()
+
+        self.assertEqual([item["name"] for item in result["items"]], ["github-mcp-url"])
+
+    async def test_get_hides_marketplace_sources_configmap(self):
+        marketplace = _config_map(name="marketplace-sources")
+        marketplace.metadata.annotations = {}
+        self.v1.read_namespaced_config_map = AsyncMock(return_value=marketplace)
+
+        with self.assertRaises(ApiException) as context:
+            await self.client.get_configuration("marketplace-sources")
+
+        self.assertEqual(context.exception.status, 404)
 
 
 class TestConfigurationInitK8sOrdering(unittest.IsolatedAsyncioTestCase):

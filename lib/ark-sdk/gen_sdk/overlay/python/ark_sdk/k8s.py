@@ -480,6 +480,12 @@ class SecretClient:
 
 
 CONFIGURATION_DATA_KEY = "value"
+RESERVED_CONFIGURATION_NAMES = frozenset({"marketplace-sources", "ark-export-metadata"})
+
+
+def _reject_reserved_configuration_name(name: str) -> None:
+    if name in RESERVED_CONFIGURATION_NAMES:
+        raise ValueError(f"Configuration name '{name}' is reserved by Ark")
 
 
 class ConfigurationClient:
@@ -551,6 +557,7 @@ class ConfigurationClient:
         labels: Optional[List[str]] = None,
     ):
         """Create a new configuration."""
+        _reject_reserved_configuration_name(name)
         await init_k8s()
         async with create_api_client() as api:
             self._get_api_client(api)
@@ -591,6 +598,7 @@ class ConfigurationClient:
         alias or labels clears them on the stored configuration; callers must
         send the complete desired state on every call.
         """
+        _reject_reserved_configuration_name(name)
         await init_k8s()
         async with create_api_client() as api:
             self._get_api_client(api)
@@ -619,6 +627,7 @@ class ConfigurationClient:
 
     async def delete_configuration(self, name: str) -> bool:
         """Delete a configuration."""
+        _reject_reserved_configuration_name(name)
         await init_k8s()
         async with create_api_client() as api:
             self._get_api_client(api)
