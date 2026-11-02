@@ -164,7 +164,7 @@ The Python SDK's `SecretClient`, also exposed as `ArkClient.secrets`, applies th
 
 ### Personal Secrets in `/v1/secrets`
 
-A signed-in user can create a personal Secret that only they can list, read, change and delete through `/v1/secrets`.
+A signed-in user can create a personal Secret that only they can list, read, change and delete through `/v1/secrets`. [Personal secrets](/user-guide/secrets#personal-secrets) describes how to create and use them.
 
 - `POST /v1/secrets` accepts `"scope": "personal"`. Ark stores the Secret as `u-<owner>-<name>`, where `<owner>` is the first sixteen hex digits of the SHA-256 of the username, and labels it `ark.mckinsey.com/scope=user-<owner>`. Without a user identity, for example in `open` mode or with an API key, the request returns `403`. `scope` defaults to `shared`.
 - `GET /v1/secrets` takes `?scope=shared|personal|all` and defaults to `shared`, so existing clients keep getting only shared Secrets. `personal` lists the caller's own and returns an empty list without a user identity.
@@ -178,6 +178,7 @@ A signed-in user can create a personal Secret that only they can list, read, cha
 - Resources applied with `kubectl` or GitOps get the same treatment. After the upgrade, such a resource that references a personal Secret stops resolving it.
 - Query `mcpserver` overrides are the exception: there the executor checks only the labels, and only the API checks who owns the Secret. A Query applied with `kubectl` can send any personal Secret in its namespace, and an override that referenced a promoted Secret resolves the personal one recreated under its name. Deleting a promoted Secret and creating a personal one with the same name does not otherwise hand its value to the resources that referenced the promoted one.
 - `SecretClient.get_secret_value` in the Python SDK raises `PersonalSecretError` for a personal Secret unless called with `allow_personal=True`. Executors should pass it only when resolving the headers of a Query `mcpserver` override.
+- Only the completions executor applies the headers of Query `mcpserver` overrides. Executors built on the Python SDK's `BaseExecutor` and `ExecutorApp` don't read Query overrides yet, so they don't send personal Secrets to MCP servers.
 - `PUT /v1/secrets/{name}` with `"scope": "shared"` turns a personal Secret into a shared one and keeps its name and value. Like any `PUT`, it replaces `description`, `alias` and `labels`, so send their current values to keep them. `"scope": "personal"` on a shared Secret returns `422`. Once promoted, the name `u-<owner>-<name>` is taken: creating a personal Secret with the same name returns `409`.
 - Secret responses carry `scope` (`shared` or `personal`) and `display_name`, the name without the `u-<owner>-` prefix.
 - The dashboard **Secrets** page lists shared Secrets and your own personal ones, with a **Scope** column. It shows each Secret by its display name, with the full name underneath when the two differ. When the dashboard runs with single sign-on, **Add secret** lets you pick **Shared** or **Personal**, and a personal Secret's page has a **Make shared** action. Ark API must recognise the same user, or creating a personal Secret returns `403`. Secret pickers in the Model, MCP server, A2A server and agent forms still list only shared Secrets, and **Add New** next to them always creates a shared one.
