@@ -5,6 +5,7 @@ package controller
 import (
 	"context"
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"strings"
 	"time"
@@ -32,6 +33,7 @@ import (
 	"mckinsey.com/ark/internal/labels"
 	arkmcp "mckinsey.com/ark/internal/mcp"
 	"mckinsey.com/ark/internal/resolution"
+	"mckinsey.com/ark/internal/secretscope"
 )
 
 const (
@@ -176,6 +178,9 @@ func (r *MCPServerReconciler) processServer(ctx context.Context, mcpServer *arkv
 	mcpServer.Status.ResolvedAddress = resolvedAddress
 
 	authMaterial, err := r.resolveAuthorizationMaterial(ctx, mcpServer)
+	if stderrors.Is(err, secretscope.ErrPersonalSecret) {
+		return r.reconcileConditionsTokenAcquisitionFailed(ctx, mcpServer, err), nil
+	}
 	if err != nil {
 		return ctrl.Result{}, err
 	}

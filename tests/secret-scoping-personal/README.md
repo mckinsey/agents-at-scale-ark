@@ -15,6 +15,8 @@ Checks personal secrets in `/v1/secrets`, and which resources may reference them
 - Viewer deletes their own personal secret.
 - Admin creates a personal `mcp` secret and a Query that sends it as a header through an `mcpserver` override with a `labelSelector`: the API accepts it and stores the override as sent. Viewer's `PUT` on that Query returns `422` and changes nothing, admin's goes through. The same Query is rejected with `422` when viewer sends it, when the selector is empty, when the override targets a `model`, when the secret is in `parameters` and when the secret does not exist, always with the same detail and without creating anything.
 - A Model that references admin's personal secret is rejected with `422` even for admin; one that references the promoted secret is accepted for viewer.
+- Rebinding through the API: admin promotes a secret, viewer creates a Model whose `apiKey` references it and the Model becomes available, admin deletes the promoted secret and creates a personal one with the same name. A Query against that Model then fails because the executor refuses the personal secret, and neither the Query, the Model nor the namespace events contain the new value.
+- A Query that sends admin's personal secret through an `mcpserver` override runs against mock-llm, and the MCP tool echoes the value back, so the override path still resolves personal secrets.
 
 ## Running
 
@@ -24,6 +26,6 @@ ARK_API_IMAGE_TAG=<tag> \
 chainsaw test ./secret-scoping-personal
 ```
 
-Needs `helm`, `kubectl` and `jq` on the host, and a cluster with Ark installed that can pull `ghcr.io/dexidp/dex:v2.45.1` and `curlimages/curl:8.11.1`. The enforcement step creates Queries and Models, so it needs the Ark CRDs and the controller's admission webhooks. `manifests/a02-model.yaml` is the Query target and is never called. `helpers.sh` holds the shell functions each step sources (token, API call, owner hash).
+Needs `helm`, `kubectl` and `jq` on the host, and a cluster with Ark installed (controller and completions executor) that can pull `ghcr.io/dexidp/dex:v2.45.1`, `curlimages/curl:8.11.1` and the mock-llm chart. The enforcement step creates Queries and Models, so it needs the Ark CRDs and the controller's admission webhooks; the resolution step runs Queries, so it needs the controller and executor from the same build. `mock-llm-values.yaml` labels the mock MCPServer with `ark.mckinsey.com/name: mock-llm-mcp` and makes the model echo tool results; `manifests/a03-agent.yaml` is the agent that calls the echo tool. `manifests/a02-model.yaml` is the Query target and is never called. `helpers.sh` holds the shell functions each step sources (token, API call, owner hash).
 
-A pass means personal secrets are visible and writable only by their owner through `/v1/secrets`, that promotion to shared works one way only, and that the API lets a personal secret into a resource only through its owner's Query MCP header overrides.
+A pass means personal secrets are visible and writable only by their owner through `/v1/secrets`, that promotion to shared works one way only, that the API lets a personal secret into a resource only through its owner's Query MCP header overrides, and that the controller and executor resolve a personal secret only from those overrides.
