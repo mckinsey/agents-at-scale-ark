@@ -213,7 +213,7 @@ Standard CRUD (`GET`/`POST` on the collection, `GET`/`PUT`/`DELETE` on the item)
 | Teams | `/v1/teams`, `/v1/teams/{name}` |
 | Models | `/v1/models`, `/v1/models/{name}` |
 | Memories | `/v1/memories`, `/v1/memories/{name}` |
-| Secrets | `/v1/secrets`, `/v1/secrets/{name}` (serve only Secrets with the [Ark secret labels](/user-guide/secrets), which `POST` adds) |
+| Secrets | `/v1/secrets`, `/v1/secrets/{name}` (serve only Secrets with the [Ark secret labels](/user-guide/secrets), which `POST` adds; the list returns shared Secrets unless `?scope=personal` or `?scope=all` asks for the caller's [personal Secrets](/reference/upgrading#personal-secrets-in-v1secrets)) |
 | MCP servers | `/v1/mcp-servers`, `/v1/mcp-servers/{name}` (no `PUT`) |
 | Tools | `/v1/tools`, `/v1/tools/{name}` (read/delete only — tools are created from MCP servers) |
 | A2A servers | `/v1/a2a-servers`, `/v1/a2a-servers/{name}` (read/delete only) |

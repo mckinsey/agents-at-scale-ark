@@ -30,6 +30,27 @@ The dashboard reads the effective permissions from `/v1/context`, which runs a
 `SelfSubjectRulesReview` as the impersonated user, so the viewer sees the resource
 lists with the create/edit/delete controls hidden.
 
+## Tokens without a browser
+
+Automated tests can enable the password grant and ask Dex for a token directly:
+
+```bash
+helm upgrade --install dex charts/ark-dex-dev --set oauth2.passwordConnector=local
+
+DEX_CLIENT=ark-dashboard:ark-dashboard-dev-secret
+curl -s --user "$DEX_CLIENT" \
+  -d grant_type=password -d username=admin@ark.local -d password=arkdev123 \
+  -d 'scope=openid email' \
+  http://dex.default.svc.cluster.local:5556/dex/token | jq -r .id_token
+```
+
+ark-api validates the `id_token`: its `aud` is the client id, which is what
+`OIDC_APPLICATION_ID` expects.
+
+Only enable it on a Dex that nothing outside the cluster or your machine can
+reach: with the published client secret and password, anyone who reaches the
+token endpoint gets a token for either user.
+
 ## Why the issuer is a Service FQDN
 
 Dex must answer at the same URL for the browser and for the pods: the dashboard
@@ -53,6 +74,7 @@ which inside a pod is the pod itself.
 | `users.password` | `arkdev123` | Documentation only — the effective credentials are the bcrypt hashes below. |
 | `users.admin.hash` / `users.viewer.hash` | bcrypt of the above | Minimum bcrypt cost is 10. Regenerate with `htpasswd -bnBC 10 "" <password> \| tr -d ':\n'`. |
 | `refreshTokens.reuseInterval` | `3m` | Grace window in which a rotated refresh token is still accepted. Dex's default is `0`, meaning a rotated token dies immediately. |
+| `oauth2.passwordConnector` | `""` | Connector for the OAuth2 password grant. Set it to `local` to get tokens for the static users with a plain `POST /dex/token`, as `tests/secret-scoping-personal` does. Off by default. |
 | `rbac.create` | `true` | Create the ClusterRoles and bindings for the two users. |
 | `rbac.bindArkTenantRole` | `true` | Also bind the admin to the `ark-tenant` Role, for secrets/configmaps/pods access. |
 
