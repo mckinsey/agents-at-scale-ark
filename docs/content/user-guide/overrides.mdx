@@ -134,6 +134,29 @@ overrides:
         tier: production
 ```
 
+### Select an MCP Server by Name
+
+Every MCPServer carries the label `ark.mckinsey.com/name` set to its name. Ark sets it on every create and update, so it cannot be set to another server's name. Use it to send headers to a single server:
+
+```yaml
+overrides:
+  - headers:
+      - name: Authorization
+        value:
+          valueFrom:
+            secretKeyRef:
+              name: github-token
+              key: token
+    resourceType: mcpserver
+    labelSelector:
+      matchLabels:
+        ark.mckinsey.com/name: github
+```
+
+The **MCP credentials** block of the dashboard chat builds one such override per MCP server from the rows you add, and sends it with every agent or team query in the namespace. A header that references a [personal Secret](/user-guide/secrets#personal-secrets) is accepted only in a Query `mcpserver` override whose selector is exactly this one: `matchLabels` with `ark.mckinsey.com/name` and nothing else. The header goes to whatever the selected MCPServer points at when the query runs, so anyone who can change that server's `address` receives it.
+
+MCPServers created before the upgrade get the label the next time they are updated; the controller does not update them by itself. A server whose name is longer than 63 characters gets no name label and cannot be selected this way. See [Upgrading](/reference/upgrading#mcpservers-get-a-name-label).
+
 ### Match Expressions
 
 Use more complex matching logic:

@@ -113,6 +113,9 @@ kind: Secret
 metadata:
   name: otel-environment-variables
   namespace: <tenant-namespace>
+  labels:
+    ark.mckinsey.com/resource-type: secret
+    ark.mckinsey.com/scope: shared
 type: Opaque
 stringData:
   OTEL_EXPORTER_OTLP_ENDPOINT: "https://otel-backend.example.com/v1/traces"

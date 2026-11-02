@@ -415,10 +415,12 @@ Standalone model configuration.
    kubectl create secret generic azure-openai-secret \
      --from-literal=api-key="your-key" \
      --from-literal=api-version="2024-02-15-preview"
+   kubectl label secret azure-openai-secret ark.mckinsey.com/resource-type=secret ark.mckinsey.com/scope=shared
    
    # For GitHub MCP samples
    kubectl create secret generic github-token \
      --from-literal=token="your-github-pat"
+   kubectl label secret github-token ark.mckinsey.com/resource-type=secret ark.mckinsey.com/scope=shared
    ```
 
 4. **Model dependencies**: Some samples require specific models to be deployed first
@@ -433,6 +435,7 @@ For first-time users, deploy samples in this order:
    kubectl create secret generic azure-openai-secret \
      --from-literal=api-key="your-key" \
      --from-literal=api-version="2024-02-15-preview"
+   kubectl label secret azure-openai-secret ark.mckinsey.com/resource-type=secret ark.mckinsey.com/scope=shared
    ```
 
 2. **Deploy a model**:

@@ -13,6 +13,8 @@ import {
   ComboboxItem,
   ComboboxList,
   ComboboxTrigger,
+  FILLED_TRIGGER_CLASS,
+  TRIGGER_ICON_CLASS,
 } from '@/components/ui/combobox';
 import {
   FieldDescription,
@@ -30,12 +32,6 @@ import {
 
 export const ALIAS_TOOLTIP_TEXT =
   'use this as an alternative name, useful when you need to deploy this same resources with different name in another namespace';
-
-const FILLED_TRIGGER_CLASS =
-  'has-[[data-slot=input-group-control]:focus-visible]:bg-fill-onsurface-ui-3 data-[open=true]:bg-fill-onsurface-ui-3';
-
-const TRIGGER_ICON_CLASS =
-  '[&_[data-slot=combobox-trigger-icon]]:transition-transform [&_[data-slot=combobox-trigger-icon]]:duration-200 data-[popup-open]:[&_[data-slot=combobox-trigger-icon]]:rotate-180';
 
 interface AliasFieldProps {
   readonly value: string;

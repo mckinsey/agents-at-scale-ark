@@ -8,6 +8,7 @@ import { FormAliasField } from '../fields/alias-field';
 import { FormLabelsField } from '../fields/labels-field';
 import { FormTextField } from '../fields/text-field';
 import { ResourceFormShell } from '../resource-form-shell';
+import { FormSecretScopeField, SecretScopeSummary } from './secret-scope-field';
 import { type SecretFormProps } from './types';
 import { useSecretForm } from './use-secret-form';
 
@@ -21,12 +22,23 @@ export function SecretForm({
   const { readOnlyMode } = useNamespace();
   const nameFieldId = useId();
   const passwordFieldId = useId();
-  const { form, isEdit, loading, saving, onSubmit, aliasOptions } =
-    useSecretForm({
-      mode,
-      secretName,
-      onSuccess,
-    });
+  const {
+    form,
+    isEdit,
+    loading,
+    saving,
+    onSubmit,
+    aliasOptions,
+    secret,
+    canChooseScope,
+    makeShared,
+    makingShared,
+    hasUnsavedChanges,
+  } = useSecretForm({
+    mode,
+    secretName,
+    onSuccess,
+  });
 
   const isDisabled = saving || loading || readOnlyMode;
 
@@ -36,7 +48,9 @@ export function SecretForm({
       backHref="/secrets"
       backLabel="Secrets"
       heading={isEdit ? 'Edit secret' : 'New secret'}
-      breadcrumbCurrent={isEdit ? secretName : 'Create secret'}
+      breadcrumbCurrent={
+        isEdit ? (secret?.display_name ?? secretName) : 'Create secret'
+      }
       submitLabel={isEdit ? 'Save' : 'Create'}
       onSubmit={onSubmit}
       loading={loading}
@@ -53,6 +67,22 @@ export function SecretForm({
         required
         disabled={isDisabled || isEdit}
       />
+
+      {canChooseScope && (
+        <FormSecretScopeField control={form.control} disabled={isDisabled} />
+      )}
+
+      {isEdit && secret && (
+        <SecretScopeSummary
+          scope={secret.scope}
+          secretName={secret.name}
+          displayName={secret.display_name}
+          canMakeShared={!isDisabled}
+          hasUnsavedChanges={hasUnsavedChanges}
+          makingShared={makingShared}
+          onMakeShared={makeShared}
+        />
+      )}
 
       <FormTextField
         control={form.control}

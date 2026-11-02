@@ -5,10 +5,13 @@ from ark_sdk.constants import ARK_DOMAIN
 
 ARK_LABEL_PREFIX = ARK_DOMAIN
 ARK_TAG_LABEL_PREFIX = f"{ARK_LABEL_PREFIX}label."
+NAME_LABEL = f"{ARK_LABEL_PREFIX}name"
 
 TAG_PATTERN = re.compile(r"^[a-zA-Z0-9]+$")
 LEGACY_TAG_PATTERN = re.compile(r"^[a-zA-Z0-9]([-_.a-zA-Z0-9]*[a-zA-Z0-9])?$")
 TAG_MAX_LENGTH = 63 - len("label.")
+LABEL_VALUE_PATTERN = re.compile(r"[a-zA-Z0-9]([-_.a-zA-Z0-9]*[a-zA-Z0-9])?")
+LABEL_VALUE_MAX_LENGTH = 63
 
 
 def _check_tag_length(tag: str) -> None:
@@ -83,3 +86,16 @@ def strip_tag_labels(labels: Optional[Dict[str, str]]) -> Dict[str, str]:
         for key, value in labels.items()
         if not key.startswith(ARK_TAG_LABEL_PREFIX)
     }
+
+
+def with_name_label(labels: Optional[Dict[str, str]], name: str) -> Dict[str, str]:
+    """Set the Ark name label to the resource name, keeping every other label.
+
+    Any existing value is replaced. When the name is not a valid label value
+    (longer than 63 characters, for example) the label is dropped instead, so
+    a resource never carries another resource's name.
+    """
+    result = {key: value for key, value in (labels or {}).items() if key != NAME_LABEL}
+    if len(name) <= LABEL_VALUE_MAX_LENGTH and LABEL_VALUE_PATTERN.fullmatch(name):
+        result[NAME_LABEL] = name
+    return result

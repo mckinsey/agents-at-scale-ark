@@ -18,6 +18,21 @@ export type QueryDetailResponse = components['schemas']['QueryDetailResponse'];
 export type QueryListResponse = components['schemas']['QueryListResponse'];
 export type QueryCreateRequest = components['schemas']['QueryCreateRequest'];
 export type QueryUpdateRequest = components['schemas']['QueryUpdateRequest'];
+export type QueryOverride = NonNullable<
+  QueryCreateRequest['overrides']
+>[number];
+
+export type ChatQueryOptions = {
+  sessionId?: string;
+  conversationId?: string;
+  timeout?: string;
+  parameters?: QueryParameter[];
+  overrides?: QueryOverride[];
+};
+
+export type ChatStreamOptions = ChatQueryOptions & {
+  abortSignal?: AbortSignal;
+};
 
 // Define terminal status phases
 type TerminalQueryStatusPhase = 'done' | 'error' | 'canceled' | 'unknown';
@@ -347,11 +362,10 @@ export const chatService = {
     input: string,
     targetType: string,
     targetName: string,
-    sessionId?: string,
-    conversationId?: string,
-    timeout?: string,
-    parameters?: QueryParameter[],
+    options: ChatQueryOptions = {},
   ): Promise<QueryDetailResponse> {
+    const { sessionId, conversationId, timeout, parameters, overrides } =
+      options;
     const queryRequest: QueryCreateRequest = {
       name: `chat-query-${generateUUID()}`,
       type: 'user',
@@ -364,6 +378,7 @@ export const chatService = {
       conversationId,
       timeout,
       ...(parameters && parameters.length > 0 ? { parameters } : {}),
+      ...(overrides && overrides.length > 0 ? { overrides } : {}),
     };
 
     return await this.createQuery(namespace, queryRequest);
@@ -577,24 +592,18 @@ export const chatService = {
     input: string,
     targetType: string,
     targetName: string,
-    sessionId?: string,
-    conversationId?: string,
-    timeout?: string,
-    abortSignal?: AbortSignal,
-    parameters?: QueryParameter[],
+    options: ChatStreamOptions = {},
   ): Promise<{
     queryName: string;
     chunks: AsyncGenerator<Record<string, unknown>, void, unknown>;
   }> {
+    const { abortSignal, ...queryOptions } = options;
     const query = await this.submitChatQuery(
       namespace,
       input,
       targetType,
       targetName,
-      sessionId,
-      conversationId,
-      timeout,
-      parameters,
+      queryOptions,
     );
 
     const queryName = query.name;
@@ -679,20 +688,14 @@ export const chatService = {
     input: string,
     targetType: string,
     targetName: string,
-    sessionId?: string,
-    conversationId?: string,
-    timeout?: string,
-    abortSignal?: AbortSignal,
+    options: ChatStreamOptions = {},
   ): AsyncGenerator<Record<string, unknown>, void, unknown> {
     const { chunks } = await this.startStreamChatResponse(
       namespace,
       input,
       targetType,
       targetName,
-      sessionId,
-      conversationId,
-      timeout,
-      abortSignal,
+      options,
     );
     yield* chunks;
   },

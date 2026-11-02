@@ -1,12 +1,16 @@
 'use client';
 
-import { Combobox as ComboboxPrimitive } from '@base-ui/react';
+import {
+  Autocomplete as AutocompletePrimitive,
+  Combobox as ComboboxPrimitive,
+} from '@base-ui/react';
 import * as React from 'react';
 
 import { Check } from '@/components/icons/check';
 import { ChevronDown } from '@/components/icons/chevron-down';
 import { Close } from '@/components/icons/close';
 import { Button } from '@/components/ui/button';
+import { useDialogContentElement } from '@/components/ui/dialog';
 import { inputVariantStyles } from '@/components/ui/input';
 import { InputGroupButton, InputGroupInput } from '@/components/ui/input-group';
 import { cn } from '@/lib/utils';
@@ -17,6 +21,12 @@ const inputGroupChildOverrides = [
   '[[data-slot=input-group]_&]:px-0! [[data-slot=input-group]_&]:py-0! [[data-slot=input-group]_&]:min-h-0',
   '[[data-slot=input-group]_&]:focus-within:bg-transparent [[data-slot=input-group]_&]:focus-within:shadow-none [[data-slot=input-group]_&]:focus-within:ring-0',
 ];
+
+const FILLED_TRIGGER_CLASS =
+  'has-[[data-slot=input-group-control]:focus-visible]:bg-fill-onsurface-ui-3 data-[open=true]:bg-fill-onsurface-ui-3';
+
+const TRIGGER_ICON_CLASS =
+  '[&_[data-slot=combobox-trigger-icon]]:transition-transform [&_[data-slot=combobox-trigger-icon]]:duration-200 data-[popup-open]:[&_[data-slot=combobox-trigger-icon]]:rotate-180';
 
 // Anchor ref context so popup width matches the full input group (not just the input element)
 const ComboboxAnchorContext =
@@ -33,6 +43,19 @@ function Combobox<Value, Multiple extends boolean | undefined = false>(
   return (
     <ComboboxAnchorContext.Provider value={anchorRef}>
       <ComboboxPrimitive.Root {...props} />
+    </ComboboxAnchorContext.Provider>
+  );
+}
+
+function Autocomplete<ItemValue>(
+  props: AutocompletePrimitive.Root.Props<ItemValue> & {
+    items?: readonly ItemValue[];
+  },
+) {
+  const anchorRef = React.useRef<HTMLDivElement | null>(null);
+  return (
+    <ComboboxAnchorContext.Provider value={anchorRef}>
+      <AutocompletePrimitive.Root {...props} />
     </ComboboxAnchorContext.Provider>
   );
 }
@@ -140,16 +163,17 @@ function ComboboxContent({
   >) {
   const anchorRef = useComboboxAnchorRef();
   const anchor = anchorProp ?? anchorRef;
+  const dialogContentElement = useDialogContentElement();
 
   return (
-    <ComboboxPrimitive.Portal>
+    <ComboboxPrimitive.Portal container={dialogContentElement ?? undefined}>
       <ComboboxPrimitive.Positioner
         side={side}
         sideOffset={sideOffset}
         align={align}
         alignOffset={alignOffset}
         anchor={anchor}
-        className="isolate z-50">
+        className={cn('isolate', dialogContentElement ? 'z-[60]' : 'z-50')}>
         <ComboboxPrimitive.Popup
           data-slot="combobox-content"
           className={cn(
@@ -352,6 +376,7 @@ function ComboboxChipsInput({
 }
 
 export {
+  Autocomplete,
   Combobox,
   ComboboxAnchor,
   ComboboxInput,
@@ -369,4 +394,6 @@ export {
   ComboboxTrigger,
   ComboboxClear,
   ComboboxValue,
+  FILLED_TRIGGER_CLASS,
+  TRIGGER_ICON_CLASS,
 };

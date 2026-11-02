@@ -3,6 +3,9 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: azure-openai-secret
+  labels:
+    ark.mckinsey.com/resource-type: secret
+    ark.mckinsey.com/scope: shared
 type: Opaque
 data:
   # This uses the base64-encoded API key from the quickstart script

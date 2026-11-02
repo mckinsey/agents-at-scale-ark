@@ -1,6 +1,6 @@
 import { trackEvent } from '@/lib/analytics/singleton';
 import { apiClient } from '@/lib/api/client';
-import type { components } from '@/lib/api/generated/types';
+import type { components, operations } from '@/lib/api/generated/types';
 
 export type Secret = components['schemas']['SecretResponse'];
 export type SecretListResponse = components['schemas']['SecretListResponse'];
@@ -8,12 +8,21 @@ export type SecretCreateRequest = components['schemas']['SecretCreateRequest'];
 export type SecretUpdateRequest = components['schemas']['SecretUpdateRequest'];
 export type SecretDetailResponse =
   components['schemas']['SecretDetailResponse'];
+export type SecretScope = Secret['scope'];
+export type SecretListScope = NonNullable<
+  NonNullable<
+    operations['list_secrets_v1_secrets_get']['parameters']['query']
+  >['scope']
+>;
 
 export const secretsService = {
-  async getAll(namespace: string): Promise<Secret[]> {
+  async getAll(
+    namespace: string,
+    scope: SecretListScope = 'shared',
+  ): Promise<Secret[]> {
     const response = await apiClient.get<SecretListResponse>(
       `/api/v1/secrets`,
-      { params: { namespace } },
+      { params: { namespace, scope } },
     );
     return response.items;
   },

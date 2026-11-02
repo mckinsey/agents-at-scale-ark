@@ -49,6 +49,9 @@ spec:
               kind: Secret
               metadata:
                 name: selfheal-memory-secret
+                labels:
+                  ark.mckinsey.com/resource-type: secret
+                  ark.mckinsey.com/scope: shared
               stringData:
                 addr: http://selfheal-memory-service:8080
         - assert:

@@ -201,9 +201,10 @@ describe('createModel', () => {
       .mockResolvedValueOnce({baseUrl: 'https://api.openai.com'})
       .mockResolvedValueOnce({apiKey: 'new-secret-key'});
 
-    mockExeca.mockResolvedValueOnce({}); // secret exists check
-    mockExeca.mockResolvedValueOnce({stdout: 'secret yaml'}); // dry-run output
-    mockExeca.mockResolvedValueOnce({}); // kubectl apply
+    mockExeca.mockResolvedValueOnce({
+      stdout: JSON.stringify({metadata: {name: 'test-model-model-secret'}}),
+    }); // secret exists check
+    mockExeca.mockResolvedValueOnce({});
     mockExeca.mockResolvedValueOnce({}); // apply model
 
     const result = await createModel('test-model');

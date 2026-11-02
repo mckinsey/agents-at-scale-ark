@@ -132,6 +132,9 @@ class GenerateHelper:
             "apiVersion: v1\n"
             "kind: Secret\n"
             f"metadata:\n  name: {name}\n"
+            "  labels:\n"
+            "    ark.mckinsey.com/resource-type: secret\n"
+            "    ark.mckinsey.com/scope: shared\n"
             "type: Opaque\n"
             f"stringData:\n  {key}: placeholder\n"
         )

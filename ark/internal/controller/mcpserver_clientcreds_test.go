@@ -26,6 +26,7 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	eventnoop "mckinsey.com/ark/internal/eventing/noop"
+	"mckinsey.com/ark/internal/secretscope"
 )
 
 type machineMCPOpts struct {
@@ -371,6 +372,48 @@ var _ = Describe("MCPServer Controller — client_credentials token acquisition"
 		Expect(avail).NotTo(BeNil())
 		Expect(avail.Status).To(Equal(metav1.ConditionFalse))
 		Expect(avail.Reason).To(Equal(MCPServerReasonTokenAcquisitionFailed))
+	})
+
+	It("reports TokenAcquisitionFailed when tokenSecretRef names a personal Secret", func() {
+		const name = "mcp-personal-token"
+		tokenSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "u-0123456789abcdef-token",
+				Namespace: "default",
+				Labels: map[string]string{
+					secretscope.ResourceTypeLabel: secretscope.SecretResourceType,
+					secretscope.ScopeLabel:        "user-0123456789abcdef",
+				},
+			},
+			Data: map[string][]byte{"access_token": []byte("personal-access-token")},
+		}
+		Expect(k8sClient.Create(ctx, tokenSecret)).To(Succeed())
+		DeferCleanup(func() { _ = k8sClient.Delete(ctx, tokenSecret) })
+
+		mcpServer := &arkv1alpha1.MCPServer{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+			Spec: arkv1alpha1.MCPServerSpec{
+				Address:   arkv1alpha1.ValueSource{Value: "http://127.0.0.1:1/mcp"},
+				Transport: "http",
+				Timeout:   "5s",
+				Authorization: &arkv1alpha1.MCPServerAuthorizationSpec{
+					TokenSecretRef: arkv1alpha1.TokenSecretReference{Name: tokenSecret.Name},
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, mcpServer)).To(Succeed())
+		DeferCleanup(func() { _ = k8sClient.Delete(ctx, mcpServer) })
+
+		Expect(reconcileUntilStable(ctx, newMachineReconciler(), nn(name))).To(Succeed())
+
+		out := &arkv1alpha1.MCPServer{}
+		Expect(k8sClient.Get(ctx, nn(name), out)).To(Succeed())
+		avail := findCondition(out.Status.Conditions, MCPServerAvailable)
+		Expect(avail).NotTo(BeNil())
+		Expect(avail.Status).To(Equal(metav1.ConditionFalse))
+		Expect(avail.Reason).To(Equal(MCPServerReasonTokenAcquisitionFailed))
+		Expect(avail.Message).To(ContainSubstring(secretscope.ErrPersonalSecret.Error()))
+		Expect(avail.Message).NotTo(ContainSubstring("personal-access-token"))
 	})
 
 	It("keeps using a still-valid token when renewal fails", func() {

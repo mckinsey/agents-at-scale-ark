@@ -265,6 +265,9 @@ kind: Secret
 metadata:
   name: {name}
   namespace: {namespace}
+  labels:
+    ark.mckinsey.com/resource-type: secret
+    ark.mckinsey.com/scope: shared
 type: Opaque
 data:
   api-key: {ak}

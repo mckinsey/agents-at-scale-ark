@@ -30,6 +30,7 @@
 #
 #   kubectl create secret generic example-mcp-signing-key \
 #     --from-file=private.pem=private.pem
+#   kubectl label secret example-mcp-signing-key ark.mckinsey.com/resource-type=secret ark.mckinsey.com/scope=shared
 #
 # Then apply this file.
 ---
