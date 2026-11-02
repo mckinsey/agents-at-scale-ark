@@ -100,6 +100,13 @@ func (s *executionState) finalizeStream(ctx context.Context, responseMessages []
 	}
 }
 
+func withQueryTimeout(ctx context.Context, query *arkv1alpha1.Query) (context.Context, context.CancelFunc) {
+	if query.Spec.Timeout == nil {
+		return context.WithCancel(ctx)
+	}
+	return context.WithTimeout(ctx, query.Spec.Timeout.Duration)
+}
+
 //nolint:gocognit // TODO: Refactor to reduce cognitive complexity
 func (h *Handler) ProcessMessage(
 	ctx context.Context,
@@ -122,6 +129,9 @@ func (h *Handler) ProcessMessage(
 	if err != nil {
 		return nil, err
 	}
+
+	ctx, cancelTimeout := withQueryTimeout(ctx, query)
+	defer cancelTimeout()
 
 	if subTargetAgentName != "" {
 		ctx = WithSubTargetAgent(ctx, subTargetAgentName)

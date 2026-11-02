@@ -116,7 +116,7 @@ export function ChatPanel({
       <ScrollArea
         viewportRef={scrollContainerRef}
         onViewportScroll={handleScroll}
-        className="h-0 min-h-0 flex-1">
+        className="h-0 min-h-0 flex-1 [&_[data-slot=scroll-area-viewport]>div]:block!">
         <div className="space-y-4 p-4">
           {engineToolWarning && (
             <ChatNotice icon={<Info />} iconClassName="text-status-information">

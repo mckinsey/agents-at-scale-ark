@@ -257,7 +257,11 @@ describe('chatService.getQueryResult memory lookup', () => {
 
     const result = await chatService.getQueryResult('default', 'chat-query-1');
 
-    expect(result).toEqual({status: 'error', terminal: true});
+    expect(result).toEqual({
+      status: 'error',
+      terminal: true,
+      transportError: true,
+    });
   });
 });
 
