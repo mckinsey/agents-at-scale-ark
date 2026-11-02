@@ -202,7 +202,7 @@ The interactive authorize flow (dynamic client registration, PKCE, token exchang
 
 A successful flow writes the token material to the referenced Secret and the controller reconciles `status.authorization.state` to `Authorized`. ark-api does not record the identity of the caller who triggered the flow.
 
-ark-api reads, writes, clears and deletes the referenced Secret only if it does not exist yet or carries the label `ark.mckinsey.com/mcp-token-secret: "true"`. ark-api sets this label on the Secrets it creates. If `tokenSecretRef` names an existing Secret without the label, `auth/start`, `auth/status`, `auth/logout` and the callback return `409` and leave the Secret unchanged. To use a Secret you created yourself, label it:
+ark-api reads, writes, clears and deletes the referenced Secret only if it does not exist yet or carries the label `ark.mckinsey.com/mcp-token-secret: "true"`. ark-api sets this label on the Secrets it creates. If `tokenSecretRef` names an existing Secret without the label, `auth/start`, `auth/status` and `auth/logout` return `409`, the callback marks the flow failed, and the Secret is left unchanged. To use a Secret you created yourself, label it:
 
 ```bash
 kubectl label secret <name> -n <namespace> ark.mckinsey.com/mcp-token-secret=true
