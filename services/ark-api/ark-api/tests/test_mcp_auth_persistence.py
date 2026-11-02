@@ -7,6 +7,7 @@ import unittest
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from kubernetes_asyncio import client
 from kubernetes_asyncio.client.rest import ApiException
 
 from ark_api.services.mcp_auth_persistence import (
@@ -18,7 +19,10 @@ from ark_api.services.mcp_auth_persistence import (
     DEFAULT_CLIENT_SECRET_KEY,
     DEFAULT_EXPIRES_AT_KEY,
     DEFAULT_REFRESH_TOKEN_KEY,
+    FLOW_AUTH_ID_KEY,
+    FLOW_STATE_LABEL,
     FlowState,
+    NotATokenSecretError,
     SecretKeys,
     SecretPatchPayload,
     TOKEN_EXPIRY_SAFETY_MARGIN_SECONDS,
@@ -28,9 +32,14 @@ from ark_api.services.mcp_auth_persistence import (
     compute_expires_at,
     delete_token_secret,
     flow_deadline_rfc3339,
+    mark_flow_authorized,
+    mark_flow_failed,
     now_rfc3339,
     read_cached_client_creds,
+    read_flow_state_by_auth_id,
+    read_flow_state_by_state_param,
     strip_mcpserver_auth_annotations,
+    write_flow_state,
     write_token_secret,
 )
 
@@ -171,71 +180,242 @@ class TestDecodeB64(unittest.TestCase):
         self.assertIsNone(_decode_b64(encoded))
 
 
+def _stored_secret(*, labels=None, data=None, uid="uid-1") -> client.V1Secret:
+    if labels is None:
+        labels = {TOKEN_SECRET_LABEL: "true"}
+    return client.V1Secret(
+        metadata=client.V1ObjectMeta(name="tok", namespace="ns", uid=uid, labels=labels),
+        data=data,
+    )
+
+
+def _unlabelled_secret() -> client.V1Secret:
+    return _stored_secret(
+        labels={"app": "db"},
+        data={"password": base64.b64encode(b"hunter2").decode()},
+    )
+
+
+def _core_v1(read=None) -> MagicMock:
+    v1 = MagicMock()
+    if isinstance(read, Exception):
+        v1.read_namespaced_secret = AsyncMock(side_effect=read)
+    else:
+        v1.read_namespaced_secret = AsyncMock(return_value=read)
+    v1.create_namespaced_secret = AsyncMock()
+    v1.patch_namespaced_secret = AsyncMock()
+    v1.delete_namespaced_secret = AsyncMock()
+    v1.list_namespaced_secret = AsyncMock()
+    return v1
+
+
+def _run(v1: MagicMock, coro):
+    api_factory, core_factory = _api_client_cm(v1)
+    with patch(
+        "ark_api.services.mcp_auth_persistence.create_api_client", api_factory
+    ), patch("ark_api.services.mcp_auth_persistence.client.CoreV1Api", core_factory):
+        return asyncio.run(coro)
+
+
+def _assert_untouched(v1: MagicMock) -> None:
+    v1.create_namespaced_secret.assert_not_called()
+    v1.patch_namespaced_secret.assert_not_called()
+    v1.delete_namespaced_secret.assert_not_called()
+
+
+class TestTokenSecretGate(unittest.TestCase):
+    def test_error_names_secret_and_label(self):
+        err = NotATokenSecretError("ns", "team-db")
+        self.assertIn("team-db", str(err))
+        self.assertIn(f"{TOKEN_SECRET_LABEL}=true", str(err))
+        self.assertIn("tokenSecretRef", str(err))
+
+    def test_label_with_other_value_is_rejected(self):
+        v1 = _core_v1(read=_stored_secret(labels={TOKEN_SECRET_LABEL: "false"}))
+        with self.assertRaises(NotATokenSecretError):
+            _run(v1, read_cached_client_creds("ns", "tok", SecretKeys()))
+
+    def test_secret_without_labels_is_rejected(self):
+        v1 = _core_v1(read=_stored_secret(labels={}))
+        v1.read_namespaced_secret.return_value.metadata.labels = None
+        with self.assertRaises(NotATokenSecretError):
+            _run(v1, read_cached_client_creds("ns", "tok", SecretKeys()))
+
+
 class TestReadCachedClientCreds(unittest.TestCase):
     def test_returns_decoded_creds(self):
-        secret = MagicMock()
-        secret.data = {
-            DEFAULT_CLIENT_ID_KEY: base64.b64encode(b"cid").decode(),
-            DEFAULT_CLIENT_SECRET_KEY: base64.b64encode(b"csec").decode(),
-        }
-        v1 = MagicMock()
-        v1.read_namespaced_secret = AsyncMock(return_value=secret)
-        api_factory, core_factory = _api_client_cm(v1)
-
-        with patch(
-            "ark_api.services.mcp_auth_persistence.create_api_client", api_factory
-        ), patch("ark_api.services.mcp_auth_persistence.client.CoreV1Api", core_factory):
-            creds = asyncio.run(
-                read_cached_client_creds("ns", "tok-secret", SecretKeys())
+        v1 = _core_v1(
+            read=_stored_secret(
+                data={
+                    DEFAULT_CLIENT_ID_KEY: base64.b64encode(b"cid").decode(),
+                    DEFAULT_CLIENT_SECRET_KEY: base64.b64encode(b"csec").decode(),
+                }
             )
+        )
+
+        creds = _run(v1, read_cached_client_creds("ns", "tok-secret", SecretKeys()))
 
         self.assertEqual(creds.client_id, "cid")
         self.assertEqual(creds.client_secret, "csec")
         v1.read_namespaced_secret.assert_awaited_once_with(name="tok-secret", namespace="ns")
 
     def test_secret_missing_returns_empty_creds(self):
-        v1 = MagicMock()
-        v1.read_namespaced_secret = AsyncMock(side_effect=ApiException(status=404))
-        api_factory, core_factory = _api_client_cm(v1)
+        v1 = _core_v1(read=ApiException(status=404))
 
-        with patch(
-            "ark_api.services.mcp_auth_persistence.create_api_client", api_factory
-        ), patch("ark_api.services.mcp_auth_persistence.client.CoreV1Api", core_factory):
-            creds = asyncio.run(
-                read_cached_client_creds("ns", "tok-secret", SecretKeys())
-            )
+        creds = _run(v1, read_cached_client_creds("ns", "tok-secret", SecretKeys()))
 
         self.assertIsNone(creds.client_id)
         self.assertIsNone(creds.client_secret)
         self.assertFalse(creds.both_present)
 
     def test_other_api_exception_propagates(self):
-        v1 = MagicMock()
-        v1.read_namespaced_secret = AsyncMock(side_effect=ApiException(status=500))
-        api_factory, core_factory = _api_client_cm(v1)
+        v1 = _core_v1(read=ApiException(status=500))
 
-        with patch(
-            "ark_api.services.mcp_auth_persistence.create_api_client", api_factory
-        ), patch("ark_api.services.mcp_auth_persistence.client.CoreV1Api", core_factory):
-            with self.assertRaises(ApiException):
-                asyncio.run(read_cached_client_creds("ns", "tok-secret", SecretKeys()))
+        with self.assertRaises(ApiException):
+            _run(v1, read_cached_client_creds("ns", "tok-secret", SecretKeys()))
 
     def test_secret_with_no_data_returns_none(self):
-        secret = MagicMock()
-        secret.data = None
-        v1 = MagicMock()
-        v1.read_namespaced_secret = AsyncMock(return_value=secret)
-        api_factory, core_factory = _api_client_cm(v1)
+        v1 = _core_v1(read=_stored_secret(data=None))
 
-        with patch(
-            "ark_api.services.mcp_auth_persistence.create_api_client", api_factory
-        ), patch("ark_api.services.mcp_auth_persistence.client.CoreV1Api", core_factory):
-            creds = asyncio.run(
-                read_cached_client_creds("ns", "tok-secret", SecretKeys())
-            )
+        creds = _run(v1, read_cached_client_creds("ns", "tok-secret", SecretKeys()))
 
         self.assertIsNone(creds.client_id)
         self.assertIsNone(creds.client_secret)
+
+    def test_rejects_a_secret_without_the_token_label(self):
+        v1 = _core_v1(read=_unlabelled_secret())
+        keys = SecretKeys(client_id="password", client_secret="password")
+
+        with self.assertRaises(NotATokenSecretError):
+            _run(v1, read_cached_client_creds("ns", "team-db", keys))
+
+
+class TestWriteFlowState(unittest.TestCase):
+    def _write(self, v1: MagicMock):
+        return _run(
+            v1,
+            write_flow_state(
+                namespace="ns",
+                secret_name="tok",
+                auth_id="aid",
+                state_param="st",
+                verifier="ver",
+                expires_at="2030-01-01T00:00:00Z",
+                server_name="srv",
+                client_id="cid",
+                client_secret="csec",
+                keys=SecretKeys(),
+            ),
+        )
+
+    def test_create_path_labels_the_secret(self):
+        v1 = _core_v1()
+
+        self._write(v1)
+
+        body = v1.create_namespaced_secret.await_args.kwargs["body"]
+        self.assertEqual(body.metadata.labels[TOKEN_SECRET_LABEL], "true")
+        self.assertEqual(body.metadata.labels[FLOW_STATE_LABEL], "st")
+        v1.read_namespaced_secret.assert_not_called()
+        v1.patch_namespaced_secret.assert_not_called()
+
+    def test_existing_labelled_secret_is_patched_with_uid_precondition(self):
+        v1 = _core_v1(read=_stored_secret(uid="uid-42"))
+        v1.create_namespaced_secret.side_effect = ApiException(status=409)
+
+        self._write(v1)
+
+        body = v1.patch_namespaced_secret.await_args.kwargs["body"]
+        self.assertEqual(body["metadata"]["uid"], "uid-42")
+        self.assertEqual(body["metadata"]["labels"][FLOW_STATE_LABEL], "st")
+        self.assertEqual(body["stringData"][FLOW_AUTH_ID_KEY], "aid")
+
+    def test_rejects_a_secret_without_the_token_label(self):
+        v1 = _core_v1(read=_unlabelled_secret())
+        v1.create_namespaced_secret.side_effect = ApiException(status=409)
+
+        with self.assertRaises(NotATokenSecretError):
+            self._write(v1)
+
+        v1.patch_namespaced_secret.assert_not_called()
+
+
+class TestReadFlowState(unittest.TestCase):
+    def _flow_secret(self, labels=None) -> client.V1Secret:
+        return _stored_secret(
+            labels=labels,
+            data={FLOW_AUTH_ID_KEY: base64.b64encode(b"aid").decode()},
+        )
+
+    def test_by_state_param_selects_only_token_secrets(self):
+        v1 = _core_v1()
+        v1.list_namespaced_secret.return_value = MagicMock(items=[self._flow_secret()])
+
+        flow = _run(v1, read_flow_state_by_state_param("ns", "st"))
+
+        self.assertEqual(flow.auth_id, "aid")
+        self.assertEqual(flow.secret_name, "tok")
+        selector = v1.list_namespaced_secret.await_args.kwargs["label_selector"]
+        self.assertEqual(selector, f"{TOKEN_SECRET_LABEL}=true,{FLOW_STATE_LABEL}=st")
+
+    def test_by_auth_id_returns_flow_from_labelled_secret(self):
+        v1 = _core_v1(read=self._flow_secret())
+
+        flow = _run(v1, read_flow_state_by_auth_id("ns", "tok"))
+
+        self.assertEqual(flow.auth_id, "aid")
+
+    def test_by_auth_id_missing_secret_returns_none(self):
+        v1 = _core_v1(read=ApiException(status=404))
+
+        self.assertIsNone(_run(v1, read_flow_state_by_auth_id("ns", "tok")))
+
+    def test_by_auth_id_rejects_a_secret_without_the_token_label(self):
+        v1 = _core_v1(read=self._flow_secret(labels={"app": "db"}))
+
+        with self.assertRaises(NotATokenSecretError):
+            _run(v1, read_flow_state_by_auth_id("ns", "tok"))
+
+
+class TestMarkFlow(unittest.TestCase):
+    def _cases(self):
+        return [
+            ("authorized", lambda: mark_flow_authorized("ns", "tok", "2030-01-01T00:00:00Z")),
+            ("failed", lambda: mark_flow_failed("ns", "tok", "denied")),
+        ]
+
+    def test_labelled_secret_is_patched_with_uid_precondition(self):
+        for status, call in self._cases():
+            with self.subTest(status=status):
+                v1 = _core_v1(read=_stored_secret(uid="uid-7"))
+
+                _run(v1, call())
+
+                body = v1.patch_namespaced_secret.await_args.kwargs["body"]
+                self.assertEqual(body["metadata"]["uid"], "uid-7")
+                self.assertIsNone(body["metadata"]["labels"][FLOW_STATE_LABEL])
+                self.assertEqual(body["stringData"]["_flow_status"], status)
+
+    def test_rejects_a_secret_without_the_token_label(self):
+        for status, call in self._cases():
+            with self.subTest(status=status):
+                v1 = _core_v1(read=_unlabelled_secret())
+
+                with self.assertRaises(NotATokenSecretError):
+                    _run(v1, call())
+
+                _assert_untouched(v1)
+
+    def test_missing_secret_raises_not_found(self):
+        for status, call in self._cases():
+            with self.subTest(status=status):
+                v1 = _core_v1(read=ApiException(status=404))
+
+                with self.assertRaises(ApiException) as ctx:
+                    _run(v1, call())
+
+                self.assertEqual(ctx.exception.status, 404)
+                _assert_untouched(v1)
 
 
 class TestComputeExpiresAt(unittest.TestCase):
@@ -274,29 +454,25 @@ class TestWriteTokenSecret(unittest.TestCase):
             client_secret="csec",
         )
 
-    def _setup(self):
-        v1 = MagicMock()
-        return v1, *_api_client_cm(v1)
+    def _write(self, v1: MagicMock, **payload):
+        return _run(
+            v1,
+            write_token_secret(
+                namespace="ns",
+                secret_name="tok",
+                keys=SecretKeys(),
+                payload=self._payload(**payload),
+            ),
+        )
 
     def test_create_path(self):
-        v1, api_factory, core_factory = self._setup()
-        v1.create_namespaced_secret = AsyncMock()
-        v1.patch_namespaced_secret = AsyncMock()
+        v1 = _core_v1()
 
-        with patch(
-            "ark_api.services.mcp_auth_persistence.create_api_client", api_factory
-        ), patch("ark_api.services.mcp_auth_persistence.client.CoreV1Api", core_factory):
-            asyncio.run(
-                write_token_secret(
-                    namespace="ns",
-                    secret_name="tok",
-                    keys=SecretKeys(),
-                    payload=self._payload(refresh_token="rt", expires_at="2030-01-01T00:00:00Z"),
-                )
-            )
+        self._write(v1, refresh_token="rt", expires_at="2030-01-01T00:00:00Z")
 
         v1.create_namespaced_secret.assert_awaited_once()
         v1.patch_namespaced_secret.assert_not_called()
+        v1.read_namespaced_secret.assert_not_called()
         kwargs = v1.create_namespaced_secret.await_args.kwargs
         body = kwargs["body"]
         self.assertEqual(kwargs["namespace"], "ns")
@@ -310,43 +486,53 @@ class TestWriteTokenSecret(unittest.TestCase):
         self.assertEqual(body.type, "Opaque")
 
     def test_409_falls_back_to_patch(self):
-        v1, api_factory, core_factory = self._setup()
-        v1.create_namespaced_secret = AsyncMock(side_effect=ApiException(status=409))
-        v1.patch_namespaced_secret = AsyncMock()
+        v1 = _core_v1(read=_stored_secret(uid="uid-9"))
+        v1.create_namespaced_secret.side_effect = ApiException(status=409)
 
-        with patch(
-            "ark_api.services.mcp_auth_persistence.create_api_client", api_factory
-        ), patch("ark_api.services.mcp_auth_persistence.client.CoreV1Api", core_factory):
-            asyncio.run(
-                write_token_secret(
-                    namespace="ns",
-                    secret_name="tok",
-                    keys=SecretKeys(),
-                    payload=self._payload(refresh_token="rt", expires_at="t"),
-                )
-            )
+        self._write(v1, refresh_token="rt", expires_at="t")
 
         v1.create_namespaced_secret.assert_awaited_once()
         v1.patch_namespaced_secret.assert_awaited_once()
+        body = v1.patch_namespaced_secret.await_args.kwargs["body"]
+        self.assertEqual(body["metadata"]["uid"], "uid-9")
+        self.assertEqual(body["stringData"]["access_token"], "at")
+
+    def test_rejects_a_secret_without_the_token_label(self):
+        v1 = _core_v1(read=_unlabelled_secret())
+        v1.create_namespaced_secret.side_effect = ApiException(status=409)
+
+        with self.assertRaises(NotATokenSecretError):
+            self._write(v1)
+
+        v1.patch_namespaced_secret.assert_not_called()
+
+    def test_secret_gone_after_conflict_raises_not_found(self):
+        v1 = _core_v1(read=ApiException(status=404))
+        v1.create_namespaced_secret.side_effect = ApiException(status=409)
+
+        with self.assertRaises(ApiException) as ctx:
+            self._write(v1)
+
+        self.assertEqual(ctx.exception.status, 404)
+        v1.patch_namespaced_secret.assert_not_called()
 
 
 class TestClearTokenSecret(unittest.TestCase):
-    def test_default_clears_token_and_flow_keys(self):
-        v1 = MagicMock()
-        v1.patch_namespaced_secret = AsyncMock()
-        api_factory, core_factory = _api_client_cm(v1)
+    def _clear(self, v1: MagicMock, *, keep_client: bool):
+        return _run(
+            v1,
+            clear_token_secret(
+                namespace="ns",
+                secret_name="tok",
+                keys=SecretKeys(),
+                keep_client=keep_client,
+            ),
+        )
 
-        with patch(
-            "ark_api.services.mcp_auth_persistence.create_api_client", api_factory
-        ), patch("ark_api.services.mcp_auth_persistence.client.CoreV1Api", core_factory):
-            cleared = asyncio.run(
-                clear_token_secret(
-                    namespace="ns",
-                    secret_name="tok",
-                    keys=SecretKeys(),
-                    keep_client=False,
-                )
-            )
+    def test_default_clears_token_and_flow_keys(self):
+        v1 = _core_v1(read=_stored_secret(uid="uid-3"))
+
+        cleared = self._clear(v1, keep_client=False)
 
         self.assertEqual(
             set(cleared),
@@ -358,23 +544,13 @@ class TestClearTokenSecret(unittest.TestCase):
                 DEFAULT_CLIENT_SECRET_KEY,
             },
         )
+        body = v1.patch_namespaced_secret.await_args.kwargs["body"]
+        self.assertEqual(body["metadata"]["uid"], "uid-3")
 
     def test_keep_client_clears_three_keys(self):
-        v1 = MagicMock()
-        v1.patch_namespaced_secret = AsyncMock()
-        api_factory, core_factory = _api_client_cm(v1)
+        v1 = _core_v1(read=_stored_secret())
 
-        with patch(
-            "ark_api.services.mcp_auth_persistence.create_api_client", api_factory
-        ), patch("ark_api.services.mcp_auth_persistence.client.CoreV1Api", core_factory):
-            cleared = asyncio.run(
-                clear_token_secret(
-                    namespace="ns",
-                    secret_name="tok",
-                    keys=SecretKeys(),
-                    keep_client=True,
-                )
-            )
+        cleared = self._clear(v1, keep_client=True)
 
         self.assertEqual(
             set(cleared),
@@ -382,49 +558,63 @@ class TestClearTokenSecret(unittest.TestCase):
         )
 
     def test_missing_secret_returns_none(self):
-        v1 = MagicMock()
-        v1.patch_namespaced_secret = AsyncMock(side_effect=ApiException(status=404))
-        api_factory, core_factory = _api_client_cm(v1)
+        v1 = _core_v1(read=ApiException(status=404))
 
-        with patch(
-            "ark_api.services.mcp_auth_persistence.create_api_client", api_factory
-        ), patch("ark_api.services.mcp_auth_persistence.client.CoreV1Api", core_factory):
-            cleared = asyncio.run(
-                clear_token_secret(
-                    namespace="ns",
-                    secret_name="tok",
-                    keys=SecretKeys(),
-                    keep_client=False,
-                )
-            )
+        self.assertIsNone(self._clear(v1, keep_client=False))
+        v1.patch_namespaced_secret.assert_not_called()
 
-        self.assertIsNone(cleared)
+    def test_secret_gone_before_patch_returns_none(self):
+        v1 = _core_v1(read=_stored_secret())
+        v1.patch_namespaced_secret.side_effect = ApiException(status=404)
+
+        self.assertIsNone(self._clear(v1, keep_client=False))
+
+    def test_rejects_a_secret_without_the_token_label(self):
+        for keep_client in (False, True):
+            with self.subTest(keep_client=keep_client):
+                v1 = _core_v1(read=_unlabelled_secret())
+
+                with self.assertRaises(NotATokenSecretError):
+                    self._clear(v1, keep_client=keep_client)
+
+                _assert_untouched(v1)
 
 
 class TestDeleteTokenSecret(unittest.TestCase):
     def test_delete_success_returns_true(self):
-        v1 = MagicMock()
-        v1.delete_namespaced_secret = AsyncMock()
-        api_factory, core_factory = _api_client_cm(v1)
+        v1 = _core_v1(read=_stored_secret(uid="uid-5"))
 
-        with patch(
-            "ark_api.services.mcp_auth_persistence.create_api_client", api_factory
-        ), patch("ark_api.services.mcp_auth_persistence.client.CoreV1Api", core_factory):
-            result = asyncio.run(delete_token_secret(namespace="ns", secret_name="tok"))
+        result = _run(v1, delete_token_secret(namespace="ns", secret_name="tok"))
 
         self.assertTrue(result)
+        kwargs = v1.delete_namespaced_secret.await_args.kwargs
+        self.assertEqual(kwargs["name"], "tok")
+        self.assertEqual(kwargs["namespace"], "ns")
+        self.assertEqual(kwargs["body"].preconditions.uid, "uid-5")
 
     def test_delete_404_returns_false(self):
-        v1 = MagicMock()
-        v1.delete_namespaced_secret = AsyncMock(side_effect=ApiException(status=404))
-        api_factory, core_factory = _api_client_cm(v1)
+        v1 = _core_v1(read=_stored_secret())
+        v1.delete_namespaced_secret.side_effect = ApiException(status=404)
 
-        with patch(
-            "ark_api.services.mcp_auth_persistence.create_api_client", api_factory
-        ), patch("ark_api.services.mcp_auth_persistence.client.CoreV1Api", core_factory):
-            result = asyncio.run(delete_token_secret(namespace="ns", secret_name="tok"))
+        result = _run(v1, delete_token_secret(namespace="ns", secret_name="tok"))
 
         self.assertFalse(result)
+
+    def test_missing_secret_returns_false_without_delete(self):
+        v1 = _core_v1(read=ApiException(status=404))
+
+        result = _run(v1, delete_token_secret(namespace="ns", secret_name="tok"))
+
+        self.assertFalse(result)
+        v1.delete_namespaced_secret.assert_not_called()
+
+    def test_rejects_a_secret_without_the_token_label(self):
+        v1 = _core_v1(read=_unlabelled_secret())
+
+        with self.assertRaises(NotATokenSecretError):
+            _run(v1, delete_token_secret(namespace="ns", secret_name="team-db"))
+
+        _assert_untouched(v1)
 
 
 class TestNowRfc3339(unittest.TestCase):

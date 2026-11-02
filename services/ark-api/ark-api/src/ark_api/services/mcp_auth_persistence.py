@@ -134,6 +134,48 @@ class FlowState:
             return True
 
 
+class NotATokenSecretError(Exception):
+    def __init__(self, namespace: str, secret_name: str) -> None:
+        self.namespace = namespace
+        self.secret_name = secret_name
+        super().__init__(
+            f"Secret {secret_name!r} in namespace {namespace!r} is not an MCP token "
+            f"Secret managed by Ark. Label it {TOKEN_SECRET_LABEL}=true or point "
+            f"spec.authorization.tokenSecretRef at another Secret."
+        )
+
+
+def _is_token_secret(secret) -> bool:
+    metadata = secret.metadata
+    labels = (metadata.labels if metadata else None) or {}
+    return labels.get(TOKEN_SECRET_LABEL) == "true"
+
+
+async def _read_token_secret(v1, namespace: str, secret_name: str):
+    try:
+        secret = await v1.read_namespaced_secret(name=secret_name, namespace=namespace)
+    except ApiException as e:
+        if e.status == 404:
+            return None
+        raise
+    if not _is_token_secret(secret):
+        raise NotATokenSecretError(namespace, secret_name)
+    return secret
+
+
+async def _require_token_secret(v1, namespace: str, secret_name: str):
+    secret = await _read_token_secret(v1, namespace, secret_name)
+    if secret is None:
+        raise ApiException(status=404, reason="Not Found")
+    return secret
+
+
+def _pinned_patch(secret, body: dict) -> dict:
+    metadata = dict(body.get("metadata") or {})
+    metadata["uid"] = secret.metadata.uid
+    return {**body, "metadata": metadata}
+
+
 def _decode_b64(value: Optional[str]) -> Optional[str]:
     if value is None:
         return None
@@ -152,12 +194,9 @@ async def read_cached_client_creds(
 ) -> CachedClientCreds:
     async with create_api_client() as api:
         v1 = client.CoreV1Api(api)
-        try:
-            secret = await v1.read_namespaced_secret(name=secret_name, namespace=namespace)
-        except ApiException as e:
-            if e.status == 404:
-                return CachedClientCreds(client_id=None, client_secret=None)
-            raise
+        secret = await _read_token_secret(v1, namespace, secret_name)
+    if secret is None:
+        return CachedClientCreds(client_id=None, client_secret=None)
 
     data = secret.data or {}
     return CachedClientCreds(
@@ -230,7 +269,10 @@ async def write_flow_state(
             if e.status != 409:
                 raise
 
-        await v1.patch_namespaced_secret(name=secret_name, namespace=namespace, body=body)
+        existing = await _require_token_secret(v1, namespace, secret_name)
+        await v1.patch_namespaced_secret(
+            name=secret_name, namespace=namespace, body=_pinned_patch(existing, body)
+        )
         logger.info("Patched flow-state into Secret %s/%s", namespace, secret_name)
 
 
@@ -241,7 +283,7 @@ async def read_flow_state_by_state_param(
         v1 = client.CoreV1Api(api)
         secrets = await v1.list_namespaced_secret(
             namespace=namespace,
-            label_selector=f"{FLOW_STATE_LABEL}={state_param}",
+            label_selector=f"{TOKEN_SECRET_LABEL}=true,{FLOW_STATE_LABEL}={state_param}",
         )
         if not secrets.items:
             return None
@@ -257,12 +299,9 @@ async def read_flow_state_by_auth_id(
 ) -> Optional[FlowState]:
     async with create_api_client() as api:
         v1 = client.CoreV1Api(api)
-        try:
-            secret = await v1.read_namespaced_secret(name=secret_name, namespace=namespace)
-        except ApiException as e:
-            if e.status == 404:
-                return None
-            raise
+        secret = await _read_token_secret(v1, namespace, secret_name)
+        if secret is None:
+            return None
         flow = _extract_flow_state(secret)
         if flow is None:
             return None
@@ -305,7 +344,10 @@ async def mark_flow_authorized(
     }
     async with create_api_client() as api:
         v1 = client.CoreV1Api(api)
-        await v1.patch_namespaced_secret(name=secret_name, namespace=namespace, body=body)
+        existing = await _require_token_secret(v1, namespace, secret_name)
+        await v1.patch_namespaced_secret(
+            name=secret_name, namespace=namespace, body=_pinned_patch(existing, body)
+        )
 
 
 async def mark_flow_failed(namespace: str, secret_name: str, message: str) -> None:
@@ -319,7 +361,10 @@ async def mark_flow_failed(namespace: str, secret_name: str, message: str) -> No
     }
     async with create_api_client() as api:
         v1 = client.CoreV1Api(api)
-        await v1.patch_namespaced_secret(name=secret_name, namespace=namespace, body=body)
+        existing = await _require_token_secret(v1, namespace, secret_name)
+        await v1.patch_namespaced_secret(
+            name=secret_name, namespace=namespace, body=_pinned_patch(existing, body)
+        )
 
 
 def compute_expires_at(expires_in: Optional[int], now: Optional[datetime] = None) -> Optional[str]:
@@ -383,7 +428,10 @@ async def write_token_secret(
             "metadata": {"labels": {TOKEN_SECRET_LABEL: "true"}},
             "stringData": string_data,
         }
-        await v1.patch_namespaced_secret(name=secret_name, namespace=namespace, body=body)
+        existing = await _require_token_secret(v1, namespace, secret_name)
+        await v1.patch_namespaced_secret(
+            name=secret_name, namespace=namespace, body=_pinned_patch(existing, body)
+        )
         logger.info("Patched MCP token secret %s/%s", namespace, secret_name)
 
 
@@ -408,14 +456,20 @@ async def clear_token_secret(
 
     async with create_api_client() as api:
         v1 = client.CoreV1Api(api)
+        existing = await _read_token_secret(v1, namespace, secret_name)
+        if existing is None:
+            return None
         try:
             await v1.patch_namespaced_secret(
                 name=secret_name,
                 namespace=namespace,
-                body={
-                    "metadata": {"labels": {FLOW_STATE_LABEL: None}},
-                    "stringData": cleared,
-                },
+                body=_pinned_patch(
+                    existing,
+                    {
+                        "metadata": {"labels": {FLOW_STATE_LABEL: None}},
+                        "stringData": cleared,
+                    },
+                ),
             )
         except ApiException as e:
             if e.status == 404:
@@ -428,8 +482,17 @@ async def clear_token_secret(
 async def delete_token_secret(*, namespace: str, secret_name: str) -> bool:
     async with create_api_client() as api:
         v1 = client.CoreV1Api(api)
+        existing = await _read_token_secret(v1, namespace, secret_name)
+        if existing is None:
+            return False
         try:
-            await v1.delete_namespaced_secret(name=secret_name, namespace=namespace)
+            await v1.delete_namespaced_secret(
+                name=secret_name,
+                namespace=namespace,
+                body=client.V1DeleteOptions(
+                    preconditions=client.V1Preconditions(uid=existing.metadata.uid)
+                ),
+            )
             return True
         except ApiException as e:
             if e.status == 404:

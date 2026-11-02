@@ -1125,3 +1125,217 @@ class MachineManagedGuardTests(_AuthBase):
             )
         self.assertEqual(response.status_code, 409, response.text)
         mock_delete.assert_not_awaited()
+
+
+def _core_v1_with(read):
+    from kubernetes_asyncio.client.rest import ApiException
+
+    v1 = MagicMock()
+    if isinstance(read, ApiException):
+        v1.read_namespaced_secret = AsyncMock(side_effect=read)
+    else:
+        v1.read_namespaced_secret = AsyncMock(return_value=read)
+    v1.create_namespaced_secret = AsyncMock(side_effect=ApiException(status=409))
+    v1.patch_namespaced_secret = AsyncMock()
+    v1.delete_namespaced_secret = AsyncMock()
+    return v1
+
+
+def _stored_secret(labels):
+    import base64
+
+    from kubernetes_asyncio import client
+
+    encoded = base64.b64encode(b"s3cr3t-value").decode()
+    return client.V1Secret(
+        metadata=client.V1ObjectMeta(
+            name=SECRET_NAME, namespace="default", uid="uid-1", labels=labels
+        ),
+        data={"client_id": encoded, "client_secret": encoded},
+    )
+
+
+def _patch_persistence_k8s(v1):
+    cm = AsyncMock()
+    cm.__aenter__.return_value = MagicMock()
+    cm.__aexit__.return_value = None
+    return (
+        patch(
+            "ark_api.services.mcp_auth_persistence.create_api_client",
+            MagicMock(return_value=cm),
+        ),
+        patch(
+            "ark_api.services.mcp_auth_persistence.client.CoreV1Api",
+            MagicMock(return_value=v1),
+        ),
+    )
+
+
+class TokenSecretLabelGateTests(_AuthBase):
+    UNLABELLED = {"app": "db"}
+    LABELLED = {"ark.mckinsey.com/mcp-token-secret": "true"}
+
+    def _call(self, v1, method, path, **kwargs):
+        api_patch, core_patch = _patch_persistence_k8s(v1)
+        patcher, _ = _patch_ark_client(_build_typed_mcp())
+        with patcher, api_patch, core_patch:
+            return getattr(self.client, method)(path, params={"namespace": "default"}, **kwargs)
+
+    def _assert_untouched(self, v1):
+        v1.create_namespaced_secret.assert_not_called()
+        v1.patch_namespaced_secret.assert_not_called()
+        v1.delete_namespaced_secret.assert_not_called()
+
+    def _assert_conflict(self, response):
+        self.assertEqual(response.status_code, 409, response.text)
+        detail = response.json()["detail"]
+        self.assertIn(SECRET_NAME, detail)
+        self.assertIn("ark.mckinsey.com/mcp-token-secret=true", detail)
+        self.assertNotIn("s3cr3t-value", response.text)
+
+    @patch("ark_api.api.v1.mcp_auth.register_client", new_callable=AsyncMock)
+    def test_start_rejects_an_unlabelled_secret_without_writing(self, mock_register):
+        v1 = _core_v1_with(_stored_secret(self.UNLABELLED))
+
+        response = self._call(v1, "post", "/v1/mcp-servers/notion-mcp/auth/start", json={})
+
+        self._assert_conflict(response)
+        self.assertNotIn("client_id", response.text)
+        self.assertNotIn("authorization_url", response.json())
+        mock_register.assert_not_awaited()
+        self._assert_untouched(v1)
+
+    @patch("ark_api.api.v1.mcp_auth.register_client", new_callable=AsyncMock)
+    def test_start_reuses_cached_client_from_a_labelled_secret(self, mock_register):
+        v1 = _core_v1_with(_stored_secret(self.LABELLED))
+
+        response = self._call(v1, "post", "/v1/mcp-servers/notion-mcp/auth/start", json={})
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertIn("client_id=s3cr3t-value", response.json()["authorization_url"])
+        mock_register.assert_not_awaited()
+        body = v1.patch_namespaced_secret.await_args.kwargs["body"]
+        self.assertEqual(body["metadata"]["uid"], "uid-1")
+
+    @patch("ark_api.api.v1.mcp_auth.register_client", new_callable=AsyncMock)
+    def test_start_on_a_missing_secret_registers_and_creates_it(self, mock_register):
+        from kubernetes_asyncio.client.rest import ApiException
+
+        from ark_api.services.oauth_dcr import DcrResult
+
+        mock_register.return_value = DcrResult(client_id="cid", client_secret="csec", raw_response={})
+        v1 = _core_v1_with(ApiException(status=404))
+        v1.create_namespaced_secret = AsyncMock()
+
+        response = self._call(v1, "post", "/v1/mcp-servers/notion-mcp/auth/start", json={})
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertIn("client_id=cid", response.json()["authorization_url"])
+        created = v1.create_namespaced_secret.await_args.kwargs["body"]
+        self.assertEqual(created.metadata.labels["ark.mckinsey.com/mcp-token-secret"], "true")
+        v1.patch_namespaced_secret.assert_not_called()
+
+    @patch("ark_api.api.v1.mcp_auth.strip_mcpserver_auth_annotations", new_callable=AsyncMock)
+    def test_logout_rejects_an_unlabelled_secret_without_changing_it(self, mock_strip):
+        for body in ({}, {"keep_client": True}, {"delete_secret": True}):
+            with self.subTest(body=body):
+                mock_strip.reset_mock()
+                v1 = _core_v1_with(_stored_secret(self.UNLABELLED))
+
+                response = self._call(
+                    v1, "post", "/v1/mcp-servers/notion-mcp/auth/logout", json=body
+                )
+
+                self._assert_conflict(response)
+                self._assert_untouched(v1)
+                mock_strip.assert_not_awaited()
+
+    @patch("ark_api.api.v1.mcp_auth.strip_mcpserver_auth_annotations", new_callable=AsyncMock)
+    def test_logout_deletes_a_labelled_secret(self, mock_strip):
+        v1 = _core_v1_with(_stored_secret(self.LABELLED))
+
+        response = self._call(
+            v1, "post", "/v1/mcp-servers/notion-mcp/auth/logout", json={"delete_secret": True}
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertTrue(response.json()["deleted"])
+        self.assertEqual(
+            v1.delete_namespaced_secret.await_args.kwargs["body"].preconditions.uid, "uid-1"
+        )
+        mock_strip.assert_awaited_once()
+
+    @patch("ark_api.api.v1.mcp_auth.strip_mcpserver_auth_annotations", new_callable=AsyncMock)
+    def test_logout_clears_a_labelled_secret(self, mock_strip):
+        v1 = _core_v1_with(_stored_secret(self.LABELLED))
+
+        response = self._call(v1, "post", "/v1/mcp-servers/notion-mcp/auth/logout", json={})
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(len(response.json()["cleared_keys"]), 5)
+        v1.patch_namespaced_secret.assert_awaited_once()
+
+    @patch("ark_api.api.v1.mcp_auth.strip_mcpserver_auth_annotations", new_callable=AsyncMock)
+    def test_logout_on_a_missing_secret_is_a_noop(self, mock_strip):
+        from kubernetes_asyncio.client.rest import ApiException
+
+        for body in ({}, {"delete_secret": True}):
+            with self.subTest(body=body):
+                v1 = _core_v1_with(ApiException(status=404))
+
+                response = self._call(
+                    v1, "post", "/v1/mcp-servers/notion-mcp/auth/logout", json=body
+                )
+
+                self.assertEqual(response.status_code, 200, response.text)
+                self.assertTrue(response.json()["noop"])
+                self._assert_untouched(v1)
+
+    def test_status_rejects_an_unlabelled_secret(self):
+        v1 = _core_v1_with(_stored_secret(self.UNLABELLED))
+        api_patch, core_patch = _patch_persistence_k8s(v1)
+        patcher, _ = _patch_ark_client(_build_typed_mcp())
+        with patcher, api_patch, core_patch:
+            response = self.client.get(
+                "/v1/mcp-servers/notion-mcp/auth/status",
+                params={"namespace": "default", "auth_id": "aid"},
+            )
+
+        self._assert_conflict(response)
+
+    @patch("ark_api.api.v1.mcp_auth.mark_flow_failed", new_callable=AsyncMock)
+    @patch("ark_api.api.v1.mcp_auth.mark_flow_authorized", new_callable=AsyncMock)
+    @patch("ark_api.api.v1.mcp_auth.exchange_code", new_callable=AsyncMock)
+    @patch("ark_api.api.v1.mcp_auth.read_flow_state_by_state_param", new_callable=AsyncMock)
+    def test_callback_does_not_write_tokens_into_an_unlabelled_secret(
+        self, mock_read_flow, mock_exchange, mock_authorized, mock_failed
+    ):
+        from ark_api.services.mcp_auth_persistence import FlowState
+        from ark_api.services.oauth_token import TokenResponse
+
+        mock_read_flow.return_value = FlowState(
+            auth_id="aid", state_param="st1", verifier="v" * 64,
+            status="pending", message="", expires_at="2030-01-01T00:00:00Z",
+            token_expires_at="",
+            server_name="notion-mcp", namespace="default",
+            client_id="cid", client_secret="csec",
+            secret_name="flow-secret",
+        )
+        mock_exchange.return_value = TokenResponse(
+            access_token="at", refresh_token="rt", expires_in=3600, raw={}
+        )
+        v1 = _core_v1_with(_stored_secret(self.UNLABELLED))
+        api_patch, core_patch = _patch_persistence_k8s(v1)
+        patcher, _ = _patch_ark_client(_build_typed_mcp())
+        with patcher, api_patch, core_patch:
+            response = self.client.get(
+                "/v1/mcp/auth/callback",
+                params={"state": "default.st1", "code": "the-code"},
+            )
+
+        self.assertEqual(response.status_code, 409, response.text)
+        self.assertIn("ark.mckinsey.com/mcp-token-secret=true", response.text)
+        v1.patch_namespaced_secret.assert_not_called()
+        mock_authorized.assert_not_awaited()
+        mock_failed.assert_awaited_once()
+        self.assertEqual(mock_failed.await_args.args[1], "flow-secret")

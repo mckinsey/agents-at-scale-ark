@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import html
 import logging
-from typing import Optional
+from functools import wraps
+from typing import Any, Callable, Optional
 from urllib.parse import quote, urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -22,6 +23,7 @@ from ...models.mcp_auth import (
     AuthStatusResponse,
 )
 from ...services.mcp_auth_persistence import (
+    NotATokenSecretError,
     SecretKeys,
     SecretPatchPayload,
     clear_token_secret,
@@ -56,6 +58,16 @@ VERSION = "v1alpha1"
 MAX_AUTH_ERROR_DESC = 200
 TOKEN_EXCHANGE_FAILED_CODE = "token_exchange_failed"
 INVALID_REQUEST_CODE = "invalid_request"
+
+
+def _token_secret_conflict(func: Callable) -> Callable:
+    @wraps(func)
+    async def wrapper(*args: Any, **kwargs: Any) -> Any:
+        try:
+            return await func(*args, **kwargs)
+        except NotATokenSecretError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return wrapper
 
 
 def _get_config_or_503():
@@ -135,6 +147,7 @@ def _build_authorization_url(
     response_model=AuthStartResponse,
 )
 @handle_k8s_errors(operation="start auth", resource_type="mcp_server")
+@_token_secret_conflict
 async def start_mcp_auth(
     mcp_server_name: str,
     body: AuthStartRequest,
@@ -459,18 +472,34 @@ async def mcp_auth_callback(
             )
 
         expires_at = compute_expires_at(token.expires_in)
-        await write_token_secret(
-            namespace=secret_ns,
-            secret_name=secret_name,
-            keys=keys,
-            payload=SecretPatchPayload(
-                access_token=token.access_token,
-                refresh_token=token.refresh_token,
-                expires_at=expires_at,
-                client_id=flow.client_id,
-                client_secret=flow.client_secret,
-            ),
-        )
+        try:
+            await write_token_secret(
+                namespace=secret_ns,
+                secret_name=secret_name,
+                keys=keys,
+                payload=SecretPatchPayload(
+                    access_token=token.access_token,
+                    refresh_token=token.refresh_token,
+                    expires_at=expires_at,
+                    client_id=flow.client_id,
+                    client_secret=flow.client_secret,
+                ),
+            )
+        except NotATokenSecretError as exc:
+            await mark_flow_failed(secret_ns, secret_name_for_flow, str(exc))
+            if use_redirect:
+                return _dashboard_error_redirect(
+                    cfg,
+                    name=name,
+                    namespace=ns,
+                    code=INVALID_REQUEST_CODE,
+                    desc=str(exc),
+                )
+            return _html_response(
+                title="Authorization failed",
+                body=str(exc),
+                status_code=409,
+            )
         await mark_flow_authorized(secret_ns, secret_name_for_flow, expires_at)
         await strip_mcpserver_auth_annotations(ark_client, flow.server_name)
 
@@ -489,6 +518,7 @@ async def mcp_auth_callback(
     response_model=AuthStatusResponse,
 )
 @handle_k8s_errors(operation="get auth status", resource_type="mcp_server")
+@_token_secret_conflict
 async def get_mcp_auth_status(
     mcp_server_name: str,
     auth_id: str = Query(..., description="auth_id returned by auth/start"),
@@ -569,6 +599,7 @@ async def get_mcp_auth_status(
     response_model=AuthLogoutResponse,
 )
 @handle_k8s_errors(operation="logout auth", resource_type="mcp_server")
+@_token_secret_conflict
 async def logout_mcp_auth(
     mcp_server_name: str,
     body: AuthLogoutRequest,
