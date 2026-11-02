@@ -1,0 +1,196 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: cross-namespace-refs
+spec:
+  description: Cross-namespace modelRef and memory references require the target to list the source namespace in ark.mckinsey.com/allowed-namespaces
+  bindings:
+  - name: target
+    value: (join('-', [$namespace, 'target']))
+  steps:
+  - name: setup-target-namespace
+    try:
+    - script:
+        timeout: 200s
+        content: |
+          set -e
+          kubectl create namespace "$TARGET"
+          NAMESPACE="$TARGET" bash ../shared/install-mock-llm.sh
+          sed "s#MEMORY_ADDRESS#http://mock-llm.$TARGET.svc.cluster.local:6556#" manifests/a01-target-memory.yaml | kubectl apply -n "$TARGET" -f -
+        env:
+        - name: TARGET
+          value: ($target)
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: test-model-mock
+        namespace: ($target)
+        timeout: 90s
+        for:
+          condition:
+            name: ModelAvailable
+            value: 'True'
+
+  - name: reject-references-without-opt-in
+    try:
+    - script:
+        content: |
+          set -u
+          expect_denied() {
+            kind="$1"; name="$2"; manifest="$3"
+            want="cross-namespace reference to $kind $TARGET/$name is not allowed: the $kind must list namespace $NAMESPACE in annotation ark.mckinsey.com/allowed-namespaces"
+            if out=$(printf '%s\n' "$manifest" | kubectl apply -n "$NAMESPACE" -f - 2>&1); then
+              echo "expected rejection, got: $out"; exit 1
+            fi
+            case "$out" in
+              *"$want"*) echo "rejected: $want" ;;
+              *) echo "unexpected error: $out"; exit 1 ;;
+            esac
+          }
+          agent() {
+            printf 'apiVersion: ark.mckinsey.com/v1alpha1\nkind: Agent\nmetadata:\n  name: %s\nspec:\n  prompt: hi\n  modelRef:\n    name: %s\n    namespace: %s\n' "$1" "$2" "$TARGET"
+          }
+          query() {
+            printf 'apiVersion: ark.mckinsey.com/v1alpha1\nkind: Query\nmetadata:\n  name: %s\nspec:\n  input: hi\n  target:\n    type: agent\n    name: local-agent\n  memory:\n    name: %s\n    namespace: %s\n' "$1" "$2" "$TARGET"
+          }
+          printf 'apiVersion: ark.mckinsey.com/v1alpha1\nkind: Agent\nmetadata:\n  name: local-agent\nspec:\n  prompt: hi\n' | kubectl apply -n "$NAMESPACE" -f -
+          expect_denied Model test-model-mock "$(agent closed-model-agent test-model-mock)"
+          expect_denied Model no-such-model "$(agent missing-model-agent no-such-model)"
+          expect_denied Memory shared-memory "$(query closed-memory-query shared-memory)"
+          expect_denied Memory no-such-memory "$(query missing-memory-query no-such-memory)"
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        - name: TARGET
+          value: ($target)
+    catch:
+    - events: {}
+
+  - name: accept-model-listing-source-namespace
+    try:
+    - script:
+        content: |
+          kubectl annotate model test-model-mock -n "$TARGET" "ark.mckinsey.com/allowed-namespaces=other-namespace, $NAMESPACE" --overwrite
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        - name: TARGET
+          value: ($target)
+    - script:
+        content: |
+          for i in $(seq 1 10); do
+            sed "s#TARGET_NAMESPACE#$TARGET#" manifests/a02-agent-cross-namespace.yaml | kubectl apply -n "$NAMESPACE" -f - && exit 0
+            sleep 1
+          done
+          exit 1
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        - name: TARGET
+          value: ($target)
+    - apply:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: cross-namespace-query
+          spec:
+            input: What is the capital of France?
+            target:
+              type: agent
+              name: cross-namespace-agent
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: cross-namespace-query
+        timeout: 90s
+        for:
+          jsonPath:
+            path: '{.status.response.content}'
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: cross-namespace-query
+          status:
+            phase: done
+            (contains(response.content, 'Paris')): true
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: cross-namespace-query
+
+  - name: accept-memory-allowing-every-namespace
+    try:
+    - script:
+        content: |
+          set -e
+          kubectl annotate memory shared-memory -n "$TARGET" "ark.mckinsey.com/allowed-namespaces=*" --overwrite
+          printf 'apiVersion: ark.mckinsey.com/v1alpha1\nkind: Query\nmetadata:\n  name: shared-memory-query\nspec:\n  input: hi\n  cancel: true\n  target:\n    type: agent\n    name: local-agent\n  memory:\n    name: shared-memory\n    namespace: %s\n' "$TARGET" | kubectl apply -n "$NAMESPACE" -f -
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        - name: TARGET
+          value: ($target)
+
+  - name: executor-fails-query-when-opt-in-is-removed
+    try:
+    - script:
+        content: |
+          kubectl annotate model test-model-mock -n "$TARGET" ark.mckinsey.com/allowed-namespaces-
+        env:
+        - name: TARGET
+          value: ($target)
+    - apply:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: revoked-query
+          spec:
+            input: What is the capital of France?
+            target:
+              type: agent
+              name: cross-namespace-agent
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: revoked-query
+        timeout: 90s
+        for:
+          condition:
+            name: Completed
+            value: 'True'
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: revoked-query
+          status:
+            phase: error
+    - script:
+        content: |
+          kubectl get query revoked-query -n "$NAMESPACE" -o json | grep -F "cross-namespace reference to Model $TARGET/test-model-mock is not allowed"
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        - name: TARGET
+          value: ($target)
+    catch:
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: revoked-query
+
+    cleanup:
+    - script:
+        content: |
+          helm uninstall mock-llm --namespace "$TARGET" --wait --timeout=180s || true
+          kubectl delete namespace "$TARGET" --wait=false || true
+        env:
+        - name: TARGET
+          value: ($target)
