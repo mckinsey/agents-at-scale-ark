@@ -10,6 +10,7 @@ metadata:
   namespace: default
   labels:
     ark.mckinsey.com/mcpserver: notion
+    ark.mckinsey.com/mcp-token-secret: "true"
 type: Opaque
 # No data block — controller-owned, populated by CLI (or manual steps below)
 ---

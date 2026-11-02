@@ -57,7 +57,7 @@ spec:
 | `spec.pollInterval` | duration | no | How often the controller re-discovers tools from the server. Defaults to `1m`. |
 | `spec.headers[]` | list | no | HTTP headers added to requests to the server. Each entry has a `name` and a `value` (either a literal `value` or `valueFrom` — `secretKeyRef`, `configMapKeyRef`, `queryParameterRef`). |
 | `spec.authorization` | object | no | OAuth configuration for servers protected per [RFC 9728](https://datatracker.ietf.org/doc/html/rfc9728). When set, the resolved access token is injected as `Authorization: Bearer` on both tool discovery and tool calls — see [Header precedence](#header-precedence). When unset, Ark does not inject `Authorization` headers. |
-| `spec.authorization.tokenSecretRef` | object | yes (within `authorization`) | References the Secret holding OAuth tokens and client credentials. The Secret **must** exist in the same namespace as the MCPServer. |
+| `spec.authorization.tokenSecretRef` | object | yes (within `authorization`) | References the Secret holding OAuth tokens and client credentials, in the same namespace as the MCPServer. ark-api creates the Secret on the first authorize flow if it is missing. A Secret created beforehand must carry the label `ark.mckinsey.com/mcp-token-secret: "true"`; see [Token writes go through ark-api](#token-writes-go-through-ark-api). |
 | `spec.authorization.tokenSecretRef.name` | string | yes | Name of the Secret. |
 | `spec.authorization.tokenSecretRef.accessTokenKey` | string | no | Secret key holding the access token. Defaults to `access_token`. |
 | `spec.authorization.tokenSecretRef.refreshTokenKey` | string | no | Secret key holding the refresh token. Defaults to `refresh_token`. |
@@ -201,6 +201,12 @@ spec:
 The interactive authorize flow (dynamic client registration, PKCE, token exchange, Secret write) is orchestrated by ark-api. The [`ark mcp auth login`](/developer-guide/cli-tools#ark-mcp-auth) CLI is a thin client that POSTs to ark-api's `/api/v1/mcp-servers/{name}/auth/start` and polls `auth/status` — it never touches the Kubernetes Secret directly. The CLI is the only client today; a dashboard authorize flow is not yet available. See [MCP OAuth Callback](/operations-guide/mcp-oauth-callback) for the operator-side callback URL configuration.
 
 A successful flow writes the token material to the referenced Secret and the controller reconciles `status.authorization.state` to `Authorized`. ark-api does not record the identity of the caller who triggered the flow.
+
+ark-api reads, writes, clears and deletes the referenced Secret only if it does not exist yet or carries the label `ark.mckinsey.com/mcp-token-secret: "true"`. ark-api sets this label on the Secrets it creates. If `tokenSecretRef` names an existing Secret without the label, `auth/start`, `auth/status`, `auth/logout` and the callback return `409` and leave the Secret unchanged. To use a Secret you created yourself, label it:
+
+```bash
+kubectl label secret <name> -n <namespace> ark.mckinsey.com/mcp-token-secret=true
+```
 
 MCPServer tokens are a per-server singleton, only one user can hold an authorized session at a time. A future per-user-tokens capability will lift this limitation.
 
