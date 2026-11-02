@@ -22,13 +22,20 @@ export const CREATE_SECRET_MUTATION_KEY = 'create-secret';
 export const UPDATE_SECRET_MUTATION_KEY = 'update-secret';
 export const DELETE_SECRET_MUTATION_KEY = 'delete-secret';
 
-export const useGetAllSecrets = (scope: SecretListScope = 'shared') => {
+type UseGetAllSecretsOptions = {
+  enabled?: boolean;
+};
+
+export const useGetAllSecrets = (
+  scope: SecretListScope = 'shared',
+  { enabled = true }: UseGetAllSecretsOptions = {},
+) => {
   const { namespace } = useNamespace();
 
   return useQuery({
     queryKey: [GET_ALL_SECRETS_QUERY_KEY, scope, namespace],
     queryFn: () => secretsService.getAll(namespace, scope),
-    enabled: Boolean(namespace),
+    enabled: enabled && Boolean(namespace),
   });
 };
 
