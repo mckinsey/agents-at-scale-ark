@@ -105,8 +105,20 @@ class TestQueryOverrideHeaderAllows(unittest.TestCase):
     def test_mcpserver_override_with_match_labels(self):
         self.assertTrue(query_override_header_allows(OVERRIDE_REF_PATH, _query_spec("s")))
 
-    def test_mcpserver_override_with_match_expressions(self):
-        selector = {"matchExpressions": [{"key": "ark.mckinsey.com/name", "operator": "In", "values": ["github"]}]}
+    def test_selectors_that_do_not_pick_one_server_by_name_are_not_allowed(self):
+        for selector in (
+            {"matchExpressions": [{"key": "ark.mckinsey.com/name", "operator": "In", "values": ["github"]}]},
+            {"matchLabels": {"ark.mckinsey.com/name": "github"}, "matchExpressions": [{"key": "team", "operator": "Exists"}]},
+            {"matchLabels": {"team": "a"}},
+            {"matchLabels": {"ark.mckinsey.com/name": "github", "team": "a"}},
+            {"matchLabels": {"ark.mckinsey.com/name": ""}},
+            {"matchLabels": {"ark.mckinsey.com/name": 1}},
+        ):
+            with self.subTest(selector=selector):
+                self.assertFalse(query_override_header_allows(OVERRIDE_REF_PATH, _query_spec("s", selector)))
+
+    def test_name_selector_with_empty_match_expressions_is_allowed(self):
+        selector = {"matchLabels": {"ark.mckinsey.com/name": "github"}, "matchExpressions": None}
         self.assertTrue(query_override_header_allows(OVERRIDE_REF_PATH, _query_spec("s", selector)))
 
     def test_model_override_is_not_allowed(self):

@@ -360,7 +360,7 @@ describe('ChatPanel MCP credentials', () => {
 
     const row = screen.getByRole('group', { name: 'Credential for github' });
     expect(row).toHaveAccessibleDescription(
-      `Label the MCP server with ${NAME_LABEL}=github to send credentials to it.`,
+      `The MCP server github has no ${NAME_LABEL} label yet. Update it once and Ark adds the label.`,
     );
     expect(within(row).getByLabelText('MCP server for github')).toHaveAttribute(
       'aria-invalid',

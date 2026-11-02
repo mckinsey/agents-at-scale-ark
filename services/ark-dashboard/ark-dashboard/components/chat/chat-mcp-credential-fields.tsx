@@ -59,20 +59,20 @@ const SERVER_OPTION_HINTS: Record<McpServerTargetIssue, string> = {
 };
 
 const SERVER_OPTION_TITLES: Record<McpServerTargetIssue, string> = {
-  unlabelled: `Label this MCP server with ${ARK_LABELS.NAME} set to its name to pick it.`,
+  unlabelled: `This MCP server has no ${ARK_LABELS.NAME} label yet. Ark adds it the next time the server is updated.`,
   'name-too-long':
     'MCP server names over 63 characters cannot be picked by name.',
-  ambiguous: `Another MCP server has the same ${ARK_LABELS.NAME} label, so it would get the header too.`,
+  ambiguous: `Another MCP server still carries this ${ARK_LABELS.NAME} label from before Ark set it, so it could get the header too.`,
 };
 
 function issueMessage(row: McpCredentialRow): string | null {
   switch (row.issue) {
     case 'unlabelled':
-      return `Label the MCP server with ${ARK_LABELS.NAME}=${row.server} to send credentials to it.`;
+      return `The MCP server ${row.server} has no ${ARK_LABELS.NAME} label yet. Update it once and Ark adds the label.`;
     case 'name-too-long':
       return 'MCP server names over 63 characters cannot be picked by name.';
     case 'ambiguous':
-      return `Another MCP server also carries ${ARK_LABELS.NAME}=${row.server} and would get this header. Fix the labels first.`;
+      return `Another MCP server still carries ${ARK_LABELS.NAME}=${row.server} from before Ark set name labels and could get this header. Update that server once.`;
     case 'server-missing':
       return `The MCP server ${row.server} is not in this namespace.`;
     case 'servers-pending':

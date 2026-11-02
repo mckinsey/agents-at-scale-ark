@@ -21,7 +21,31 @@ MATCH_CONDITIONS = (
     '    expression: "!has(object.metadata.deletionTimestamp)"\n'
 )
 
+NAME_LABEL_EXPRESSION = (
+    "!has(object.metadata.deletionTimestamp) || "
+    "(has(object.metadata.labels) && 'ark.mckinsey.com/name' in object.metadata.labels && "
+    "object.metadata.labels['ark.mckinsey.com/name'] != object.metadata.name)"
+)
+
+MATCH_CONDITIONS_BY_WEBHOOK = {
+    "mmcpserver-v1.kb.io": (
+        "  matchConditions:\n"
+        "  - name: not-being-deleted-unless-name-label-differs\n"
+        f'    expression: "{NAME_LABEL_EXPRESSION}"\n'
+    ),
+}
+
 WEBHOOK_KINDS = {"MutatingWebhookConfiguration", "ValidatingWebhookConfiguration"}
+
+
+def entry_name(start):
+    for line in lines[start:]:
+        stripped = line.strip()
+        if stripped == "- admissionReviewVersions:" or stripped.startswith("kind:"):
+            return None
+        if line.startswith("  name: "):
+            return stripped.split(":", 1)[1].strip()
+    return None
 
 with open(MANIFEST) as f:
     lines = f.readlines()
@@ -46,7 +70,7 @@ for i, line in enumerate(lines):
     if in_webhook_entry and stripped == "failurePolicy: Fail":
         next_line = lines[i + 1] if i + 1 < len(lines) else ""
         if "matchConditions:" not in next_line:
-            out.append(MATCH_CONDITIONS)
+            out.append(MATCH_CONDITIONS_BY_WEBHOOK.get(entry_name(i + 1), MATCH_CONDITIONS))
 
 with open(MANIFEST, "w") as f:
     f.writelines(out)

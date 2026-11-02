@@ -20,6 +20,8 @@ var userScope = regexp.MustCompile(`^user-[0-9a-f]{16}$`)
 
 var ErrPersonalSecret = errors.New("personal secrets can only be used in the headers of a Query mcpserver override")
 
+var ErrPersonalSecretSelector = errors.New("personal secrets can only be sent to one MCP server, selected by matchLabels ark.mckinsey.com/name and nothing else")
+
 type Access int
 
 const (

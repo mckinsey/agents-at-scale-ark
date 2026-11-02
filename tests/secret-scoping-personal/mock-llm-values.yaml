@@ -5,8 +5,6 @@ ark:
   mcp:
     enabled: true
     name: mock-llm
-    labels:
-      ark.mckinsey.com/name: mock-llm-mcp
 
 config:
   rules:

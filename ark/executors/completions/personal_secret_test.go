@@ -6,10 +6,16 @@ import (
 
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/labels"
 	"mckinsey.com/ark/internal/secretscope"
 )
 
@@ -36,7 +42,10 @@ func personalSecretTestObjects() []client.Object {
 			Data:       map[string][]byte{"token": []byte("legacy-token")},
 		},
 		&arkv1alpha1.MCPServer{
-			ObjectMeta: metav1.ObjectMeta{Name: "github-mcp", Namespace: "default", Labels: map[string]string{"app": "github"}},
+			ObjectMeta: metav1.ObjectMeta{Name: "github-mcp", Namespace: "default", Labels: map[string]string{"app": "github", labels.NameLabel: "github-mcp"}},
+		},
+		&arkv1alpha1.MCPServer{
+			ObjectMeta: metav1.ObjectMeta{Name: "copycat-mcp", Namespace: "default", Labels: map[string]string{"app": "github", labels.NameLabel: "github-mcp"}},
 		},
 		&arkv1alpha1.Model{
 			ObjectMeta: metav1.ObjectMeta{Name: "gpt", Namespace: "default", Labels: map[string]string{"app": "github"}},
@@ -61,9 +70,32 @@ func personalSecretHeader() arkv1alpha1.Header {
 func personalSecretOverride(resourceType OverrideType) arkv1alpha1.Override {
 	return arkv1alpha1.Override{
 		ResourceType:  string(resourceType),
-		LabelSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "github"}},
+		LabelSelector: &metav1.LabelSelector{MatchLabels: map[string]string{labels.NameLabel: "github-mcp"}},
 		Headers:       []arkv1alpha1.Header{personalSecretHeader()},
 	}
+}
+
+func legacySecretHeader() arkv1alpha1.Header {
+	header := personalSecretHeader()
+	header.Value.ValueFrom.SecretKeyRef.Name = "legacy"
+	return header
+}
+
+func interceptedTestClient(get func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error) client.Client {
+	scheme := runtime.NewScheme()
+	_ = corev1.AddToScheme(scheme)
+	_ = arkv1alpha1.AddToScheme(scheme)
+	return fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(personalSecretTestObjects()...).
+		WithInterceptorFuncs(interceptor.Funcs{Get: get}).
+		Build()
+}
+
+func broadPersonalOverride() arkv1alpha1.Override {
+	override := personalSecretOverride(OverrideTypeMCPServer)
+	override.LabelSelector = &metav1.LabelSelector{MatchLabels: map[string]string{"app": "github"}}
+	return override
 }
 
 func requirePersonalSecretRejected(t *testing.T, err error) {
@@ -80,6 +112,135 @@ func TestResolveHeadersFromOverridesPersonalSecrets(t *testing.T) {
 			[]arkv1alpha1.Override{personalSecretOverride(OverrideTypeMCPServer)}, "default", OverrideTypeMCPServer, secretscope.AllowPersonal)
 		require.NoError(t, err)
 		require.Equal(t, map[string]map[string]string{"github-mcp": {"Authorization": personalSecretValue}}, got)
+	})
+
+	t.Run("personal secret reaches only the server with that name, not one that copied its label", func(t *testing.T) {
+		got, err := ResolveHeadersFromOverrides(ctx, setupTestClient(personalSecretTestObjects()),
+			[]arkv1alpha1.Override{personalSecretOverride(OverrideTypeMCPServer)}, "default", OverrideTypeMCPServer, secretscope.AllowPersonal)
+		require.NoError(t, err)
+		require.NotContains(t, got, "copycat-mcp")
+	})
+
+	broadSelectors := map[string]*metav1.LabelSelector{
+		"no selector":            nil,
+		"another label":          {MatchLabels: map[string]string{"app": "github"}},
+		"name and another label": {MatchLabels: map[string]string{labels.NameLabel: "github-mcp", "app": "github"}},
+		"empty name":             {MatchLabels: map[string]string{labels.NameLabel: ""}},
+		"match expressions": {
+			MatchLabels:      map[string]string{labels.NameLabel: "github-mcp"},
+			MatchExpressions: []metav1.LabelSelectorRequirement{{Key: "app", Operator: metav1.LabelSelectorOpExists}},
+		},
+	}
+	for name, selector := range broadSelectors {
+		t.Run("personal secret with "+name+" is refused", func(t *testing.T) {
+			override := personalSecretOverride(OverrideTypeMCPServer)
+			override.LabelSelector = selector
+			got, err := ResolveHeadersFromOverrides(ctx, setupTestClient(personalSecretTestObjects()),
+				[]arkv1alpha1.Override{override}, "default", OverrideTypeMCPServer, secretscope.AllowPersonal)
+			require.ErrorIs(t, err, secretscope.ErrPersonalSecretSelector)
+			require.NotContains(t, err.Error(), personalSecretValue)
+			require.Nil(t, got)
+		})
+	}
+
+	t.Run("a secret that is not personal keeps any selector", func(t *testing.T) {
+		override := arkv1alpha1.Override{
+			ResourceType:  string(OverrideTypeMCPServer),
+			LabelSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "github"}},
+			Headers:       []arkv1alpha1.Header{legacySecretHeader()},
+		}
+		got, err := ResolveHeadersFromOverrides(ctx, setupTestClient(personalSecretTestObjects()),
+			[]arkv1alpha1.Override{override}, "default", OverrideTypeMCPServer, secretscope.AllowPersonal)
+		require.NoError(t, err)
+		require.Equal(t, map[string]map[string]string{
+			"github-mcp":  {"Authorization": "legacy-token"},
+			"copycat-mcp": {"Authorization": "legacy-token"},
+		}, got)
+	})
+
+	t.Run("headers that are not secrets keep any selector", func(t *testing.T) {
+		objects := append(personalSecretTestObjects(), &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: "settings", Namespace: "default"},
+			Data:       map[string]string{"team": "platform"},
+		})
+		override := arkv1alpha1.Override{
+			ResourceType:  string(OverrideTypeMCPServer),
+			LabelSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "github"}},
+			Headers: []arkv1alpha1.Header{{
+				Name: "X-Team",
+				Value: arkv1alpha1.HeaderValue{ValueFrom: &arkv1alpha1.HeaderValueSource{
+					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: "settings"},
+						Key:                  "team",
+					},
+				}},
+			}},
+		}
+		got, err := ResolveHeadersFromOverrides(ctx, setupTestClient(objects),
+			[]arkv1alpha1.Override{override}, "default", OverrideTypeMCPServer, secretscope.AllowPersonal)
+		require.NoError(t, err)
+		require.Contains(t, got, "github-mcp")
+		require.Contains(t, got, "copycat-mcp")
+	})
+
+	t.Run("a missing secret fails as not found, not as an unreadable one", func(t *testing.T) {
+		override := personalSecretOverride(OverrideTypeMCPServer)
+		missing := legacySecretHeader()
+		missing.Value.ValueFrom.SecretKeyRef.Name = "missing"
+		override.Headers = append([]arkv1alpha1.Header{missing}, override.Headers...)
+		_, err := ResolveHeadersFromOverrides(ctx, setupTestClient(personalSecretTestObjects()),
+			[]arkv1alpha1.Override{override}, "default", OverrideTypeMCPServer, secretscope.AllowPersonal)
+		require.ErrorContains(t, err, "not found")
+		require.NotContains(t, err.Error(), "failed to read secret")
+	})
+
+	t.Run("a secret that cannot be read fails the override", func(t *testing.T) {
+		forbidden := func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+			if _, ok := obj.(*corev1.Secret); ok {
+				return apierrors.NewForbidden(schema.GroupResource{Resource: "secrets"}, key.Name, nil)
+			}
+			return c.Get(ctx, key, obj, opts...)
+		}
+		got, err := ResolveHeadersFromOverrides(ctx, interceptedTestClient(forbidden),
+			[]arkv1alpha1.Override{broadPersonalOverride()}, "default", OverrideTypeMCPServer, secretscope.AllowPersonal)
+		require.ErrorContains(t, err, "failed to read secret")
+		require.Nil(t, got)
+	})
+
+	t.Run("a secret that turns personal after the check is refused", func(t *testing.T) {
+		reads := 0
+		flip := func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+			if err := c.Get(ctx, key, obj, opts...); err != nil {
+				return err
+			}
+			if secret, ok := obj.(*corev1.Secret); ok && key.Name == personalSecretName {
+				reads++
+				if reads == 1 {
+					secret.Labels = nil
+				}
+			}
+			return nil
+		}
+		got, err := ResolveHeadersFromOverrides(ctx, interceptedTestClient(flip),
+			[]arkv1alpha1.Override{broadPersonalOverride()}, "default", OverrideTypeMCPServer, secretscope.AllowPersonal)
+		requirePersonalSecretRejected(t, err)
+		require.Nil(t, got)
+	})
+
+	t.Run("a personal secret for a name no server carries fails the query", func(t *testing.T) {
+		override := personalSecretOverride(OverrideTypeMCPServer)
+		override.LabelSelector = &metav1.LabelSelector{MatchLabels: map[string]string{labels.NameLabel: "gone"}}
+		got, err := ResolveHeadersFromOverrides(ctx, setupTestClient(personalSecretTestObjects()),
+			[]arkv1alpha1.Override{override}, "default", OverrideTypeMCPServer, secretscope.AllowPersonal)
+		require.ErrorContains(t, err, "no MCPServer named gone")
+		require.NotContains(t, err.Error(), personalSecretValue)
+		require.Nil(t, got)
+	})
+
+	t.Run("without permission a broad selector still reports the personal secret", func(t *testing.T) {
+		_, err := ResolveHeadersFromOverrides(ctx, setupTestClient(personalSecretTestObjects()),
+			[]arkv1alpha1.Override{broadPersonalOverride()}, "default", OverrideTypeMCPServer, secretscope.RejectPersonal)
+		requirePersonalSecretRejected(t, err)
 	})
 
 	t.Run("mcpserver override without permission rejects personal secret", func(t *testing.T) {
