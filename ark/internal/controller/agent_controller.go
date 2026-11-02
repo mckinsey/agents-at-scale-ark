@@ -20,6 +20,7 @@ import (
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 	arka2a "mckinsey.com/ark/internal/a2a"
+	"mckinsey.com/ark/internal/crossns"
 	"mckinsey.com/ark/internal/eventing"
 	"mckinsey.com/ark/internal/validation"
 )
@@ -183,7 +184,15 @@ func (r *AgentReconciler) checkModelDependency(ctx context.Context, agent *arkv1
 
 	var model arkv1alpha1.Model
 	modelKey := types.NamespacedName{Name: modelName, Namespace: modelNamespace}
-	if err := r.Get(ctx, modelKey, &model); err != nil {
+	err := r.Get(ctx, modelKey, &model)
+	if modelNamespace != agent.Namespace && (err != nil || !crossns.Allowed(&model, agent.Namespace)) {
+		var lookupErr error
+		if err != nil && !errors.IsNotFound(err) {
+			lookupErr = err
+		}
+		return reasonModelNotFound, crossns.DeniedError("Model", modelNamespace, modelName, agent.Namespace).Error(), lookupErr
+	}
+	if err != nil {
 		if errors.IsNotFound(err) {
 			msg := fmt.Sprintf("Model '%s' not found in namespace '%s'", modelName, modelNamespace)
 			return reasonModelNotFound, msg, nil

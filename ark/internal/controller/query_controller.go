@@ -43,6 +43,7 @@ import (
 	arka2a "mckinsey.com/ark/internal/a2a"
 	"mckinsey.com/ark/internal/annotations"
 	"mckinsey.com/ark/internal/common"
+	"mckinsey.com/ark/internal/crossns"
 	eventingconfig "mckinsey.com/ark/internal/eventing/config"
 	"mckinsey.com/ark/internal/resolution"
 	"mckinsey.com/ark/internal/telemetry"
@@ -1357,6 +1358,10 @@ func (r *QueryReconciler) deleteBrokerMessages(ctx context.Context, query *arkv1
 			return nil
 		}
 		return fmt.Errorf("failed to get memory %s/%s: %w", memoryNamespace, memoryName, err)
+	}
+	if !crossns.Allowed(&memory, query.Namespace) {
+		log.Info("memory does not allow references from the query namespace, skipping broker message cleanup", "memory", memoryName, "memoryNamespace", memoryNamespace, "query", query.Name)
+		return nil
 	}
 
 	var baseURL string
