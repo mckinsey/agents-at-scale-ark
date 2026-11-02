@@ -265,7 +265,7 @@ spec:
         name: {{ include "{{ .Values.projectName }}.fullname" . }}-my-tool
         port: 8000
         path: /mcp
-  transport: sse
+  transport: http
 ```
 
 See `tools/example-tool.yaml.disabled` for a complete example.
