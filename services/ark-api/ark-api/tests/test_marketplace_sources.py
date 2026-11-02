@@ -383,6 +383,139 @@ class TestMarketplaceSourceAuth(unittest.TestCase):
         mock_core.delete_namespaced_secret.assert_not_awaited()
 
 
+class TestMarketplaceSourceSecretRefBinding(unittest.TestCase):
+    """A source only uses the credential Secret Ark derives from its name."""
+
+    FOREIGN = "other-app-token"
+
+    def _core(self, auth):
+        mock_core = MagicMock()
+        mock_core.read_namespaced_config_map = AsyncMock(
+            return_value=SimpleNamespace(
+                data={"priv": _entry("https://example.com/marketplace.json", auth=auth)}
+            )
+        )
+        mock_core.patch_namespaced_config_map = AsyncMock(return_value=None)
+        mock_core.patch_namespaced_secret = AsyncMock(return_value=None)
+        mock_core.delete_namespaced_secret = AsyncMock(return_value=None)
+        mock_core.read_namespaced_secret = AsyncMock(
+            return_value=SimpleNamespace(data={"value": "dG9r"})
+        )
+        return mock_core
+
+    def _assert_foreign_secret_untouched(self, mock_core):
+        for method in (
+            mock_core.read_namespaced_secret,
+            mock_core.patch_namespaced_secret,
+            mock_core.delete_namespaced_secret,
+        ):
+            for call in method.await_args_list:
+                self.assertNotIn(self.FOREIGN, call.args)
+                self.assertNotIn(self.FOREIGN, call.kwargs.values())
+
+    def test_parse_drops_non_derived_secret_ref(self):
+        from src.ark_api.api.v1.marketplace_sources import parse_sources
+
+        parsed = parse_sources(
+            {
+                "priv": _entry(
+                    "https://example.com/m.json",
+                    auth={"scheme": "bearer", "secretRef": self.FOREIGN},
+                ),
+                "ok": _entry(
+                    "https://example.com/m.json",
+                    auth={"scheme": "bearer", "secretRef": "marketplace-source-ok-auth"},
+                ),
+            }
+        )
+        by_name = {p.name: p for p in parsed}
+        self.assertIsNone(by_name["priv"].secretRef)
+        self.assertEqual(by_name["priv"].scheme, "bearer")
+        self.assertEqual(by_name["ok"].secretRef, "marketplace-source-ok-auth")
+
+    def test_list_reports_no_credential_for_non_derived_secret_ref(self):
+        mock_core = self._core({"scheme": "bearer", "secretRef": self.FOREIGN})
+        with _patch_core(mock_core):
+            response = client.get("/v1/namespaces/team-a/marketplace-sources")
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()[0]["hasCredential"])
+
+    def test_delete_leaves_non_derived_secret_untouched(self):
+        mock_core = self._core({"scheme": "bearer", "secretRef": self.FOREIGN})
+        with _patch_core(mock_core):
+            response = client.delete("/v1/namespaces/team-a/marketplace-sources/priv")
+        self.assertEqual(response.status_code, 204)
+        mock_core.delete_namespaced_secret.assert_not_awaited()
+        mock_core.patch_namespaced_config_map.assert_awaited_once()
+
+    def test_update_clearing_auth_leaves_non_derived_secret_untouched(self):
+        mock_core = self._core({"scheme": "bearer", "secretRef": self.FOREIGN})
+        with _patch_core(mock_core):
+            response = client.patch(
+                "/v1/namespaces/team-a/marketplace-sources/priv",
+                json={"url": "https://example.com/marketplace.json"},
+            )
+        self.assertEqual(response.status_code, 200)
+        mock_core.delete_namespaced_secret.assert_not_awaited()
+        self._assert_foreign_secret_untouched(mock_core)
+
+    def test_update_keeping_credential_does_not_read_non_derived_secret(self):
+        mock_core = self._core({"scheme": "bearer", "secretRef": self.FOREIGN})
+        with _patch_core(mock_core):
+            response = client.patch(
+                "/v1/namespaces/team-a/marketplace-sources/priv",
+                json={
+                    "url": "https://example.com/marketplace.json",
+                    "auth": {"scheme": "bearer"},
+                },
+            )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("auth.credential is required", response.text)
+        mock_core.read_namespaced_secret.assert_not_awaited()
+        mock_core.patch_namespaced_secret.assert_not_awaited()
+        mock_core.patch_namespaced_config_map.assert_not_awaited()
+
+    def test_update_with_new_credential_writes_only_the_derived_secret(self):
+        mock_core = self._core({"scheme": "bearer", "secretRef": self.FOREIGN})
+        with _patch_core(mock_core):
+            response = client.patch(
+                "/v1/namespaces/team-a/marketplace-sources/priv",
+                json={
+                    "url": "https://example.com/marketplace.json",
+                    "auth": {"scheme": "bearer", "credential": "new-token"},
+                },
+            )
+        self.assertEqual(response.status_code, 200)
+        mock_core.patch_namespaced_secret.assert_awaited_once()
+        self.assertEqual(
+            mock_core.patch_namespaced_secret.await_args.args[0],
+            "marketplace-source-priv-auth",
+        )
+        self._assert_foreign_secret_untouched(mock_core)
+        written = json.loads(
+            mock_core.patch_namespaced_config_map.await_args.args[2]["data"]["priv"]
+        )
+        self.assertEqual(written["auth"]["secretRef"], "marketplace-source-priv-auth")
+
+    def test_update_keeping_derived_credential_reads_it(self):
+        mock_core = self._core({"scheme": "bearer", "secretRef": "marketplace-source-priv-auth"})
+        with _patch_core(mock_core):
+            response = client.patch(
+                "/v1/namespaces/team-a/marketplace-sources/priv",
+                json={
+                    "url": "https://example.com/marketplace.json",
+                    "displayName": "Private",
+                    "auth": {"scheme": "bearer"},
+                },
+            )
+        self.assertEqual(response.status_code, 200)
+        mock_core.read_namespaced_secret.assert_awaited_once()
+        self.assertEqual(
+            mock_core.read_namespaced_secret.await_args.args[0],
+            "marketplace-source-priv-auth",
+        )
+        self.assertTrue(response.json()["hasCredential"])
+
 class TestMarketplacePermissionProbe(unittest.TestCase):
     def _run(self, allowed=None, raises=None):
         mock_auth = MagicMock()
