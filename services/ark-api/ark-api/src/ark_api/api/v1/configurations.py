@@ -1,6 +1,6 @@
 """Ark configuration API endpoints, backed by Kubernetes ConfigMaps."""
 import logging
-from fastapi import APIRouter, Query, Depends
+from fastapi import APIRouter, HTTPException, Query, Depends
 from typing import Optional
 from ark_sdk.client import with_ark_client
 from ark_sdk.k8s import ConfigurationClient
@@ -39,13 +39,16 @@ async def list_configurations(namespace: Optional[str] = Query(None, description
 async def create_configuration(body: ConfigurationCreateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_QUERY_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ConfigurationResponse:
     """Create a new configuration using ark-sdk."""
     client = ConfigurationClient(namespace=namespace, impersonation=impersonation)
-    result = await client.create_configuration(
-        name=body.name,
-        value=body.value,
-        description=body.description,
-        alias=body.alias,
-        labels=body.labels
-    )
+    try:
+        result = await client.create_configuration(
+            name=body.name,
+            value=body.value,
+            description=body.description,
+            alias=body.alias,
+            labels=body.labels
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
     return ConfigurationResponse(**result)
 
 @router.get("/{configuration_name}", response_model=ConfigurationResponse)
@@ -61,13 +64,16 @@ async def get_configuration(configuration_name: str, namespace: Optional[str] = 
 async def update_configuration(configuration_name: str, body: ConfigurationUpdateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_QUERY_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> ConfigurationResponse:
     """Update a configuration using ark-sdk."""
     client = ConfigurationClient(namespace=namespace, impersonation=impersonation)
-    result = await client.update_configuration(
-        configuration_name,
-        value=body.value,
-        description=body.description,
-        alias=body.alias,
-        labels=body.labels
-    )
+    try:
+        result = await client.update_configuration(
+            configuration_name,
+            value=body.value,
+            description=body.description,
+            alias=body.alias,
+            labels=body.labels
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
     return ConfigurationResponse(**result)
 
 @router.delete("/{configuration_name}")
@@ -75,7 +81,10 @@ async def update_configuration(configuration_name: str, body: ConfigurationUpdat
 async def delete_configuration(configuration_name: str, namespace: Optional[str] = Query(None, description=NAMESPACE_QUERY_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)):
     """Delete a configuration using ark-sdk."""
     client = ConfigurationClient(namespace=namespace, impersonation=impersonation)
-    await client.delete_configuration(configuration_name)
+    try:
+        await client.delete_configuration(configuration_name)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
     return {"message": "Configuration deleted successfully"}
 
 @router.get("/{configuration_name}/references", response_model=ConfigurationReferenceListResponse)

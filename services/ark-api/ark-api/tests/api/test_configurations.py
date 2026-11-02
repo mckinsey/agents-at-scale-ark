@@ -11,6 +11,7 @@ os.environ["AUTH_MODE"] = "open"
 os.environ["READ_ONLY_MODE"] = "false"
 
 from ark_sdk import models, versions
+from ark_sdk.k8s import RESERVED_CONFIGURATION_NAMES
 from fastapi.testclient import TestClient
 
 from ark_api.api.v1.export import EXPORT_CONFIGMAP_NAME
@@ -156,6 +157,67 @@ class TestConfigurationsApi(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         mock_client.delete_configuration.assert_awaited_once_with("github-mcp-url")
+
+
+class TestReservedConfigurationNamesApi(unittest.TestCase):
+    """ConfigMaps ark-api owns for its own features cannot be written as configurations."""
+
+    def setUp(self):
+        from ark_api.main import app
+        self.client = TestClient(app)
+        init_patcher = patch('ark_sdk.k8s.init_k8s', new=AsyncMock())
+        init_patcher.start()
+        self.addCleanup(init_patcher.stop)
+        api_patcher = patch('ark_sdk.k8s.create_api_client')
+        self.create_api_client = api_patcher.start()
+        self.addCleanup(api_patcher.stop)
+
+    def test_reserved_names_are_the_configmaps_ark_api_owns(self):
+        self.assertEqual(
+            RESERVED_CONFIGURATION_NAMES,
+            {EXPORT_CONFIGMAP_NAME, MARKETPLACE_CONFIGMAP_NAME},
+        )
+
+    def test_create_with_reserved_name_returns_422(self):
+        for name in RESERVED_CONFIGURATION_NAMES:
+            with self.subTest(name=name):
+                response = self.client.post("/v1/configurations", json={
+                    "name": name,
+                    "value": json.dumps({"url": "https://example.test/"}),
+                })
+                self.assertEqual(response.status_code, 422)
+                self.assertIn("reserved", response.json()["detail"])
+        self.create_api_client.assert_not_called()
+
+    def test_update_with_reserved_name_returns_422(self):
+        for name in RESERVED_CONFIGURATION_NAMES:
+            with self.subTest(name=name):
+                response = self.client.put(f"/v1/configurations/{name}", json={
+                    "value": json.dumps({"url": "https://example.test/"}),
+                })
+                self.assertEqual(response.status_code, 422)
+        self.create_api_client.assert_not_called()
+
+    def test_delete_with_reserved_name_returns_422(self):
+        for name in RESERVED_CONFIGURATION_NAMES:
+            with self.subTest(name=name):
+                response = self.client.delete(f"/v1/configurations/{name}")
+                self.assertEqual(response.status_code, 422)
+        self.create_api_client.assert_not_called()
+
+    @patch('ark_api.api.v1.configurations.ConfigurationClient')
+    def test_client_value_error_on_create_maps_to_422(self, mock_client_cls):
+        mock_client_cls.return_value.create_configuration = AsyncMock(
+            side_effect=ValueError("bad configuration")
+        )
+
+        response = self.client.post("/v1/configurations", json={
+            "name": "github-mcp-url",
+            "value": "https://example.test/mcp/",
+        })
+
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["detail"], "bad configuration")
 
 
 class TestConfigurationReferencesEndpoint(unittest.TestCase):
