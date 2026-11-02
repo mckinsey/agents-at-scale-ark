@@ -1,4 +1,4 @@
-API="http://ark-api.$NAMESPACE.svc.cluster.local/v1/secrets"
+ARK_API="http://ark-api.$NAMESPACE.svc.cluster.local/v1"
 ISSUER="http://dex.$NAMESPACE.svc.cluster.local:5556/dex"
 POD=personal-curl
 DEX_CLIENT=ark-dashboard:ark-dashboard-dev-secret
@@ -31,10 +31,14 @@ owner_hash() {
 }
 
 call() {
-  bearer=$1 method=$2 path=$3 body=${4:-}
+  call_api secrets "$@"
+}
+
+call_api() {
+  resource=$1 bearer=$2 method=$3 path=$4 body=${5:-}
   case "$path" in
-    *\?*) url="$API$path&namespace=$NAMESPACE" ;;
-    *) url="$API$path?namespace=$NAMESPACE" ;;
+    *\?*) url="$ARK_API/$resource$path&namespace=$NAMESPACE" ;;
+    *) url="$ARK_API/$resource$path?namespace=$NAMESPACE" ;;
   esac
   set -- -s -w '\n%{http_code}' -X "$method" "$url" -H 'Content-Type: application/json'
   if [ -n "$bearer" ]; then
