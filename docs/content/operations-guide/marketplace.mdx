@@ -26,7 +26,7 @@ marketplaceSources:
 | `url` | yes | Absolute `https` URL of a marketplace manifest. The filename is not constrained. |
 | `displayName` | no | Label shown in the dashboard. Defaults to `name`. |
 | `namespace` | no | Target namespace. Defaults to the install namespace. |
-| `auth` | no | Authenticated fetch: `{ scheme: bearer\|basic, secretRef }` referencing a pre-existing credential Secret. See [Authenticated sources](#authenticated-sources). |
+| `auth` | no | Authenticated fetch: `{ scheme: bearer\|basic, secretRef }` referencing a pre-existing credential Secret named `marketplace-source-<name>-auth`. See [Authenticated sources](#authenticated-sources). |
 
 Set `marketplaceSources: []` to seed nothing and skip the Job. The Job image is configurable via `marketplaceSourcesSeed.image`.
 
@@ -122,7 +122,7 @@ A source can fetch a manifest that requires authentication (private GitHub/GHES,
 
 An authenticated source is a credential Secret plus a `marketplaceSources` entry with an `auth` block. Provision it declaratively — the token never goes in `values.yaml`:
 
-1. **Create the credential Secret out-of-band** (External Secrets Operator, sealed-secrets, SOPS, Vault), named `marketplace-source-<name>-auth` with a single key `value`:
+1. **Create the credential Secret out-of-band** (External Secrets Operator, sealed-secrets, SOPS, Vault), named `marketplace-source-<name>-auth` with a single key `value`. ark-api ignores a `secretRef` with any other name:
 
    ```bash
    kubectl create secret generic marketplace-source-internal-mirror-auth \
@@ -162,7 +162,7 @@ So user changes survive upgrades; only untouched seeded defaults track the chart
 
 - **Source availability.** ark-api fetches each source concurrently with a 10s per-source timeout and a 30s aggregator deadline, and caches successful fetches for one hour. A failing source surfaces an inline error and does not block the others.
 - **Outbound restrictions.** Source URLs must be `https`. ark-api rejects non-routable hosts (loopback, link-local, multicast, reserved) and does not follow redirects — including for credentialed fetches, so a credential cannot be used to reach internal/metadata services or leaked to a redirect target. Private RFC-1918 hosts are allowed for internal mirrors.
-- **Items not appearing.** Check the source URL returns valid JSON with an `items` array, is reachable from the ark-api pod, and uses `https`. For an authenticated source, an `auth_error` means the credential Secret is missing, the user lacks `get` on it, or the upstream rejected it (401/403).
+- **Items not appearing.** Check the source URL returns valid JSON with an `items` array, is reachable from the ark-api pod, and uses `https`. For an authenticated source, an `auth_error` means the credential Secret is missing, the user lacks `get` on it, its name is not `marketplace-source-<name>-auth`, or the upstream rejected it (401/403).
 
 ## Uninstall and cleanup
 

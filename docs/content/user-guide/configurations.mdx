@@ -38,6 +38,8 @@ data:
 | `ark.mckinsey.com/description` | Free text shown in the dashboard. |
 | `ark.mckinsey.com/alias` | An alternative name, for display only. See [Aliases do not resolve](#aliases-do-not-resolve). |
 
+The names `marketplace-sources` and `ark-export-metadata` are reserved for ConfigMaps the Ark API manages itself. The configurations API rejects them with HTTP 422.
+
 Label names accept only letters and digits, and are limited to 57 characters. The API rejects anything else.
 
 A ConfigMap without the marker annotation stays invisible to the Configurations page, and Ark never adds the marker to a ConfigMap it did not create. Referencing such a ConfigMap from a resource still works — the marker only controls what the page manages.
