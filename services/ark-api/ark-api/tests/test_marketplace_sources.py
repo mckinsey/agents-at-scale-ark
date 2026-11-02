@@ -433,6 +433,53 @@ class TestMarketplaceSourceSecretRefBinding(unittest.TestCase):
         self.assertEqual(by_name["priv"].scheme, "bearer")
         self.assertEqual(by_name["ok"].secretRef, "marketplace-source-ok-auth")
 
+    def test_parse_drops_non_derived_secret_ref_without_scheme(self):
+        from src.ark_api.api.v1.marketplace_sources import parse_sources
+
+        parsed = parse_sources(
+            {"priv": _entry("https://example.com/m.json", auth={"secretRef": self.FOREIGN})}
+        )
+        self.assertIsNone(parsed[0].secretRef)
+
+    def test_parse_does_not_log_the_secret_ref_value(self):
+        from src.ark_api.api.v1.marketplace_sources import parse_sources
+
+        with self.assertLogs("src.ark_api.api.v1.marketplace_sources", "INFO") as logs:
+            parse_sources(
+                {
+                    "priv": _entry(
+                        "https://example.com/m.json",
+                        auth={"scheme": "bearer", "secretRef": self.FOREIGN},
+                    )
+                }
+            )
+        self.assertTrue(logs.output)
+        self.assertNotIn(self.FOREIGN, "\n".join(logs.output))
+
+    def test_get_reports_no_credential_for_non_derived_secret_ref(self):
+        mock_core = self._core({"scheme": "bearer", "secretRef": self.FOREIGN})
+        with _patch_core(mock_core):
+            response = client.get("/v1/namespaces/team-a/marketplace-sources/priv")
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["hasCredential"])
+
+    def test_delete_leaves_non_derived_secret_untouched_without_scheme(self):
+        mock_core = self._core({"secretRef": self.FOREIGN})
+        with _patch_core(mock_core):
+            response = client.delete("/v1/namespaces/team-a/marketplace-sources/priv")
+        self.assertEqual(response.status_code, 204)
+        mock_core.delete_namespaced_secret.assert_not_awaited()
+
+    def test_update_clearing_auth_leaves_non_derived_secret_untouched_without_scheme(self):
+        mock_core = self._core({"secretRef": self.FOREIGN})
+        with _patch_core(mock_core):
+            response = client.patch(
+                "/v1/namespaces/team-a/marketplace-sources/priv",
+                json={"url": "https://example.com/marketplace.json"},
+            )
+        self.assertEqual(response.status_code, 200)
+        mock_core.delete_namespaced_secret.assert_not_awaited()
+
     def test_list_reports_no_credential_for_non_derived_secret_ref(self):
         mock_core = self._core({"scheme": "bearer", "secretRef": self.FOREIGN})
         with _patch_core(mock_core):
@@ -515,6 +562,7 @@ class TestMarketplaceSourceSecretRefBinding(unittest.TestCase):
             "marketplace-source-priv-auth",
         )
         self.assertTrue(response.json()["hasCredential"])
+
 
 class TestMarketplacePermissionProbe(unittest.TestCase):
     def _run(self, allowed=None, raises=None):

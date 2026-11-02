@@ -479,7 +479,7 @@ class TestReservedConfigurationNames(unittest.IsolatedAsyncioTestCase):
         await self.client.create_configuration(name="marketplace-sources-url", value="{}")
         self.v1.create_namespaced_config_map.assert_called_once()
 
-    async def test_list_hides_marketplace_sources_configmap(self):
+    async def test_list_skips_unmarked_marketplace_sources_configmap(self):
         marketplace = _config_map(name="marketplace-sources")
         marketplace.metadata.annotations = {}
         self.v1.list_namespaced_config_map = AsyncMock(
@@ -490,7 +490,7 @@ class TestReservedConfigurationNames(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual([item["name"] for item in result["items"]], ["github-mcp-url"])
 
-    async def test_get_hides_marketplace_sources_configmap(self):
+    async def test_get_skips_unmarked_marketplace_sources_configmap(self):
         marketplace = _config_map(name="marketplace-sources")
         marketplace.metadata.annotations = {}
         self.v1.read_namespaced_config_map = AsyncMock(return_value=marketplace)
@@ -499,6 +499,18 @@ class TestReservedConfigurationNames(unittest.IsolatedAsyncioTestCase):
             await self.client.get_configuration("marketplace-sources")
 
         self.assertEqual(context.exception.status, 404)
+
+    async def test_marked_reserved_configmap_stays_readable_but_not_writable(self):
+        self.v1.read_namespaced_config_map = AsyncMock(
+            return_value=_config_map(name="marketplace-sources")
+        )
+
+        result = await self.client.get_configuration("marketplace-sources")
+
+        self.assertEqual(result["name"], "marketplace-sources")
+        with self.assertRaises(ValueError):
+            await self.client.delete_configuration("marketplace-sources")
+        self.v1.delete_namespaced_config_map.assert_not_called()
 
 
 class TestConfigurationInitK8sOrdering(unittest.IsolatedAsyncioTestCase):

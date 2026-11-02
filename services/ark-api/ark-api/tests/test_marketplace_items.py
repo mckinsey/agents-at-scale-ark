@@ -404,6 +404,27 @@ class TestMarketplaceItemsAuth(unittest.TestCase):
         mock_core.read_namespaced_secret.assert_not_awaited()
         self.assertEqual(len(recorded), 0)
 
+    def test_scheme_without_secret_ref_yields_auth_error_and_no_fetch(self):
+        mock_core = _make_core([("a", "https://a.test/m.json", None, {"scheme": "bearer"})])
+        stack, recorded = _recording_patch(mock_core)
+        with stack:
+            response = client.get("/v1/namespaces/team-a/marketplace-items")
+        self.assertEqual(response.json()[0]["error"]["code"], "auth_error")
+        mock_core.read_namespaced_secret.assert_not_awaited()
+        self.assertEqual(len(recorded), 0)
+
+    def test_secret_ref_without_scheme_fetches_anonymously_without_reading_it(self):
+        mock_core = _make_core(
+            [("a", "https://a.test/m.json", None, {"secretRef": "marketplace-source-a-auth"})],
+            secrets={"marketplace-source-a-auth": "tok"},
+        )
+        stack, recorded = _recording_patch(mock_core)
+        with stack:
+            response = client.get("/v1/namespaces/team-a/marketplace-items")
+        self.assertEqual(response.json()[0]["items"], [{"name": "x"}])
+        self.assertNotIn("Authorization", recorded[0]["headers"] or {})
+        mock_core.read_namespaced_secret.assert_not_awaited()
+
     def test_secret_ref_of_another_source_is_not_borrowed(self):
         mock_core = _make_core(
             [
@@ -416,6 +437,7 @@ class TestMarketplaceItemsAuth(unittest.TestCase):
         with stack:
             response = client.get("/v1/namespaces/team-a/marketplace-items")
         by_source = {r["source"]: r for r in response.json()}
+        self.assertIsNotNone(by_source["b"]["error"])
         self.assertEqual(by_source["b"]["error"]["code"], "auth_error")
         self.assertEqual(by_source["a"]["items"], [{"name": "x"}])
         self.assertEqual([r["url"] for r in recorded], ["https://a.test/m.json"])
@@ -423,7 +445,6 @@ class TestMarketplaceItemsAuth(unittest.TestCase):
         self.assertEqual(
             mock_core.read_namespaced_secret.await_args.args[0], "marketplace-source-a-auth"
         )
-
 
 
 def _addrinfo(*ips, port=443):
