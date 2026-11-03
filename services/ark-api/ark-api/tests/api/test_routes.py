@@ -1,5 +1,6 @@
 """Tests for API routes."""
 
+import json
 import os
 import unittest
 import unittest.mock
@@ -1099,6 +1100,34 @@ class TestAgentsEndpoint(unittest.TestCase):
         )
 
     @patch("ark_api.api.v1.agents.with_ark_client")
+    def test_list_agents_summary_view_keeps_a2a_server_name(self, mock_ark_client):
+        mock_client = AsyncMock()
+        mock_ark_client.return_value.__aenter__.return_value = mock_client
+
+        mock_agent = Mock()
+        mock_agent.to_dict.return_value = {
+            "metadata": {
+                "name": "simple-agent",
+                "namespace": "default",
+                "annotations": {
+                    "ark.mckinsey.com/a2a-server-name": "simple-agent",
+                    "ark.mckinsey.com/a2a-server-skills": '[{"heavy": "payload"}]',
+                },
+            },
+            "spec": {"description": "A simple agent"},
+            "status": {"conditions": [{"type": "Available", "status": "True"}]},
+        }
+        mock_client.agents.a_list_page = AsyncMock(return_value=_page([mock_agent]))
+
+        response = self.client.get("/v1/agents?namespace=default&view=summary")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json()["items"][0]["annotations"],
+            {"ark.mckinsey.com/a2a-server-name": "simple-agent"},
+        )
+
+    @patch("ark_api.api.v1.agents.with_ark_client")
     def test_list_agents_with_tools_view(self, mock_ark_client):
         """With-tools view trims heavy fields but carries the referenced tool names."""
         mock_client = AsyncMock()
@@ -1272,6 +1301,95 @@ class TestAgentsEndpoint(unittest.TestCase):
         self.assertEqual(data["prompt"], "You are a helpful assistant")
         self.assertEqual(data["modelRef"]["name"], "gpt-4")
         self.assertEqual(data["status"]["phase"], "Ready")
+
+    @patch("ark_api.api.v1.agents.with_ark_client")
+    def test_get_a2a_agent_returns_skills_from_annotation(self, mock_ark_client):
+        mock_client = AsyncMock()
+        mock_ark_client.return_value.__aenter__.return_value = mock_client
+
+        skills = [
+            {
+                "id": "simple_math",
+                "name": "Simple Math",
+                "description": "Perform basic mathematical calculations",
+                "tags": ["math", "calculation"],
+            },
+            {"id": "echo_messages", "name": "Echo Messages"},
+        ]
+        mock_agent = Mock()
+        mock_agent.to_dict.return_value = {
+            "metadata": {
+                "name": "simple-agent",
+                "namespace": "default",
+                "annotations": {
+                    "ark.mckinsey.com/a2a-server-address": "http://simple-agent.default.svc.cluster.local:80",
+                    "ark.mckinsey.com/a2a-server-skills": json.dumps(skills),
+                },
+            },
+            "spec": {"description": "A simple agent"},
+            "status": {"conditions": [{"type": "Available", "status": "True"}]},
+        }
+        mock_client.agents.a_get = AsyncMock(return_value=mock_agent)
+
+        response = self.client.get("/v1/agents/simple-agent?namespace=default")
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data["isA2A"])
+        self.assertEqual([s["id"] for s in data["skills"]], ["simple_math", "echo_messages"])
+        self.assertEqual(data["skills"][0]["tags"], ["math", "calculation"])
+
+    @patch("ark_api.api.v1.agents.with_ark_client")
+    def test_get_a2a_agent_skips_invalid_skill_entries(self, mock_ark_client):
+        mock_client = AsyncMock()
+        mock_ark_client.return_value.__aenter__.return_value = mock_client
+
+        skills = [{"foo": 1}, {"id": "echo_messages", "name": "Echo Messages"}, "not-a-skill"]
+        mock_agent = Mock()
+        mock_agent.to_dict.return_value = {
+            "metadata": {
+                "name": "simple-agent",
+                "namespace": "default",
+                "annotations": {
+                    "ark.mckinsey.com/a2a-server-address": "http://simple-agent.default.svc.cluster.local:80",
+                    "ark.mckinsey.com/a2a-server-skills": json.dumps(skills),
+                },
+            },
+            "spec": {"description": "A simple agent"},
+            "status": {"conditions": [{"type": "Available", "status": "True"}]},
+        }
+        mock_client.agents.a_get = AsyncMock(return_value=mock_agent)
+
+        response = self.client.get("/v1/agents/simple-agent?namespace=default")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([s["id"] for s in response.json()["skills"]], ["echo_messages"])
+
+    @patch("ark_api.api.v1.agents.with_ark_client")
+    def test_update_a2a_agent_is_rejected(self, mock_ark_client):
+        mock_client = AsyncMock()
+        mock_ark_client.return_value.__aenter__.return_value = mock_client
+
+        existing_agent = Mock()
+        existing_agent.to_dict.return_value = {
+            "metadata": {
+                "name": "simple-agent",
+                "namespace": "default",
+                "annotations": {"ark.mckinsey.com/a2a-server-name": "simple-agent"},
+            },
+            "spec": {"description": "A simple agent", "prompt": "You are simple-agent."},
+        }
+        mock_client.agents.a_get = AsyncMock(return_value=existing_agent)
+        mock_client.agents.a_update = AsyncMock()
+
+        response = self.client.put(
+            "/v1/agents/simple-agent?namespace=default",
+            json={"description": "edited"},
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("update the A2A server", response.json()["detail"])
+        mock_client.agents.a_update.assert_not_called()
 
     @patch("ark_api.api.v1.agents.with_ark_client")
     def test_update_agent_success(self, mock_ark_client):
@@ -1471,6 +1589,103 @@ class TestAgentsEndpoint(unittest.TestCase):
         data = response.json()
         self.assertIsNone(data["prompt"])
         self.assertEqual(data["description"], "desc")
+
+    @patch("ark_api.api.v1.agents.with_ark_client")
+    def test_update_agent_output_schema_annotation_set(self, mock_ark_client):
+        """The output-schema annotation is set and other annotations are kept."""
+        schema_key = "executor-openai-responses.ark.mckinsey.com/output-schema"
+        mock_client = self._mock_agent_update(mock_ark_client, {"prompt": "prompt"})
+        mock_client.agents.a_get.return_value.to_dict.return_value["metadata"][
+            "annotations"
+        ] = {"keep": "kept", schema_key: "old"}
+
+        response = self.client.put(
+            "/v1/agents/test-agent?namespace=default",
+            json={"annotations": {schema_key: '{"type": "object"}'}},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        persisted = mock_client.agents.a_update.call_args.args[0].to_dict()
+        self.assertEqual(
+            persisted["metadata"]["annotations"],
+            {"keep": "kept", schema_key: '{"type": "object"}'},
+        )
+        self.assertNotIn("annotations", persisted["spec"])
+        self.assertEqual(persisted["spec"]["prompt"], "prompt")
+
+    @patch("ark_api.api.v1.agents.with_ark_client")
+    def test_update_agent_output_schema_annotation_removed(self, mock_ark_client):
+        """A null value removes the output-schema annotation."""
+        schema_key = "executor-openai-responses.ark.mckinsey.com/output-schema"
+        mock_client = self._mock_agent_update(mock_ark_client, {"prompt": "prompt"})
+        mock_client.agents.a_get.return_value.to_dict.return_value["metadata"][
+            "annotations"
+        ] = {"keep": "kept", schema_key: "old"}
+
+        response = self.client.put(
+            "/v1/agents/test-agent?namespace=default",
+            json={"annotations": {schema_key: None}},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        persisted = mock_client.agents.a_update.call_args.args[0].to_dict()
+        self.assertEqual(persisted["metadata"]["annotations"], {"keep": "kept"})
+
+    @patch("ark_api.api.v1.agents.with_ark_client")
+    def test_update_agent_disallowed_annotation_rejected(self, mock_ark_client):
+        """Annotations other than output-schema are rejected with 400."""
+        mock_client = self._mock_agent_update(mock_ark_client, {"prompt": "prompt"})
+
+        for key in (
+            "ark.mckinsey.com/a2a-server-address",
+            "executor-openai-responses.ark.mckinsey.com/tools",
+            "custom",
+        ):
+            with self.subTest(key=key):
+                response = self.client.put(
+                    "/v1/agents/test-agent?namespace=default",
+                    json={"annotations": {key: "value"}},
+                )
+
+                self.assertEqual(response.status_code, 400)
+                self.assertIn(key, response.json()["detail"])
+
+        mock_client.agents.a_update.assert_not_called()
+
+    @patch("ark_api.api.v1.agents.with_ark_client")
+    def test_update_agent_invalid_output_schema_rejected(self, mock_ark_client):
+        """An output schema that is empty or invalid is rejected with 400."""
+        schema_key = "executor-openai-responses.ark.mckinsey.com/output-schema"
+        mock_client = self._mock_agent_update(mock_ark_client, {"prompt": "prompt"})
+
+        for value in ("", "{not json", '{"type": "string"}'):
+            with self.subTest(value=value):
+                response = self.client.put(
+                    "/v1/agents/test-agent?namespace=default",
+                    json={"annotations": {schema_key: value}},
+                )
+
+                self.assertEqual(response.status_code, 400)
+                self.assertIn("Invalid output schema", response.json()["detail"])
+
+        mock_client.agents.a_get.assert_not_called()
+        mock_client.agents.a_update.assert_not_called()
+
+    @patch("ark_api.api.v1.agents.with_ark_client")
+    def test_update_agent_omit_annotations_preserved(self, mock_ark_client):
+        """Omitting annotations leaves existing annotations untouched."""
+        mock_client = self._mock_agent_update(mock_ark_client, {"prompt": "prompt"})
+        mock_client.agents.a_get.return_value.to_dict.return_value["metadata"][
+            "annotations"
+        ] = {"keep": "kept"}
+
+        response = self.client.put(
+            "/v1/agents/test-agent?namespace=default",
+            json={"description": "new desc"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["annotations"], {"keep": "kept"})
 
     @patch("ark_api.api.v1.agents.with_ark_client")
     def test_delete_agent_success(self, mock_ark_client):

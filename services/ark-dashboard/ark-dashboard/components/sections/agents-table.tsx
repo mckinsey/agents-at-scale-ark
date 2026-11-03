@@ -63,7 +63,11 @@ function AgentTableRow({ agent, onDelete }: Readonly<AgentTableRowProps>) {
             {agent.name}
           </NamespacedLink>
         </TableCell>
-        <OriginCell origin={agent.annotations?.[ARK_ANNOTATIONS.ORIGIN]} />
+        <OriginCell
+          origin={agent.annotations?.[ARK_ANNOTATIONS.ORIGIN]}
+          a2aServerName={agent.annotations?.[ARK_ANNOTATIONS.A2A_SERVER_NAME]}
+          rowHref={`/agents/${encodeURIComponent(agent.name)}`}
+        />
         <TableCell size="small" className="relative z-10">
           {agent.description ? (
             <TruncatedTooltip label={agent.description}>

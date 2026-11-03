@@ -103,6 +103,7 @@
     "postcss": "^8.5.18",
     "proxy-addr": "^2.0.8",
     "source-map-js": "^1.2.2",
-    "follow-redirects": "^1.16.1"
+    "follow-redirects": "^1.16.1",
+    "body-parser": "^2.4.0"
   }
 }
