@@ -44,6 +44,9 @@ spec:
         for:
           jsonPath:
             path: '{.status.lastResolvedAddress}'
+    - script:
+        content: |
+          kubectl annotate memory default -n default ark.mckinsey.com/allowed-namespaces='*' --overwrite
     - apply:
         file: manifests/a01-agent-a.yaml
     - apply:
