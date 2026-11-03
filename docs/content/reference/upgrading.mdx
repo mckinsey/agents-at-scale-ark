@@ -112,6 +112,33 @@ kubectl get secrets -n <ark-api-namespace> -l ark.mckinsey.com/api-key=true \
 
 See [Revoked and Expired Key Retention](/developer-guide/authentication#revoked-and-expired-key-retention).
 
+### Model Base URLs Checked at Runtime
+
+The model URL rules used to run only when a Model was created or updated. A `baseUrl` read from a ConfigMap or Secret could change afterwards without being checked again. The controller now checks the resolved base URL before every availability probe, and the completions executor checks it every time it loads a Model, with the same rules as admission.
+
+A Model whose resolved base URL no longer passes gets `ModelAvailable=False` with reason `BaseURLNotAllowed`. Queries against it end in `error` with a message such as `spec.config.openai.baseUrl is not allowed by the model URL policy: hosts outside the cluster must use HTTPS`. Nothing is sent to that URL.
+
+The `ark-completions` chart has new `modelUrlSecurity` values, off by default, with the same shape as the `ark-controller` chart. They read `WHITELISTED_MODEL_DOMAINS` and `ALLOWED_PRIVATE_IP_RANGES` from the `model-url-security` ConfigMap in the namespace the executor runs in.
+
+**Migration:**
+- List Models that are no longer available because of the check:
+
+```bash
+kubectl get models -A -o json | jq -r '.items[]
+  | select(any(.status.conditions[]?; .type == "ModelAvailable" and .reason == "BaseURLNotAllowed"))
+  | "\(.metadata.namespace)/\(.metadata.name)"'
+```
+
+- If you enabled `modelUrlSecurity.domainWhitelist` or `modelUrlSecurity.privateIPAllowlist` on `ark-controller`, enable the same values on `ark-completions` (keep only the `--set` lines you use):
+
+```bash
+helm upgrade ark-completions oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-completions \
+  --namespace ark-system \
+  --set modelUrlSecurity.domainWhitelist.enabled=true \
+  --set modelUrlSecurity.privateIPAllowlist.enabled=true \
+  --reuse-values
+```
+
 ## v0.1.72
 
 ### Argo Workflows Upgraded to v4.1
