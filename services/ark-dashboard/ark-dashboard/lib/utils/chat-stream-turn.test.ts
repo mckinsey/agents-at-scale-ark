@@ -11,6 +11,7 @@ import {
   createStreamTurnState,
   finishStreamTurn,
   isBrokerUnavailableChunk,
+  isTurnWithoutAnswer,
   processStreamChunk,
 } from './chat-stream-turn';
 
@@ -393,6 +394,34 @@ describe('processStreamChunk', () => {
       content: 'again',
       name: 'planner',
     });
+  });
+});
+
+describe('isTurnWithoutAnswer', () => {
+  it('is true for a turn that received nothing to render', () => {
+    const { state } = setup();
+    expect(isTurnWithoutAnswer(state)).toBe(true);
+  });
+
+  it('is false once content has streamed', () => {
+    const { state, effects } = setup([{ role: 'assistant', content: '' }]);
+    processStreamChunk(state, contentChunk('hi'), effects);
+    expect(isTurnWithoutAnswer(state)).toBe(false);
+  });
+
+  it('is false when the final chunk carried the completed messages', () => {
+    const { state } = setup();
+    state.completedQueryMessages = [{ role: 'assistant', content: 'answer' }];
+    expect(isTurnWithoutAnswer(state)).toBe(false);
+  });
+
+  it('is false when the turn failed or paused for approval', () => {
+    const failed = setup().state;
+    failed.hasError = true;
+    const paused = setup().state;
+    paused.hasPendingApproval = true;
+    expect(isTurnWithoutAnswer(failed)).toBe(false);
+    expect(isTurnWithoutAnswer(paused)).toBe(false);
   });
 });
 

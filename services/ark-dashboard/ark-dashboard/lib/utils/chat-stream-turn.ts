@@ -345,6 +345,17 @@ function hasTerminateToolCall(state: StreamTurnState): boolean {
   );
 }
 
+export function isTurnWithoutAnswer(state: StreamTurnState): boolean {
+  return (
+    !state.accumulatedContent &&
+    state.accumulatedToolCalls.length === 0 &&
+    state.completedQueryMessages.length === 0 &&
+    !state.hasPendingApproval &&
+    !state.hasError &&
+    !state.brokerUnavailableError
+  );
+}
+
 export function finishStreamTurn(
   state: StreamTurnState,
   effects: StreamTurnEffects,
