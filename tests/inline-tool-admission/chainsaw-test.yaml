@@ -46,6 +46,58 @@ spec:
                 name: inline-admission-probe
                 namespace: default
 
+    - name: deny-name-that-cannot-be-a-service
+      try:
+        # The runner Service is named <tool>-runner and a Service name must be a
+        # DNS-1035 label, so a dot or a leading digit has to be refused up front
+        # instead of leaving a Tool stuck in ProvisioningFailed.
+        - script:
+            timeout: 60s
+            content: |
+              sa=system:serviceaccount:default:inline-author
+              for name in inline-probe.dot 9inline-probe; do
+                if out=$(kubectl apply --as="$sa" -f - 2>&1 <<EOF
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Tool
+              metadata:
+                name: $name
+                namespace: default
+              spec:
+                type: inline
+                description: d
+                inputSchema: {type: object}
+                inline: {language: python, source: "print(1)"}
+              EOF
+                )
+                then
+                  echo "expected denial for $name but the apply succeeded: $out"
+                  exit 1
+                fi
+                echo "$out" | grep -q 'cannot be used as the runner Service name' || {
+                  echo "$name denied, but for the wrong reason: $out"
+                  exit 1
+                }
+                echo "$name correctly denied"
+              done
+        - error:
+            resource:
+              apiVersion: ark.mckinsey.com/v1alpha1
+              kind: Tool
+              metadata:
+                name: inline-probe.dot
+                namespace: default
+        - error:
+            resource:
+              apiVersion: v1
+              kind: ConfigMap
+              metadata:
+                name: inline-probe.dot-source
+                namespace: default
+      cleanup:
+        - script:
+            content: |
+              kubectl delete tool -n default inline-probe.dot 9inline-probe --ignore-not-found
+
     - name: accept-authorized-and-stamp-authorship
       try:
         # Impersonate a subject whose only inline permission is the chart's

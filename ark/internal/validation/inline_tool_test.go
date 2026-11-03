@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
@@ -12,6 +13,7 @@ import (
 
 func inlineTool(source, language string) *arkv1alpha1.Tool {
 	return &arkv1alpha1.Tool{
+		ObjectMeta: metav1.ObjectMeta{Name: "weather"},
 		Spec: arkv1alpha1.ToolSpec{
 			Type:   ToolTypeInline,
 			Inline: &arkv1alpha1.InlineSpec{Source: source, Language: language},
@@ -79,6 +81,22 @@ func TestValidateInlineTool(t *testing.T) {
 			t.Fatalf("fixture is not under the character limit")
 		}
 		requireErrorContains(t, inlineTool(source, "bash"), "exceeding the 65536 byte limit")
+	})
+
+	for _, name := range []string{"repro.dot", "9repro"} {
+		t.Run("rejects name "+name+" that cannot back a runner Service", func(t *testing.T) {
+			tool := inlineTool("x", "bash")
+			tool.Name = name
+			requireErrorContains(t, tool, "cannot be used as the runner Service name")
+		})
+	}
+
+	t.Run("accepts a long name that is shortened for the runner Service", func(t *testing.T) {
+		tool := inlineTool("x", "bash")
+		tool.Name = strings.Repeat("a", 100)
+		if _, err := ValidateTool(tool); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 	})
 
 	t.Run("rejects a non-object input schema", func(t *testing.T) {

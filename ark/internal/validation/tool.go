@@ -8,8 +8,10 @@ import (
 	"strings"
 
 	"github.com/google/jsonschema-go/jsonschema"
+	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/inlinetools"
 )
 
 // MaxInlineSourceBytes bounds spec.inline.source. The CRD's maxLength counts
@@ -101,6 +103,9 @@ func validateInlineTool(tool *arkv1alpha1.Tool) ([]string, error) {
 	inline := tool.Spec.Inline
 	if inline == nil {
 		return nil, fmt.Errorf("inline spec is required for inline type")
+	}
+	if runner := inlinetools.NamesFor(tool.Name).Runner; len(k8svalidation.IsDNS1035Label(runner)) != 0 {
+		return nil, fmt.Errorf("inline tool name '%s' cannot be used as the runner Service name '%s': it must start with a lowercase letter and contain only lowercase letters, digits and '-'", tool.Name, runner)
 	}
 	if strings.TrimSpace(inline.Source) == "" {
 		return nil, fmt.Errorf("inline source is required and must not be whitespace only")
