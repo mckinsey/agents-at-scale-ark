@@ -1,0 +1,9 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: allowed-endpoint-query
+spec:
+  input: "What is the capital of France? Respond with just the city name."
+  target:
+    type: model
+    name: configmap-endpoint-model
