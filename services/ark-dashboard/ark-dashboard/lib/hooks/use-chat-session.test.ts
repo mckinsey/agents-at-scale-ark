@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import React from 'react';
@@ -19,6 +20,10 @@ vi.mock('@/providers/NamespaceProvider', () => ({
     isPending: false,
     readOnlyMode: false,
   }),
+}));
+
+vi.mock('@/lib/services/agents', async () => ({
+  agentsService: (await import('@/lib/services')).agentsService,
 }));
 
 vi.mock('@/lib/services', () => ({
@@ -53,9 +58,16 @@ vi.mock('@/lib/analytics/utils', () => ({
   hashPromptSync: vi.fn(() => 'test-hash'),
 }));
 
-function createWrapper() {
+function createWrapper(store?: ReturnType<typeof createStore>) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
   return ({ children }: { children: React.ReactNode }) =>
-    React.createElement(Provider, null, children);
+    React.createElement(
+      QueryClientProvider,
+      { client: queryClient },
+      React.createElement(Provider, { store }, children),
+    );
 }
 
 // The real chunk stream is an async generator; wrap array fixtures so tests
@@ -1284,10 +1296,7 @@ describe('useChatSession - Resume after navigation (#3844)', () => {
 
     const { result } = renderHook(
       () => useChatSession({ name: 'test-agent', type: 'agent' }),
-      {
-        wrapper: ({ children }: { children: React.ReactNode }) =>
-          React.createElement(Provider, { store }, children),
-      },
+      { wrapper: createWrapper(store) },
     );
 
     await waitFor(() => {
@@ -1789,10 +1798,7 @@ describe('useChatSession - Resume after navigation (#3844)', () => {
       const store = createStore();
       const view = renderHook(
         () => useChatSession({ name: 'test-agent', type: 'agent' }),
-        {
-          wrapper: ({ children }: { children: React.ReactNode }) =>
-            React.createElement(Provider, { store }, children),
-        },
+        { wrapper: createWrapper(store) },
       );
       return { store, ...view };
     }

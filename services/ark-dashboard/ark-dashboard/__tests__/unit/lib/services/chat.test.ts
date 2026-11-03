@@ -151,6 +151,32 @@ describe('chatService', () => {
       expect(result).toEqual(mockResponse);
     });
 
+    it('should forward annotations as query metadata when provided', async () => {
+      vi.mocked(apiClient.post).mockResolvedValueOnce({
+        name: 'chat-query-mock-uuid',
+      });
+
+      await chatService.submitChatQuery(
+        'default',
+        'Hello',
+        'agent',
+        'test-agent',
+        'session-123',
+        undefined,
+        undefined,
+        undefined,
+        { 'example.com/key': 'value' },
+      );
+
+      expect(apiClient.post).toHaveBeenCalledWith(
+        `/api/v1/queries/`,
+        expect.objectContaining({
+          metadata: { annotations: { 'example.com/key': 'value' } },
+        }),
+        { params: { namespace: 'default' } },
+      );
+    });
+
     it('should forward parameters when provided', async () => {
       const mockResponse: QueryDetailResponse = {
         name: 'chat-query-mock-uuid',
