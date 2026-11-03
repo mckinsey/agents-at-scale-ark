@@ -96,6 +96,20 @@ func TestValidateAccepts(t *testing.T) {
 	}
 }
 
+func TestConfiguredAllowlistsCountsEntries(t *testing.T) {
+	t.Setenv(WhitelistedDomainsEnv, "# providers\napi.openai.com\n\napi.anthropic.com\n")
+	t.Setenv(AllowedPrivateIPRangeEnv, "10.0.0.0/8\nnot-a-cidr\n# comment")
+	domains, ranges := ConfiguredAllowlists()
+	if domains != 2 || ranges != 1 {
+		t.Fatalf("ConfiguredAllowlists() = %d, %d; want 2, 1", domains, ranges)
+	}
+	t.Setenv(WhitelistedDomainsEnv, "")
+	t.Setenv(AllowedPrivateIPRangeEnv, "")
+	if domains, ranges := ConfiguredAllowlists(); domains != 0 || ranges != 0 {
+		t.Fatalf("ConfiguredAllowlists() = %d, %d; want 0, 0", domains, ranges)
+	}
+}
+
 func TestRuleOfIgnoresOtherErrors(t *testing.T) {
 	if _, ok := RuleOf(errors.New("other")); ok {
 		t.Fatal("RuleOf reported a rule for an unrelated error")

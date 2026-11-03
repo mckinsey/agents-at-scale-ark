@@ -94,6 +94,10 @@ func Validate(baseURL string) error {
 	return nil
 }
 
+func ConfiguredAllowlists() (domains, privateRanges int) {
+	return len(whitelistedDomains()), len(allowedPrivateIPRanges())
+}
+
 func whitelistedDomains() []string {
 	domains := os.Getenv(WhitelistedDomainsEnv)
 	if domains == "" {
