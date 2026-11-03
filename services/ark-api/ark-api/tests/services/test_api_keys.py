@@ -1027,13 +1027,28 @@ class TestAPIKeyRevocationAndVerification(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(stored, "2026-12-01T00:00:00+00:00")
 
-    async def test_naive_future_expiry_stays_blocked(self):
+    @patch('ark_api.services.api_keys.logger')
+    async def test_naive_future_expiry_with_wrong_secret_is_rejected_without_warning(self, mock_logger):
         naive_future = (self.now + timedelta(days=30)).replace(tzinfo=None)
         self.v1.read_namespaced_secret = AsyncMock(return_value=_api_key_secret("naive", expires_at=naive_future))
 
-        result = await self.service.get_api_key_by_public_key("pk-ark-naive")
+        with patch.object(self.service, '_verify_secret_key', return_value=False):
+            result = await self.service.verify_api_key("pk-ark-naive", "sk-ark-wrong")
 
         self.assertIsNone(result)
+        mock_logger.warning.assert_not_called()
+
+    @patch('ark_api.services.api_keys.logger')
+    async def test_naive_future_expiry_with_right_secret_stays_blocked(self, mock_logger):
+        naive_future = (self.now + timedelta(days=30)).replace(tzinfo=None)
+        self.v1.read_namespaced_secret = AsyncMock(return_value=_api_key_secret("naive", expires_at=naive_future))
+
+        with patch.object(self.service, '_verify_secret_key', return_value=True):
+            result = await self.service.verify_api_key("pk-ark-naive", "sk-ark-right")
+
+        self.assertIsNone(result)
+        mock_logger.warning.assert_called_once()
+        self.v1.patch_namespaced_secret.assert_not_awaited()
 
     async def test_future_expiry_with_timezone_authenticates(self):
         self.v1.read_namespaced_secret = AsyncMock(

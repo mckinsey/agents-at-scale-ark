@@ -417,10 +417,6 @@ class APIKeyService:
             if expires_at and expires_at < datetime.now(timezone.utc):
                 return None
 
-            if metadata["expires_at_without_timezone"]:
-                logger.warning(f"Rejecting API key {public_key}: its expiry was stored without a timezone")
-                return None
-
             if created_by is not None and metadata.get("created_by") != created_by:
                 return None
 
@@ -432,7 +428,8 @@ class APIKeyService:
                 "is_active": is_active,
                 "expires_at": expires_at,
                 "secret_name": secret_name,
-                "created_by": metadata.get("created_by")
+                "created_by": metadata.get("created_by"),
+                "expires_at_without_timezone": metadata["expires_at_without_timezone"]
             }
             
         except client.rest.ApiException as e:
@@ -460,6 +457,10 @@ class APIKeyService:
         
         # Verify secret key
         if not self._verify_secret_key(secret_key, api_key_data["secret_key_hash"]):
+            return None
+
+        if api_key_data["expires_at_without_timezone"]:
+            logger.warning(f"Rejecting API key {public_key}: its expiry was stored without a timezone")
             return None
         
         # Update last used timestamp
