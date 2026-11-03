@@ -7,10 +7,9 @@ import {
   ResourceListCreateButton,
   ResourceListSection,
 } from '@/components/sections/resource-list-section';
-import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
 import { DOCS_URLS } from '@/lib/constants/docs';
 import { useDeleteAgent, useGetAllAgents } from '@/lib/services/agents-hooks';
-import { getOriginLabel } from '@/lib/utils/origin-icon';
+import { getAgentOriginLabel } from '@/lib/utils/origin-icon';
 
 export function AgentsSection() {
   const {
@@ -43,8 +42,7 @@ export function AgentsSection() {
       headerActions={<AgentsApiAccess />}
       originFilter={{
         label: 'Origin',
-        getValue: agent =>
-          getOriginLabel(agent.annotations?.[ARK_ANNOTATIONS.ORIGIN]),
+        getValue: agent => getAgentOriginLabel(agent.annotations),
       }}
       items={agents}
       loading={isPending}

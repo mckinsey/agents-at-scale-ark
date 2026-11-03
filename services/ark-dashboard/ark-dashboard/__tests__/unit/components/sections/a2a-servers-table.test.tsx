@@ -62,6 +62,10 @@ const servers: A2AServer[] = [
     description: 'Simple agent with conversation, math, and echo capabilities',
     address: 'http://simple-agent.default.svc.cluster.local:80',
     ready: true,
+    negotiated_protocol: 'v0.2.x',
+    card_version: '1.0.0',
+    streaming_supported: false,
+    skill_count: 3,
   },
   {
     id: 'a2a-task-demos',
@@ -135,10 +139,19 @@ describe('A2AServersTable', () => {
     expect(screen.queryByText('Unavailable')).not.toBeInTheDocument();
   });
 
-  it('falls back to a dash for a missing description', () => {
+  it('falls back to a dash for a missing description and undiscovered agent card fields', () => {
     render(<A2AServersTable servers={[servers[1]]} onDelete={vi.fn()} />);
 
-    expect(screen.getAllByText('—')).toHaveLength(1);
+    expect(screen.getAllByText('—')).toHaveLength(5);
+  });
+
+  it('shows the agent card fields of a discovered server', () => {
+    render(<A2AServersTable servers={[servers[0]]} onDelete={vi.fn()} />);
+
+    expect(screen.getByText('v0.2.x')).toBeInTheDocument();
+    expect(screen.getByText('1.0.0')).toBeInTheDocument();
+    expect(screen.getByText('No')).toBeInTheDocument();
+    expect(screen.getByText('3')).toBeInTheDocument();
   });
 
   it('links each row to the server detail page', () => {
