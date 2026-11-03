@@ -1,6 +1,7 @@
+import asyncio
 import os
 import time
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from importlib.metadata import version, PackageNotFoundError
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,6 +27,7 @@ from .auth.config import get_public_routes
 from .middleware import CacheControlMiddleware, ReadOnlyMiddleware
 from .openapi.security import add_security_to_openapi
 from .api.v1.a2a_gateway import get_a2a_manager
+from .services.api_keys import start_api_key_reaper
 from ark_sdk.k8s import init_k8s
 
 # Fix multi-group impersonation: emit one Impersonate-Group header per group so
@@ -104,6 +106,8 @@ async def lifespan(app: FastAPI):
     set_default_user_agent("ArkAPI")
     await init_k8s()
     logger.info("Kubernetes clients initialized")
+
+    api_key_reaper = start_api_key_reaper()
     
     # Initialize A2A manager and mount dynamic agent routes under /a2a
     a2a_manager = get_a2a_manager()
@@ -114,6 +118,11 @@ async def lifespan(app: FastAPI):
     yield
     # Shutdown
     logger.info("Shutting down ARK API...")
+
+    if api_key_reaper:
+        api_key_reaper.cancel()
+        with suppress(asyncio.CancelledError):
+            await api_key_reaper
     
     # Shutdown A2A manager
     await a2a_manager.shutdown()
