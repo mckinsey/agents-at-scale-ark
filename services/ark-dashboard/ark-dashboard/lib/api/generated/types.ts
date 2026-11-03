@@ -4258,39 +4258,90 @@ export interface components {
             /** Namespace */
             namespace?: string | null;
         };
+        /** MemoryAddressValueFrom */
+        MemoryAddressValueFrom: {
+            configMapKeyRef?: components["schemas"]["MemoryConfigMapKeyRef"] | null;
+            secretKeyRef?: components["schemas"]["MemorySecretKeyRef"] | null;
+            serviceRef?: components["schemas"]["MemoryServiceRef"] | null;
+        };
+        /** MemoryAddressValueSource */
+        MemoryAddressValueSource: {
+            /** Value */
+            value?: string | null;
+            valueFrom?: components["schemas"]["MemoryAddressValueFrom"] | null;
+        };
+        /** MemoryConfigMapKeyRef */
+        MemoryConfigMapKeyRef: {
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /** Optional */
+            optional?: boolean | null;
+        };
         /**
          * MemoryCreateRequest
          * @description Request model for creating a memory.
          */
         MemoryCreateRequest: {
-            /** Config */
-            config?: {
-                [key: string]: unknown;
+            /** Annotations */
+            annotations?: {
+                [key: string]: string;
             } | null;
-            /** Description */
-            description?: string | null;
+            /** Labels */
+            labels?: {
+                [key: string]: string;
+            } | null;
             /** Name */
             name: string;
+            spec: components["schemas"]["MemorySpec"];
         };
         /**
          * MemoryDetailResponse
          * @description Response model for detailed memory information.
          */
         MemoryDetailResponse: {
-            /** Config */
-            config?: {
-                [key: string]: unknown;
+            /** Annotations */
+            annotations?: {
+                [key: string]: string;
             } | null;
-            /** Description */
-            description?: string | null;
+            /** Labels */
+            labels?: {
+                [key: string]: string;
+            } | null;
             /** Name */
             name: string;
             /** Namespace */
             namespace: string;
+            spec?: components["schemas"]["MemorySpecResponse"] | null;
             /** Status */
             status?: {
                 [key: string]: unknown;
             } | null;
+        };
+        /** MemoryHeader */
+        MemoryHeader: {
+            /** Name */
+            name: string;
+            value: components["schemas"]["MemoryHeaderValueSource"];
+        };
+        /** MemoryHeaderResponse */
+        MemoryHeaderResponse: {
+            /** Name */
+            name: string;
+            value: components["schemas"]["MemoryValueSourceResponse"];
+        };
+        /** MemoryHeaderValueFrom */
+        MemoryHeaderValueFrom: {
+            configMapKeyRef?: components["schemas"]["MemoryConfigMapKeyRef"] | null;
+            queryParameterRef?: components["schemas"]["MemoryQueryParameterRef"] | null;
+            secretKeyRef?: components["schemas"]["MemorySecretKeyRef"] | null;
+        };
+        /** MemoryHeaderValueSource */
+        MemoryHeaderValueSource: {
+            /** Value */
+            value?: string | null;
+            valueFrom?: components["schemas"]["MemoryHeaderValueFrom"] | null;
         };
         /**
          * MemoryListResponse
@@ -4336,13 +4387,20 @@ export interface components {
             /** Timestamp */
             timestamp?: string | null;
         };
+        /** MemoryQueryParameterRef */
+        MemoryQueryParameterRef: {
+            /** Name */
+            name: string;
+        };
         /**
          * MemoryResponse
          * @description Response model for memory list items.
          */
         MemoryResponse: {
-            /** Description */
-            description?: string | null;
+            /** Labels */
+            labels?: {
+                [key: string]: string;
+            } | null;
             /** Name */
             name: string;
             /** Namespace */
@@ -4350,17 +4408,65 @@ export interface components {
             /** Status */
             status?: string | null;
         };
+        /** MemorySecretKeyRef */
+        MemorySecretKeyRef: {
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /** Optional */
+            optional?: boolean | null;
+        };
+        /** MemoryServiceRef */
+        MemoryServiceRef: {
+            /** Name */
+            name: string;
+            /** Namespace */
+            namespace?: string | null;
+            /** Path */
+            path?: string | null;
+            /** Port */
+            port?: string | null;
+        };
+        /** MemorySpec */
+        MemorySpec: {
+            address: components["schemas"]["MemoryAddressValueSource"];
+            /** Headers */
+            headers?: components["schemas"]["MemoryHeader"][] | null;
+        };
+        /** MemorySpecResponse */
+        MemorySpecResponse: {
+            address?: components["schemas"]["MemoryValueSourceResponse"] | null;
+            /** Headers */
+            headers?: components["schemas"]["MemoryHeaderResponse"][] | null;
+        };
         /**
          * MemoryUpdateRequest
          * @description Request model for updating a memory.
          */
         MemoryUpdateRequest: {
-            /** Config */
-            config?: {
-                [key: string]: unknown;
+            /** Annotations */
+            annotations?: {
+                [key: string]: string;
             } | null;
-            /** Description */
-            description?: string | null;
+            /** Labels */
+            labels?: {
+                [key: string]: string;
+            } | null;
+            spec?: components["schemas"]["MemorySpec"] | null;
+        };
+        /** MemoryValueFrom */
+        MemoryValueFrom: {
+            configMapKeyRef?: components["schemas"]["MemoryConfigMapKeyRef"] | null;
+            queryParameterRef?: components["schemas"]["MemoryQueryParameterRef"] | null;
+            secretKeyRef?: components["schemas"]["MemorySecretKeyRef"] | null;
+            serviceRef?: components["schemas"]["MemoryServiceRef"] | null;
+        };
+        /** MemoryValueSourceResponse */
+        MemoryValueSourceResponse: {
+            /** Value */
+            value?: string | null;
+            valueFrom?: components["schemas"]["MemoryValueFrom"] | null;
         };
         /**
          * ModelConfig

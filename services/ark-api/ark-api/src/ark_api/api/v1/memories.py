@@ -4,6 +4,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Query, Request
 from ark_sdk.models.memory_v1alpha1 import MemoryV1alpha1
+from ark_sdk.models.memory_v1alpha1_spec import MemoryV1alpha1Spec
 from ark_sdk.impersonation import ImpersonationConfig
 
 from ark_sdk.client import with_ark_client
@@ -15,7 +16,8 @@ from ...models.memories import (
     MemoryListResponse,
     MemoryCreateRequest,
     MemoryUpdateRequest,
-    MemoryDetailResponse
+    MemoryDetailResponse,
+    MemorySpecResponse,
 )
 from ...models.conversations import MemoryMessageResponse, MemoryMessageListResponse
 from ...utils.memory_client import (
@@ -45,13 +47,12 @@ def memory_to_response(memory) -> MemoryResponse:
         memory_dict = memory
     
     metadata = memory_dict.get("metadata", {})
-    spec = memory_dict.get("spec", {})
     status = memory_dict.get("status", {})
     
     return MemoryResponse(
         name=metadata.get("name", ""),
         namespace=metadata.get("namespace", ""),
-        description=spec.get("description"),
+        labels=metadata.get("labels"),
         status=status.get("phase")
     )
 
@@ -71,8 +72,9 @@ def memory_to_detail_response(memory) -> MemoryDetailResponse:
     return MemoryDetailResponse(
         name=metadata.get("name", ""),
         namespace=metadata.get("namespace", ""),
-        description=spec.get("description"),
-        config=spec.get("config"),
+        labels=metadata.get("labels"),
+        annotations=metadata.get("annotations"),
+        spec=MemorySpecResponse(**spec) if spec else None,
         status=status
     )
 
@@ -110,13 +112,15 @@ async def create_memory(request: Request, memory_request: MemoryCreateRequest, n
     """Create a new memory."""
     async with with_ark_client(namespace, VERSION, impersonation=impersonation) as client:
         memory_obj = MemoryV1alpha1(
-            metadata={"name": memory_request.name, "namespace": namespace},
-            spec={
-                "description": memory_request.description,
-                "config": memory_request.config or {}
-            }
+            metadata={
+                "name": memory_request.name,
+                "namespace": namespace,
+                "labels": memory_request.labels,
+                "annotations": memory_request.annotations,
+            },
+            spec=MemoryV1alpha1Spec(**memory_request.spec.model_dump(exclude_none=True))
         )
-        
+
         created_memory = await client.memories.a_create(memory_obj)
         return memory_to_detail_response(created_memory.to_dict())
 
@@ -126,23 +130,18 @@ async def create_memory(request: Request, memory_request: MemoryCreateRequest, n
 async def update_memory(request: Request, name: str, memory_request: MemoryUpdateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> MemoryDetailResponse:
     """Update an existing memory."""
     async with with_ark_client(namespace, VERSION, impersonation=impersonation) as client:
-        # Get existing memory
         existing_memory = await client.memories.a_get(name)
         existing_dict = existing_memory.to_dict()
-        
-        # Update spec fields
-        spec = existing_dict.get("spec", {})
-        if memory_request.description is not None:
-            spec["description"] = memory_request.description
-        if memory_request.config is not None:
-            spec["config"] = memory_request.config
-        
-        # Create updated memory object
-        memory_obj = MemoryV1alpha1(
-            metadata=existing_dict["metadata"],
-            spec=spec
-        )
-        
+
+        if memory_request.labels is not None:
+            existing_dict["metadata"]["labels"] = memory_request.labels
+        if memory_request.annotations is not None:
+            existing_dict["metadata"]["annotations"] = memory_request.annotations
+        if memory_request.spec is not None:
+            existing_dict["spec"] = memory_request.spec.model_dump(exclude_none=True)
+
+        memory_obj = MemoryV1alpha1(**existing_dict)
+
         updated_memory = await client.memories.a_update(memory_obj)
         return memory_to_detail_response(updated_memory.to_dict())
 

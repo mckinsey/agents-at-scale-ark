@@ -93,6 +93,31 @@ ark import ark-export.yaml --upsert
 
 Exports created by older Ark CLI versions may contain stale `metadata.resourceVersion` and `status` fields. Regenerate or clean those files before importing them with `--upsert`.
 
+## Unreleased
+
+### Memory API Accepts the CRD Spec
+
+`POST /v1/memories` and `PUT /v1/memories/{name}` now take the fields of the [Memory](/reference/resources/memory) resource. The old body had `description` and `config`, which the Memory CRD does not have, so every create answered `500` and every update was silently dropped.
+
+```json
+{
+  "name": "my-memory",
+  "labels": {"team": "a"},
+  "spec": {
+    "address": {"valueFrom": {"serviceRef": {"name": "ark-broker", "port": "http"}}},
+    "headers": [{"name": "Authorization", "value": {"valueFrom": {"secretKeyRef": {"name": "memory-credentials", "key": "token"}}}}]
+  }
+}
+```
+
+`spec.address` is required. Each address and header value takes either a non-empty `value` or a `valueFrom` with exactly one source: `secretKeyRef`, `configMapKeyRef` or `serviceRef` for the address, `secretKeyRef`, `configMapKeyRef` or `queryParameterRef` for headers. Any other body answers `422`. On `PUT`, `spec` replaces the stored spec as a whole, and `labels` and `annotations` replace the stored ones when present.
+
+Responses changed with the request. `GET /v1/memories/{name}` returns `labels`, `annotations` and `spec` instead of `description` and `config`, and list items return `labels` instead of `description`. Both removed fields were always `null`.
+
+**Migration:**
+- Clients that create or update Memories through the API should send `spec` instead of `description` and `config`.
+- Clients that read `description` or `config` from Memory responses should read `spec` or `labels`.
+
 ## v0.1.72
 
 ### Argo Workflows Upgraded to v4.1
