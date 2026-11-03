@@ -248,6 +248,18 @@ func ValidateHeaderValueFrom(valueFrom *arkv1alpha1.HeaderValueSource, contextPr
 	return nil
 }
 
+func ValidateUniqueHeaderNames(headers []arkv1alpha1.Header, contextPrefix string) error {
+	seen := make(map[string]struct{}, len(headers))
+	for _, header := range headers {
+		name := strings.ToLower(strings.TrimSpace(header.Name))
+		if _, ok := seen[name]; ok {
+			return fmt.Errorf("%s: duplicate header name: %s", contextPrefix, header.Name)
+		}
+		seen[name] = struct{}{}
+	}
+	return nil
+}
+
 func ValidateOverrides(overrides []arkv1alpha1.Override) error {
 	for i, override := range overrides {
 		if err := ValidateOverrideEntry(override, i); err != nil {

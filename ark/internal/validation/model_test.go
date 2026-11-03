@@ -381,6 +381,44 @@ func TestValidateModel(t *testing.T) { //nolint:gocognit,gocyclo,cyclop
 		}
 	})
 
+	t.Run("rejects duplicate header names ignoring case", func(t *testing.T) {
+		headers := []arkv1alpha1.Header{
+			{Name: "X-Tenant", Value: arkv1alpha1.HeaderValue{Value: "a"}},
+			{Name: "x-tenant", Value: arkv1alpha1.HeaderValue{Value: "b"}},
+		}
+		configs := map[string]arkv1alpha1.ModelConfig{
+			ProviderOpenAI: {OpenAI: &arkv1alpha1.OpenAIModelConfig{
+				BaseURL: arkv1alpha1.ValueSource{Value: "https://api.openai.com"},
+				APIKey:  arkv1alpha1.ValueSource{Value: "key"},
+				Headers: headers,
+			}},
+			ProviderAzure: {Azure: &arkv1alpha1.AzureModelConfig{
+				BaseURL: arkv1alpha1.ValueSource{Value: "https://my-resource.openai.azure.com"},
+				APIKey:  &arkv1alpha1.ValueSource{Value: "key"},
+				Headers: headers,
+			}},
+			ProviderAnthropic: {Anthropic: &arkv1alpha1.AnthropicModelConfig{
+				BaseURL: arkv1alpha1.ValueSource{Value: "https://api.anthropic.com"},
+				APIKey:  arkv1alpha1.ValueSource{Value: "sk-ant-test"},
+				Headers: headers,
+			}},
+		}
+		for provider, config := range configs {
+			model := &arkv1alpha1.Model{
+				ObjectMeta: metav1.ObjectMeta{Name: "m", Namespace: "default"},
+				Spec: arkv1alpha1.ModelSpec{
+					Model:    arkv1alpha1.ValueSource{Value: "m"},
+					Provider: provider,
+					Config:   config,
+				},
+			}
+			_, err := v.ValidateModel(ctx, model)
+			if err == nil || !contains(err.Error(), "duplicate header name: x-tenant") {
+				t.Fatalf("%s: expected duplicate header error, got %v", provider, err)
+			}
+		}
+	})
+
 	t.Run("collects migration warnings", func(t *testing.T) {
 		model := &arkv1alpha1.Model{
 			ObjectMeta: metav1.ObjectMeta{

@@ -301,7 +301,7 @@ func (v *Validator) validateAzureConfig(ctx context.Context, model *arkv1alpha1.
 			return err
 		}
 	}
-	return nil
+	return ValidateUniqueHeaderNames(azure.Headers, "spec.config.azure.headers")
 }
 
 func (v *Validator) validateOpenAIConfig(ctx context.Context, model *arkv1alpha1.Model) error {
@@ -332,7 +332,7 @@ func (v *Validator) validateOpenAIConfig(ctx context.Context, model *arkv1alpha1
 		}
 	}
 
-	return nil
+	return ValidateUniqueHeaderNames(model.Spec.Config.OpenAI.Headers, "spec.config.openai.headers")
 }
 
 func (v *Validator) validateBedrockConfig(ctx context.Context, model *arkv1alpha1.Model) error {
@@ -430,5 +430,5 @@ func (v *Validator) validateAnthropicConfig(ctx context.Context, model *arkv1alp
 		}
 	}
 
-	return nil
+	return ValidateUniqueHeaderNames(anthropic.Headers, "spec.config.anthropic.headers")
 }

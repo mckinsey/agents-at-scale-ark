@@ -5,6 +5,7 @@ import { useCallback, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 
 import { DetailBreadcrumb } from '@/components/common/detail-breadcrumb';
+import { useCustomHeaderRows } from '@/components/forms/shared/custom-header-rows';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
@@ -18,7 +19,7 @@ import { ModelConfiguratorForm } from './model-configuration-form';
 import { ModelConfigurationFormContext } from './model-configuration-form-context';
 import type { FormValues } from './schema';
 import { schema } from './schema';
-import { createConfig, getResetValues } from './utils';
+import { createConfig, getResetValues, providerSupportsHeaders } from './utils';
 
 const formId = 'create-model-form';
 
@@ -43,6 +44,7 @@ export function CreateModelForm({ defaultName }: CreateModelFormProps) {
   });
 
   const provider = form.watch('provider');
+  const headerRows = useCustomHeaderRows();
 
   const handleSuccess = useCallback(() => {
     push('/models');
@@ -59,7 +61,13 @@ export function CreateModelForm({ defaultName }: CreateModelFormProps) {
   }, [provider]);
 
   const onSubmit = (formValues: FormValues) => {
-    const config = createConfig(formValues);
+    const headers = providerSupportsHeaders(formValues.provider)
+      ? headerRows.validate()
+      : [];
+    if (!headers) {
+      return;
+    }
+    const config = createConfig(formValues, {}, headers);
     mutate({
       name: formValues.name,
       provider: formValues.provider,
@@ -76,6 +84,7 @@ export function CreateModelForm({ defaultName }: CreateModelFormProps) {
         provider,
         onSubmit,
         isSubmitPending: isPending,
+        headerRows,
       }}>
       <div className="content-shell flex min-h-0 w-full flex-1 flex-col gap-5 overflow-hidden">
         <header className="flex flex-none flex-col gap-4">

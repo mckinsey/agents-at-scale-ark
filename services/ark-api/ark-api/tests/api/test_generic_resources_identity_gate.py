@@ -127,7 +127,7 @@ class IdentityGateTestCase(unittest.TestCase):
         self.k8s = KubernetesSpy()
         for target, value in (
             ("ark_api.api.v1.resources.get_impersonating_api_client", self.k8s.client),
-            ("ark_api.api.v1.resources.DynamicClient", self.k8s.dynamic_client_cls),
+            ("ark_api.api.v1.resources.create_dynamic_client", self.k8s.dynamic_client_cls),
             ("ark_api.api.v1.resources.client.AuthorizationV1Api", self.k8s.access_review_cls),
             ("ark_api.api.v1.resources.get_context", Mock(return_value={"namespace": "default"})),
         ):

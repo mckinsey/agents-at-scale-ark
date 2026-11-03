@@ -1,4 +1,5 @@
 import type {
+  AgentHeader,
   Model,
   ModelCreateRequest,
   ModelUpdateRequest,
@@ -84,11 +85,23 @@ export function buildBaseUrlValueSource(
   return { valueFrom: { configMapKeyRef: { name: configurationName, key } } };
 }
 
+const HEADER_SUPPORTED_PROVIDERS: ReadonlySet<FormValues['provider']> = new Set(
+  ['openai', 'azure', 'anthropic'],
+);
+
+export function providerSupportsHeaders(
+  provider: FormValues['provider'],
+): boolean {
+  return HEADER_SUPPORTED_PROVIDERS.has(provider);
+}
+
 export function createConfig(
   formValues: FormValues,
   baseUrlMode: BaseUrlMode = {},
+  headers: AgentHeader[] = [],
 ): ModelCreateRequest['config'] {
   const config: ModelCreateRequest['config'] = {};
+  const headersConfig = headers.length > 0 ? { headers } : {};
   switch (formValues.provider) {
     case 'openai':
       config.openai = {
@@ -104,6 +117,7 @@ export function createConfig(
         // preserved baseUrlMode.literalUrl for this provider, so one of the
         // two branches in buildBaseUrlValueSource always returns a value.
         baseUrl: buildBaseUrlValueSource(formValues.baseUrl, baseUrlMode)!,
+        ...headersConfig,
       };
       return config;
     case 'azure': {
@@ -112,6 +126,7 @@ export function createConfig(
         ...(formValues.azureApiVersion && {
           apiVersion: { value: formValues.azureApiVersion },
         }),
+        ...headersConfig,
       };
       if (formValues.azureAuthMethod === 'apiKey') {
         azureConfig.auth = {
@@ -195,6 +210,7 @@ export function createConfig(
         ...(formValues.anthropicVersion && {
           version: { value: formValues.anthropicVersion },
         }),
+        ...headersConfig,
       };
       return config;
   }
@@ -203,8 +219,9 @@ export function createConfig(
 export function createModelUpdateConfig(
   formValues: FormValues,
   baseUrlMode: BaseUrlMode = {},
+  headers: AgentHeader[] = [],
 ): ModelUpdateRequest['config'] {
-  return createConfig(formValues, baseUrlMode);
+  return createConfig(formValues, baseUrlMode, headers);
 }
 
 export function getResetValues(currentFormValues: FormValues): FormValues {
@@ -296,6 +313,13 @@ export function getBaseUrlState(
 ): BaseUrlFieldState {
   return mapBaseUrlState(
     getConfigValue<unknown>(model.config, [provider, 'baseUrl']),
+  );
+}
+
+export function getHeadersForUpdate(model: Model): AgentHeader[] {
+  return (
+    getConfigValue<AgentHeader[]>(model.config, [model.provider, 'headers']) ??
+    []
   );
 }
 

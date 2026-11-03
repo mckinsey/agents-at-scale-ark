@@ -5,6 +5,7 @@ import type { Control } from 'react-hook-form';
 import { useFormContext, useWatch } from 'react-hook-form';
 
 import { CreateResourceButton } from '@/components/forms/shared/create-resource-dialog';
+import { CustomHeadersField } from '@/components/forms/shared/custom-headers-field';
 import {
   FieldDescription,
   FieldError,
@@ -46,12 +47,19 @@ import { cn } from '@/lib/utils';
 
 import { useModelConfigurationForm } from './model-configuration-form-context';
 import type { FormValues } from './schema';
-import { CLEAR_BASE_URL_VALUE } from './utils';
+import { CLEAR_BASE_URL_VALUE, providerSupportsHeaders } from './utils';
 import type { BaseUrlFieldState } from './utils';
 
 export function ModelConfiguratorForm() {
-  const { form, formId, onSubmit, provider, disabledFields, baseUrlState } =
-    useModelConfigurationForm();
+  const {
+    form,
+    formId,
+    onSubmit,
+    provider,
+    disabledFields,
+    baseUrlState,
+    headerRows,
+  } = useModelConfigurationForm();
 
   const {
     data: secrets,
@@ -91,7 +99,11 @@ export function ModelConfiguratorForm() {
     <Form {...form}>
       <form
         id={formId}
-        onSubmit={form.handleSubmit(onSubmit)}
+        onSubmit={form.handleSubmit(onSubmit, () => {
+          if (headerRows && providerSupportsHeaders(provider)) {
+            headerRows.validate();
+          }
+        })}
         className="flex flex-col gap-6">
         <FormField
           control={form.control}
@@ -210,6 +222,12 @@ export function ModelConfiguratorForm() {
             configurations={configurations}
             baseUrlState={baseUrlState}
             control={form.control}
+          />
+        )}
+        {headerRows && providerSupportsHeaders(provider) && (
+          <CustomHeadersField
+            headerRows={headerRows}
+            description="Sent with every request to this model. Use a secret for sensitive values."
           />
         )}
       </form>

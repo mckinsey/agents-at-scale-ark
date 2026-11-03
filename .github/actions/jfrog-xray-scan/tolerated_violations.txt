@@ -46,6 +46,14 @@ XRAY-1100109 - CVE-2023-54404 (zod@4.4.3)
 - ark-dashboard uses Zod only for client-side form validation and a marketplace install route; ark-cli and docs pull Zod transitively (MCP SDK, nextra) and do not validate attacker-controlled arrays.
 - Remove this entry once a patched Zod is released, or if any ark-broker schema gains an array with a validated element type.
 
+XRAY-1146824 - CVE-2026-112366 (picomatch@4.0.4)
+- ReDoS in picomatch's analyzeRepeatedExtglob: a single-branch repeated extglob pattern (e.g. +(*)) triggers exponential backtracking against short crafted strings, blocking the event loop.
+- No fix available: 4.0.7 is the latest published release and the advisory states the vulnerability affects versions "through 4.0.7".
+- ark-broker / ark-dashboard / ark-landing-page: picomatch is dev-only, pulled in transitively via tinyglobby/micromatch/jest/lint-staged (build and test tooling); each Dockerfile runs `npm ci --only=production`, excluding it from the deployed container.
+- ark-cli: picomatch is a direct dependency in package.json, but nothing in tools/ark-cli/src requires() or imports it — no reachable code path accepts attacker-controlled glob input through this package.
+- docs: picomatch is a devDependency and a version override (forcing a consistent resolved version across the tree), pulled in transitively via tinyglobby for build-time globbing; docs/next.config.mjs sets `output: 'export'`, so the site ships as a static build with no Node.js server evaluating globs against external input at request time.
+- Remove this entry once picomatch publishes a release patching analyzeRepeatedExtglob.
+
 XRAY-1104189 - CVE-2026-104056 (authlib@1.8.0)
 - OIDC discovery metadata is cached without issuer-origin validation, so a poisoned discovery response can redirect the auth endpoints to attacker-controlled values. The advisory states Authlib "1.7.2 and below" is affected.
 - FALSE POSITIVE: Ark ships authlib 1.8.0 (services/ark-mcp), the patched release. authlib is transitive via fastmcp; pyproject pins constraint-dependencies = ["authlib>=1.8.0"] so the floor cannot regress. Xray's "fixed" metadata omits 1.8.0 and flags it anyway, the same defect as nanoid XRAY-1051070.
