@@ -2419,6 +2419,8 @@ export interface components {
             annotations?: {
                 [key: string]: string;
             } | null;
+            /** Card Version */
+            card_version?: string | null;
             /** Description */
             description?: string | null;
             /** Discovering */
@@ -2431,10 +2433,16 @@ export interface components {
             name: string;
             /** Namespace */
             namespace: string;
+            /** Negotiated Protocol */
+            negotiated_protocol?: string | null;
             /** Ready */
             ready?: boolean | null;
+            /** Skill Count */
+            skill_count?: number | null;
             /** Status Message */
             status_message?: string | null;
+            /** Streaming Supported */
+            streaming_supported?: boolean | null;
         };
         /**
          * A2ATaskArtifact
@@ -2983,6 +2991,13 @@ export interface components {
          * @description Request model for updating an agent.
          */
         AgentUpdateRequest: {
+            /**
+             * Annotations
+             * @description Merged into the existing annotations; a null value removes the key. Only the openai-responses output-schema annotation is accepted.
+             */
+            annotations?: {
+                [key: string]: string | null;
+            } | null;
             /** Description */
             description?: string | null;
             executionEngine?: components["schemas"]["ExecutionEngineRef"] | null;

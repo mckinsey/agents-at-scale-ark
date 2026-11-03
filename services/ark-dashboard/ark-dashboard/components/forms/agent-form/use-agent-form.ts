@@ -3,7 +3,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAtomValue } from 'jotai';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 
 import { isExperimentalExecutionEngineEnabledAtom } from '@/atoms/experimental-features';
@@ -33,9 +33,18 @@ import {
   GET_AGENT_BY_NAME_QUERY_KEY,
   GET_ALL_AGENTS_QUERY_KEY,
 } from '@/lib/services/agents-hooks';
+import {
+  OUTPUT_SCHEMA_ANNOTATION,
+  buildOutputSchemaAnnotationUpdate,
+  supportsOutputSchema,
+} from '@/lib/utils/output-schema';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
-import { AgentFormMode, type AgentFormValues, agentFormSchema } from './types';
+import {
+  AgentFormMode,
+  type AgentFormValues,
+  createAgentFormSchema,
+} from './types';
 import {
   agentParametersChanged,
   buildAgentOverrides,
@@ -53,6 +62,12 @@ interface UseAgentFormOptions {
   mode: AgentFormMode;
   agentName?: string;
   onSuccess?: () => void;
+}
+
+function toEngineName(executionEngineName: string | undefined): string {
+  return executionEngineName && executionEngineName !== '__none__'
+    ? executionEngineName
+    : '';
 }
 
 export function useAgentForm({
@@ -94,8 +109,30 @@ export function useAgentForm({
     isExperimentalExecutionEngineEnabledAtom,
   );
 
+  const isOutputSchemaSupported = useCallback(
+    (executionEngineName: string | undefined) =>
+      !agent?.isA2A &&
+      supportsOutputSchema(
+        executionEngineName,
+        executionEngines.find(engine => engine.name === executionEngineName)
+          ?.annotations,
+      ),
+    [agent, executionEngines],
+  );
+  const isOutputSchemaSupportedRef = useRef(isOutputSchemaSupported);
+  isOutputSchemaSupportedRef.current = isOutputSchemaSupported;
+  const resolver = useMemo(
+    () =>
+      zodResolver(
+        createAgentFormSchema(executionEngineName =>
+          isOutputSchemaSupportedRef.current(executionEngineName),
+        ),
+      ),
+    [],
+  );
+
   const form = useForm<AgentFormValues>({
-    resolver: zodResolver(agentFormSchema),
+    resolver,
     defaultValues: {
       name: '',
       description: '',
@@ -103,6 +140,7 @@ export function useAgentForm({
       selectedModelNamespace: '',
       executionEngineName: '',
       prompt: '',
+      outputSchema: '',
     },
   });
 
@@ -166,6 +204,8 @@ export function useAgentForm({
             selectedModelNamespace: agentData.modelRef?.namespace || '',
             executionEngineName: agentData.executionEngine?.name || '',
             prompt: agentData.prompt || '',
+            outputSchema:
+              agentData.annotations?.[OUTPUT_SCHEMA_ANNOTATION] || '',
           });
         } else {
           const [modelsData, toolsData, enginesData] = await Promise.all([
@@ -266,6 +306,13 @@ export function useAgentForm({
             prompt: agent.isA2A ? undefined : values.prompt || null,
             tools: agent.isA2A ? undefined : selectedTools,
             parameters: agent.isA2A ? undefined : mapParametersToApi(),
+            annotations: buildOutputSchemaAnnotationUpdate({
+              supported: isOutputSchemaSupported(values.executionEngineName),
+              engineChanged:
+                toEngineName(values.executionEngineName) !==
+                toEngineName(agent.executionEngine?.name),
+              value: values.outputSchema,
+            }),
             overrides: agent.isA2A
               ? undefined
               : overrides.length > 0
@@ -323,6 +370,7 @@ export function useAgentForm({
       namespace,
       form,
       isExperimentalExecutionEngineEnabled,
+      isOutputSchemaSupported,
     ],
   );
 
@@ -395,6 +443,7 @@ export function useAgentForm({
       handleToolToggle,
       handleDeleteTool,
       isToolSelected,
+      isOutputSchemaSupported,
       onSubmit,
       onInvalid,
     },
