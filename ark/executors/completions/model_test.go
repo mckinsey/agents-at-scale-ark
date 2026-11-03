@@ -213,7 +213,7 @@ func openAIModelWithBaseURL(name, ns, baseURL string) *arkv1alpha1.Model {
 
 func TestLoadModel_ReflectsBaseURLUpdate(t *testing.T) {
 	name, ns := "updated-model", defaultNamespace
-	fakeClient := setupModelTestClient([]client.Object{openAIModelWithBaseURL(name, ns, "http://old.example.com/v1")})
+	fakeClient := setupModelTestClient([]client.Object{openAIModelWithBaseURL(name, ns, "https://old.example.com/v1")})
 
 	loadBaseURL := func() string {
 		loaded, err := LoadModel(context.Background(), fakeClient, &arkv1alpha1.AgentModelRef{Name: name, Namespace: ns},
@@ -224,14 +224,14 @@ func TestLoadModel_ReflectsBaseURLUpdate(t *testing.T) {
 		return provider.BaseURL
 	}
 
-	require.Equal(t, "http://old.example.com/v1", loadBaseURL())
+	require.Equal(t, "https://old.example.com/v1", loadBaseURL())
 
 	var stored arkv1alpha1.Model
 	require.NoError(t, fakeClient.Get(context.Background(), types.NamespacedName{Name: name, Namespace: ns}, &stored))
-	stored.Spec.Config.OpenAI.BaseURL = arkv1alpha1.ValueSource{Value: "http://new.example.com/v1"}
+	stored.Spec.Config.OpenAI.BaseURL = arkv1alpha1.ValueSource{Value: "https://new.example.com/v1"}
 	require.NoError(t, fakeClient.Update(context.Background(), &stored))
 
-	require.Equal(t, "http://new.example.com/v1", loadBaseURL())
+	require.Equal(t, "https://new.example.com/v1", loadBaseURL())
 }
 
 func TestResolveModelHeaders_QueryParameterWithoutContext(t *testing.T) {

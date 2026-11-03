@@ -92,6 +92,9 @@ func loadAzureConfig(ctx context.Context, resolver *common.ValueSourceResolver, 
 	if err != nil {
 		return fmt.Errorf("failed to resolve Azure baseURL: %w", err)
 	}
+	if err := checkBaseURL("spec.config.azure.baseUrl", baseURL); err != nil {
+		return err
+	}
 
 	authResult, err := resolveAzureAuth(ctx, resolver, config, namespace)
 	if err != nil {

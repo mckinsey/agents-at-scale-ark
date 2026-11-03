@@ -298,6 +298,7 @@ func mixedTeamFixture(t *testing.T, name string, spec arkv1alpha1.TeamSpec) *mix
 		_, _ = w.Write([]byte(`{"id":"cmpl-1","object":"chat.completion","created":0,"model":"gpt-test","choices":[{"index":0,"message":{"role":"assistant","content":"local answer"},"finish_reason":"stop"}],"usage":{}}`))
 	}))
 	t.Cleanup(llm.Close)
+	allowTestServerBaseURLs(t)
 
 	captured := new(map[string]any)
 	engineServer := engineStub(t, "engine reply", captured)

@@ -17,6 +17,9 @@ func loadAnthropicConfig(ctx context.Context, resolver *common.ValueSourceResolv
 	if err != nil {
 		return fmt.Errorf("failed to resolve Anthropic baseURL: %w", err)
 	}
+	if err := checkBaseURL("spec.config.anthropic.baseUrl", baseURL); err != nil {
+		return err
+	}
 
 	apiKey, err := resolver.ResolveValueSource(ctx, config.APIKey, namespace)
 	if err != nil {
