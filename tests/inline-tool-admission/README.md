@@ -7,6 +7,9 @@ Inline authoring admission: authorization and authoritative authorship.
   (`tools/create`) but lacks the dedicated `use inlinetools` permission is
   denied, with the specific inline authoring error — `tools/create` alone
   must not introduce executable source. The denied request creates nothing.
+- **Deny names that cannot be a Service name**: a dotted name or one with a
+  leading digit is refused at admission, because the runner Service
+  `<tool>-runner` must be a DNS-1035 label. Nothing is created.
 - **Accept authorized create**: an identity whose only inline permission is
   the chart's `inline-tool-author-role`, bound per namespace exactly as the
   operator docs instruct, is accepted — so the shipped grant itself is what
