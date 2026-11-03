@@ -252,3 +252,26 @@ describe('useAgentForm output schema', () => {
     expect(result.current.actions.isOutputSchemaSupported('other')).toBe(false);
   });
 });
+
+describe('useAgentForm tool selection', () => {
+  it('keeps the tool type and falls back to custom when selecting tools', async () => {
+    mockAgent('executor-langchain');
+    const { result } = await renderLoadedForm();
+
+    act(() => {
+      result.current.actions.handleToolToggle(
+        { id: 'noop', name: 'noop', type: 'builtin' },
+        true,
+      );
+      result.current.actions.handleToolToggle(
+        { id: 'legacy', name: 'legacy' },
+        true,
+      );
+    });
+
+    expect(result.current.state.selectedTools).toEqual([
+      { type: 'builtin', name: 'noop' },
+      { type: 'custom', name: 'legacy' },
+    ]);
+  });
+});
