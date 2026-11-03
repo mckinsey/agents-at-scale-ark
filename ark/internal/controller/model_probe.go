@@ -39,6 +39,7 @@ var separatorCleanupPatterns = []*regexp.Regexp{
 
 type ProbeResult struct {
 	Available     bool
+	Reason        string
 	Message       string
 	DetailedError error
 }
