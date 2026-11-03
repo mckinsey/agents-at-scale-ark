@@ -101,12 +101,29 @@ func (r *MCPServerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, err
 	}
 
+	if err := r.ensureServerLabel(ctx, &mcpServer); err != nil {
+		log.Error(err, "unable to label MCPServer", "label", labels.MCPServerLabel)
+		return ctrl.Result{}, err
+	}
+
 	observed := mcpServer.Status.DeepCopy()
 	result, err := r.reconcileServer(ctx, &mcpServer)
 	if statusErr := r.persistStatus(ctx, &mcpServer, observed); statusErr != nil && err == nil {
 		return ctrl.Result{}, statusErr
 	}
 	return result, err
+}
+
+func (r *MCPServerReconciler) ensureServerLabel(ctx context.Context, mcpServer *arkv1alpha1.MCPServer) error {
+	if mcpServer.Labels[labels.MCPServerLabel] == mcpServer.Name {
+		return nil
+	}
+	patch := client.MergeFrom(mcpServer.DeepCopy())
+	if mcpServer.Labels == nil {
+		mcpServer.Labels = map[string]string{}
+	}
+	mcpServer.Labels[labels.MCPServerLabel] = mcpServer.Name
+	return r.Patch(ctx, mcpServer, patch)
 }
 
 func (r *MCPServerReconciler) reconcileServer(ctx context.Context, mcpServer *arkv1alpha1.MCPServer) (ctrl.Result, error) {

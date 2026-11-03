@@ -33,6 +33,8 @@ class SecretResponse(BaseModel):
     """Kubernetes secret response model."""
     name: str
     id: str
+    type: Optional[str] = None
+    keys: List[str] = []  # Names of the keys in the secret data (never the values)
     description: Optional[str] = None
     alias: Optional[str] = None
     labels: List[str] = []

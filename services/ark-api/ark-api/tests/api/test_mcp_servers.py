@@ -75,9 +75,14 @@ class TestAuthorizationBlock(unittest.TestCase):
 
     def test_no_token_material_serialized(self):
         mcp = _mcp_dict(state="Authorized", expires_at="2030-01-01T00:00:00Z")
+        mcp["spec"]["headers"] = [
+            {"name": "Authorization", "value": {"valueFrom": {"secretKeyRef": {"name": "gh-token", "key": "token"}}}},
+            {"name": "X-Tenant", "value": {"value": "acme-plain-value"}},
+        ]
         dumped = mcp_server_to_response(mcp).model_dump()
+        self.assertEqual(dumped["header_names"], ["Authorization", "X-Tenant"])
         serialized = str(dumped)
-        for forbidden in ("access_token", "refresh_token", "client_secret"):
+        for forbidden in ("access_token", "refresh_token", "client_secret", "gh-token", "acme-plain-value"):
             self.assertNotIn(forbidden, serialized)
 
 

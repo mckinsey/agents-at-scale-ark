@@ -102,7 +102,7 @@ overrides:
 
 ### MCP Server Overrides
 
-Override headers for MCP server requests:
+Override headers for MCP server requests. Without a `labelSelector`, the override applies to every MCP server the agent calls:
 
 ```yaml
 overrides:
@@ -112,6 +112,34 @@ overrides:
           value: "engineering-team"
     resourceType: mcpserver
 ```
+
+The controller labels every MCPServer with `mcp/server: <name>`, so select on that label to target one server. The dashboard saves per-server overrides this way:
+
+```yaml
+overrides:
+  - headers:
+      - name: X-Jira-Token
+        value:
+          valueFrom:
+            secretKeyRef:
+              name: jira-creds
+              key: token
+    resourceType: mcpserver
+    labelSelector:
+      matchLabels:
+        mcp/server: jira
+```
+
+An MCP server override replaces the header of the same name in the server's `spec.headers`. A Query override replaces the same header set on the Agent. See [Header precedence](/reference/resources/mcpserver#header-precedence).
+
+### Duplicate Header Names
+
+Header names are case-insensitive, so `X-Token` and `x-token` are the same header. The webhook and `ark-api` reject an Agent that repeats a header name in:
+
+- `model` overrides without a `labelSelector`, checked as one list
+- `mcpserver` overrides with the same `labelSelector`, checked as one list per selector. Overrides without a selector form one list
+
+The same name under different selectors is allowed. Query overrides are not checked.
 
 ## Label Selectors
 
@@ -272,7 +300,7 @@ spec:
 ## Best Practices
 
 1. **Use Secrets for Sensitive Data**: Always store API keys, tokens, and credentials in Kubernetes secrets
-2. **Label Your Resources**: Add labels to models and MCP servers for flexible targeting
+2. **Label Your Resources**: Add labels to models for flexible targeting. MCP servers already carry `mcp/server: <name>`; add your own labels to target groups of servers
 3. **Be Specific with Selectors**: Use label selectors to avoid unintended header application
 4. **Document Header Usage**: Comment your override configurations to explain their purpose
 5. **Test Overrides**: Verify that headers are correctly applied using query logs or debugging

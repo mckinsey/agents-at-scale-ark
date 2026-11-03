@@ -112,6 +112,24 @@ spec:
 
 The controller discovers tools from the server every `spec.pollInterval` and publishes the count to `status.toolCount`. See [Tools](/reference/resources/tools) for creating Tool resources that connect to MCP servers.
 
+### The `mcp/server` label
+
+The controller sets `mcp/server: <name>` on every MCPServer and replaces any other value on that label. The Tools it generates carry the same label. To send headers to one server, select on the label in an Agent or Query override:
+
+```yaml
+overrides:
+  - resourceType: mcpserver
+    labelSelector:
+      matchLabels:
+        mcp/server: github
+    headers:
+      - name: X-Request-Source
+        value:
+          value: ark
+```
+
+Only header names listed in the server's `spec.headers` can be overridden from the dashboard. See [Overrides](/user-guide/overrides#mcp-server-overrides).
+
 ## Transient error retry
 
 Tool calls that fail with a transient error — HTTP 429, 500, 502, 503, 504, or a connection-level failure where the request never reached the server — are retried with exponential backoff and jitter. A `Retry-After` header from the server sets the minimum delay for the next attempt, capped at the maximum backoff. Every other failure (auth failures, validation errors, application-level tool errors, statuses that terminate the MCP session) fails immediately with the original error.

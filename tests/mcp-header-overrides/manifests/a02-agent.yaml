@@ -1,0 +1,28 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: header-overrides-agent
+spec:
+  prompt: You are a test assistant.
+  modelRef:
+    name: test-model-mock
+  tools:
+  - name: header-overrides-mcp-echo-headers
+    type: mcp
+  overrides:
+  - resourceType: mcpserver
+    headers:
+    - name: X-Agent-Unscoped
+      value:
+        value: agent-unscoped-value
+  - resourceType: mcpserver
+    labelSelector:
+      matchLabels:
+        mcp/server: header-overrides-mcp
+    headers:
+    - name: X-Agent-Scoped
+      value:
+        value: agent-scoped-value
+    - name: X-Query-Override
+      value:
+        value: agent-query-value
