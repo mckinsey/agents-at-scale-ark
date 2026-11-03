@@ -2,15 +2,10 @@ import { trackEvent } from '@/lib/analytics/singleton';
 import { hashPromptSync } from '@/lib/analytics/utils';
 import { apiClient } from '@/lib/api/client';
 import { apiUrl } from '@/lib/api/config';
+import { isNotFoundError } from '@/lib/api/errors';
 import type { components } from '@/lib/api/generated/types';
 import { a2aTasksService } from '@/lib/services/a2a-tasks';
 import { generateUUID } from '@/lib/utils/uuid';
-
-interface AxiosError extends Error {
-  response?: {
-    status: number;
-  };
-}
 
 export type QueryParameter = components['schemas']['QueryParameter'];
 export type QueryResponse = components['schemas']['QueryResponse'];
@@ -184,6 +179,8 @@ function detectTerminalPhase(
 export type ChatResponse = {
   status: QueryStatusPhase;
   terminal: boolean;
+  transportError?: boolean;
+  notFound?: boolean;
   response?: string;
   memoryLookup?: MemoryNoticeLookup;
   messages?: Array<{
@@ -289,7 +286,7 @@ export const chatService = {
         { params: { namespace } },
       );
     } catch (error) {
-      if ((error as AxiosError).response?.status === 404) {
+      if (isNotFoundError(error)) {
         return null;
       }
       throw error;
@@ -321,7 +318,7 @@ export const chatService = {
       );
       return response;
     } catch (error) {
-      if ((error as AxiosError).response?.status === 404) {
+      if (isNotFoundError(error)) {
         return null;
       }
       throw error;
@@ -335,7 +332,7 @@ export const chatService = {
       });
       return true;
     } catch (error) {
-      if ((error as AxiosError).response?.status === 404) {
+      if (isNotFoundError(error)) {
         return false;
       }
       throw error;
@@ -351,6 +348,7 @@ export const chatService = {
     conversationId?: string,
     timeout?: string,
     parameters?: QueryParameter[],
+    annotations?: Record<string, string>,
   ): Promise<QueryDetailResponse> {
     const queryRequest: QueryCreateRequest = {
       name: `chat-query-${generateUUID()}`,
@@ -364,6 +362,9 @@ export const chatService = {
       conversationId,
       timeout,
       ...(parameters && parameters.length > 0 ? { parameters } : {}),
+      ...(annotations && Object.keys(annotations).length > 0
+        ? { metadata: { annotations } }
+        : {}),
     };
 
     return await this.createQuery(namespace, queryRequest);
@@ -405,7 +406,10 @@ export const chatService = {
     try {
       const query = await this.getQuery(namespace, queryName);
 
-      if (!query || !query.status) {
+      if (!query) {
+        return { status: 'unknown', terminal: true, notFound: true };
+      }
+      if (!query.status) {
         return { status: 'unknown', terminal: false };
       }
 
@@ -462,7 +466,7 @@ export const chatService = {
 
       return { status: 'unknown', terminal: true };
     } catch {
-      return { status: 'error', terminal: true };
+      return { status: 'error', terminal: true, transportError: true };
     }
   },
 
@@ -582,6 +586,7 @@ export const chatService = {
     timeout?: string,
     abortSignal?: AbortSignal,
     parameters?: QueryParameter[],
+    annotations?: Record<string, string>,
   ): Promise<{
     queryName: string;
     chunks: AsyncGenerator<Record<string, unknown>, void, unknown>;
@@ -595,6 +600,7 @@ export const chatService = {
       conversationId,
       timeout,
       parameters,
+      annotations,
     );
 
     const queryName = query.name;

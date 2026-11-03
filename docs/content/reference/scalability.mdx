@@ -24,6 +24,8 @@ The Query controller exposes two knobs via Helm values under `controllerManager`
 - **`maxConcurrentQueries`** (default `32`) — caps the number of Query executions running concurrently as in-process goroutines. When the cap is reached, the reconciler requeues so the backlog stays in the workqueue instead of the controller heap. This bounds memory under burst load. Set to `0` to disable the cap (not recommended — susceptible to OOM under burst load). The cap is shared max-min-fair across active namespaces: each namespace with in-flight or recently-waiting queries gets an adaptive share (`maxConcurrentQueries` divided by the number of active namespaces, floor 1), so one tenant flooding queries cannot monopolize the pool and starve others (#2698). A namespace with demand below its share leaves the remainder for others; idle namespaces do not reduce anyone's share.
 - **`maxConcurrentReconciles`** (default `4`) — caps the number of Query reconciles running in parallel. The workqueue dedupes per-key, so this only enables concurrency *across different* Query objects, not faster repeats of the same one. Set to `0` to use the controller-runtime default (1).
 
+A Query that cannot get a slot is set to phase `queued` and retried every 250ms. If its whole `spec.timeout` passes while it waits, it fails with "Query timed out waiting for controller capacity"; once it starts, the full timeout applies to the execution, and `status.duration` does not include the time spent queued.
+
 The two knobs are independent and both effective at the defaults. `maxConcurrentReconciles` controls how fast queued queries are picked up; `maxConcurrentQueries` bounds how many of them can be in-flight at once. Raise both together if the controller has spare CPU/memory headroom and queue depth is growing. Lower `maxConcurrentQueries` if the controller pod is near its memory limit during bursts.
 
 ### API and dashboard
@@ -54,7 +56,19 @@ On PostgreSQL, production capacity is roughly ~230 ops/sec burst / ~180 ops/sec 
 
 ### Executors
 
-All executors — including the default completions executor — run as separate deployments and communicate with the controller via A2A. The default completions executor uses an in-memory A2A task manager that holds conversation history, active tasks, and streaming subscribers, so it runs as a single replica by default. Scaling it to multiple replicas would require sticky sessions or a shared task store. Marketplace and custom executors can define their own HPA, resource limits, and replica strategy depending on their state management approach.
+All executors — including the default completions executor — run as separate deployments and communicate with the controller via A2A. The controller sends each Query as a single blocking A2A request that one executor pod handles from start to finish, and conversation history lives in the Memory service, so any replica can serve any request.
+
+The default completions executor runs as a single replica by default and can be scaled out through its Helm chart. `replicaCount` sets a fixed number of replicas; `autoscaling.enabled` replaces it with a HorizontalPodAutoscaler that scales on an absolute per-pod CPU target (`autoscaling.targetCPUAverageValue`, default `200m`) because the chart reserves only `10m` of CPU per pod and a percentage-of-request target would scale on the first query. `podDisruptionBudget.enabled` adds a PodDisruptionBudget for voluntary disruptions.
+
+Before scaling it out:
+
+- The HPA reads pod metrics from the Metrics API, so the cluster needs [metrics-server](https://github.com/kubernetes-sigs/metrics-server) (managed Kubernetes offerings such as EKS do not install it by default). Without cluster autoscaling, new replicas also need free node capacity or they stay `Pending`.
+- When `autoscaling.enabled` is on, the Deployment omits `replicas` and the HPA owns the count. Set `autoscaling.minReplicas` to the fixed count you are moving from, otherwise the Deployment drops to one replica until load arrives.
+- Enable the PodDisruptionBudget only with two or more replicas. With one replica and `minAvailable: 1` it allows zero disruptions and blocks node drains.
+- The controller reuses idle connections to the executor Service, so new replicas receive traffic gradually as those connections rotate. An uneven spread right after a scale-out is expected.
+- On scale-down or pod termination, in-flight queries get the drain window set by `terminationGracePeriodSeconds` and `gracefulShutdown.shutdownTimeoutSeconds` (57s by default). A query still running when the window closes ends in `error` and the controller does not re-dispatch it, so size the window for your longest query.
+
+The in-memory A2A task manager keeps task state per pod. That matters only for external A2A clients that call the executor directly and later resume a task with `tasks/get`, `tasks/resubscribe` or a stream re-attach; for them, set `taskManager.backend: redis` so task state is shared across replicas. The controller path does not need it. Marketplace and custom executors define their own HPA, resource limits and replica strategy depending on how they manage state.
 
 ## Resource monitoring
 
