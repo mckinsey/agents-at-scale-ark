@@ -68,6 +68,23 @@ spec:
           - name: SSL_CERT_FILE
             value: "/etc/ssl/certs/custom-ca/{{ .Values.customCACert.key }}"
           {{- end }}
+          {{- $modelUrlSecurity := .Values.modelUrlSecurity | default dict }}
+          {{- if dig "domainWhitelist" "enabled" false $modelUrlSecurity }}
+          - name: WHITELISTED_MODEL_DOMAINS
+            valueFrom:
+              configMapKeyRef:
+                name: {{ dig "configMapName" "" $modelUrlSecurity | default "model-url-security" }}
+                key: {{ dig "domainWhitelist" "key" "" $modelUrlSecurity | default "whitelisted-domains" }}
+                optional: true
+          {{- end }}
+          {{- if dig "privateIPAllowlist" "enabled" false $modelUrlSecurity }}
+          - name: ALLOWED_PRIVATE_IP_RANGES
+            valueFrom:
+              configMapKeyRef:
+                name: {{ dig "configMapName" "" $modelUrlSecurity | default "model-url-security" }}
+                key: {{ dig "privateIPAllowlist" "key" "" $modelUrlSecurity | default "allowed-private-ips" }}
+                optional: true
+          {{- end }}
           {{- if eq .Values.taskManager.backend "redis" }}
           - name: REDIS_URL
             {{- if .Values.redis.urlSecretRef.name }}
