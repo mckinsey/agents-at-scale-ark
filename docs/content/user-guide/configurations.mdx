@@ -38,7 +38,7 @@ data:
 | `ark.mckinsey.com/description` | Free text shown in the dashboard. |
 | `ark.mckinsey.com/alias` | An alternative name, for display only. See [Aliases do not resolve](#aliases-do-not-resolve). |
 
-The names `marketplace-sources` and `ark-export-metadata` are reserved for ConfigMaps the Ark API manages itself. The configurations API rejects them with HTTP 422.
+The names `marketplace-sources` and `ark-export-metadata` are reserved for ConfigMaps the Ark API manages itself. The configurations API rejects a create or update with those names with HTTP 422. Deleting a configuration under one of those names still works, and it only removes a ConfigMap that carries the configuration annotation.
 
 Label names accept only letters and digits, and are limited to 57 characters. The API rejects anything else.
 

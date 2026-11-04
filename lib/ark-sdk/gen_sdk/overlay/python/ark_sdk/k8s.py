@@ -627,7 +627,6 @@ class ConfigurationClient:
 
     async def delete_configuration(self, name: str) -> bool:
         """Delete a configuration."""
-        _reject_reserved_configuration_name(name)
         await init_k8s()
         async with create_api_client() as api:
             self._get_api_client(api)

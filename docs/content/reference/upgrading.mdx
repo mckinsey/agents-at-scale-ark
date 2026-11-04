@@ -114,7 +114,7 @@ See [Revoked and Expired Key Retention](/developer-guide/authentication#revoked-
 
 ### Reserved Configuration Names
 
-The configurations API no longer creates, updates, or deletes a configuration named `marketplace-sources` or `ark-export-metadata`. Those ConfigMaps belong to the marketplace and export features, and a request that names them returns HTTP 422. Manage marketplace sources through the marketplace endpoints or the dashboard. A configuration created under one of these names before the upgrade stays visible in the configurations list but can only be changed or removed with `kubectl`.
+The configurations API no longer creates or updates a configuration named `marketplace-sources` or `ark-export-metadata`. Those ConfigMaps belong to the marketplace and export features, and a create or update that names them returns HTTP 422. Manage marketplace sources through the marketplace endpoints or the dashboard. A configuration created under one of these names before the upgrade stays visible in the configurations list and can still be deleted through the API or the dashboard; the delete only removes a ConfigMap that carries the configuration annotation, never the marketplace or export ConfigMap itself.
 
 ### Marketplace Source Credentials
 

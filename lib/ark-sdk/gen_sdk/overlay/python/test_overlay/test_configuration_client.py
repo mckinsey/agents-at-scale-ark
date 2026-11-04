@@ -468,11 +468,26 @@ class TestReservedConfigurationNames(unittest.IsolatedAsyncioTestCase):
         self.v1.read_namespaced_config_map.assert_not_called()
         self.v1.replace_namespaced_config_map.assert_not_called()
 
-    async def test_delete_rejects_reserved_names(self):
+    async def test_delete_removes_a_configuration_under_a_reserved_name(self):
         for name in RESERVED_CONFIGURATION_NAMES:
-            with self.subTest(name=name), self.assertRaises(ValueError):
-                await self.client.delete_configuration(name)
-        self.v1.read_namespaced_config_map.assert_not_called()
+            with self.subTest(name=name):
+                self.v1.read_namespaced_config_map = AsyncMock(return_value=_config_map(name=name))
+                self.v1.delete_namespaced_config_map.reset_mock()
+
+                self.assertTrue(await self.client.delete_configuration(name))
+
+                self.v1.delete_namespaced_config_map.assert_called_once()
+                self.assertEqual(self.v1.delete_namespaced_config_map.call_args.kwargs["name"], name)
+
+    async def test_delete_leaves_the_unmarked_marketplace_configmap_alone(self):
+        marketplace = _config_map(name="marketplace-sources")
+        marketplace.metadata.annotations = {}
+        self.v1.read_namespaced_config_map = AsyncMock(return_value=marketplace)
+
+        with self.assertRaises(ApiException) as context:
+            await self.client.delete_configuration("marketplace-sources")
+
+        self.assertEqual(context.exception.status, 404)
         self.v1.delete_namespaced_config_map.assert_not_called()
 
     async def test_create_accepts_names_that_only_resemble_reserved_ones(self):
@@ -500,7 +515,7 @@ class TestReservedConfigurationNames(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(context.exception.status, 404)
 
-    async def test_marked_reserved_configmap_stays_readable_but_not_writable(self):
+    async def test_marked_reserved_configmap_is_readable_and_deletable_but_not_writable(self):
         self.v1.read_namespaced_config_map = AsyncMock(
             return_value=_config_map(name="marketplace-sources")
         )
@@ -509,8 +524,10 @@ class TestReservedConfigurationNames(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result["name"], "marketplace-sources")
         with self.assertRaises(ValueError):
-            await self.client.delete_configuration("marketplace-sources")
-        self.v1.delete_namespaced_config_map.assert_not_called()
+            await self.client.update_configuration("marketplace-sources", value="{}")
+        self.v1.replace_namespaced_config_map.assert_not_called()
+        self.assertTrue(await self.client.delete_configuration("marketplace-sources"))
+        self.v1.delete_namespaced_config_map.assert_called_once()
 
 
 class TestConfigurationInitK8sOrdering(unittest.IsolatedAsyncioTestCase):

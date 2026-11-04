@@ -198,12 +198,14 @@ class TestReservedConfigurationNamesApi(unittest.TestCase):
                 self.assertEqual(response.status_code, 422)
         self.create_api_client.assert_not_called()
 
-    def test_delete_with_reserved_name_returns_422(self):
+    @patch('ark_api.api.v1.configurations.ConfigurationClient')
+    def test_delete_with_reserved_name_reaches_the_client(self, mock_client_cls):
+        mock_client_cls.return_value.delete_configuration = AsyncMock(return_value=True)
         for name in RESERVED_CONFIGURATION_NAMES:
             with self.subTest(name=name):
                 response = self.client.delete(f"/v1/configurations/{name}")
-                self.assertEqual(response.status_code, 422)
-        self.create_api_client.assert_not_called()
+                self.assertLess(response.status_code, 300)
+                mock_client_cls.return_value.delete_configuration.assert_awaited_with(name)
 
     @patch('ark_api.api.v1.configurations.ConfigurationClient')
     def test_client_value_error_on_create_maps_to_422(self, mock_client_cls):
