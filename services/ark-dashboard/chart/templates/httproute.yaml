@@ -35,6 +35,14 @@ spec:
         - path:
             type: PathPrefix
             value: /
+      {{- if .Values.httpRoute.proxyBuffers.enabled }}
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: gateway.nginx.org
+            kind: SnippetsFilter
+            name: {{ $.Values.app.name }}-proxy-buffers
+      {{- end }}
       backendRefs:
         - name: {{ $.Values.service.name }}
           port: {{ $.Values.service.port }}
