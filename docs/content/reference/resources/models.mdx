@@ -414,6 +414,7 @@ The controller probes each model every `spec.pollInterval` and records the resul
 | --- | --- | --- |
 | `True` | `Available` | Model responded to the probe successfully. |
 | `False` | `ModelProbeFailed` | Probe failed (network, authentication, or configuration error) — details in `message`. |
+| `False` | `BaseURLNotAllowed` | The resolved base URL fails the [model URL rules](/operations-guide/model-url-security); no probe was sent. |
 | `Unknown` | `Initializing` | Initial state before the first probe completes. |
 
 ### Print columns

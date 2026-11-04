@@ -22,6 +22,7 @@ import (
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 	completions "mckinsey.com/ark/executors/completions"
 	eventingconfig "mckinsey.com/ark/internal/eventing/config"
+	"mckinsey.com/ark/internal/modelurl"
 	telemetryconfig "mckinsey.com/ark/internal/telemetry/config"
 	"mckinsey.com/ark/internal/telemetry/routing"
 )
@@ -78,6 +79,8 @@ func main() {
 	}
 
 	log.Info("starting ark completions engine", "version", Version, "commit", GitCommit)
+	allowedDomains, allowedPrivateRanges := modelurl.ConfiguredAllowlists()
+	log.Info("model URL policy", "allowedDomains", allowedDomains, "allowedPrivateIPRanges", allowedPrivateRanges)
 
 	restConfig := ctrl.GetConfigOrDie()
 

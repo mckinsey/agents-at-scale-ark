@@ -7,7 +7,9 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -126,6 +128,39 @@ var _ = Describe("Model Controller", func() {
 
 			By("calling updateStatus on the deleted model should not error")
 			Expect(controllerReconciler.updateStatus(ctx, deletedModel)).To(Succeed())
+		})
+
+		It("marks the model unavailable when the ConfigMap base URL is not allowed", func() {
+			const name = "test-configmap-base-url-model"
+			key := types.NamespacedName{Name: name, Namespace: "default"}
+
+			endpoint := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{Name: "model-endpoint", Namespace: "default"},
+				Data:       map[string]string{"base-url": "http://127.0.0.1:1"},
+			}
+			Expect(k8sClient.Create(ctx, endpoint)).To(Succeed())
+			DeferCleanup(func() { Expect(k8sClient.Delete(ctx, endpoint)).To(Succeed()) })
+
+			created := modelWithBaseURLConfigMap(name)
+			Expect(k8sClient.Create(ctx, created)).To(Succeed())
+			DeferCleanup(func() { Expect(k8sClient.Delete(ctx, created)).To(Succeed()) })
+
+			controllerReconciler := &ModelReconciler{
+				Client:    k8sClient,
+				Scheme:    k8sClient.Scheme(),
+				Telemetry: noop.NewProvider(),
+				Eventing:  eventnoop.NewProvider(),
+			}
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
+			Expect(err).NotTo(HaveOccurred())
+
+			var reconciled arkv1alpha1.Model
+			Expect(k8sClient.Get(ctx, key, &reconciled)).To(Succeed())
+			condition := meta.FindStatusCondition(reconciled.Status.Conditions, ModelAvailable)
+			Expect(condition).NotTo(BeNil())
+			Expect(condition.Status).To(Equal(metav1.ConditionFalse))
+			Expect(condition.Reason).To(Equal(BaseURLNotAllowedReason))
+			Expect(condition.Message).To(Equal("spec.config.openai.baseUrl is not allowed by the model URL policy: hosts outside the cluster must use HTTPS"))
 		})
 	})
 })

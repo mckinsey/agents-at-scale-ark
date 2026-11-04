@@ -40,7 +40,7 @@ func TestNewModelCachingClient_ObservesModelUpdates(t *testing.T) {
 	require.NoError(t, err)
 
 	name, ns := "envtest-model", "default"
-	require.NoError(t, writer.Create(context.Background(), openAIModelWithBaseURL(name, ns, "http://old.example.com/v1")))
+	require.NoError(t, writer.Create(context.Background(), openAIModelWithBaseURL(name, ns, "https://old.example.com/v1")))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
@@ -61,14 +61,14 @@ func TestNewModelCachingClient_ObservesModelUpdates(t *testing.T) {
 		return provider.BaseURL
 	}
 
-	require.Eventually(t, func() bool { return loadBaseURL() == "http://old.example.com/v1" },
+	require.Eventually(t, func() bool { return loadBaseURL() == "https://old.example.com/v1" },
 		20*time.Second, 100*time.Millisecond, "cached client should serve the created Model")
 
 	var stored arkv1alpha1.Model
 	require.NoError(t, writer.Get(context.Background(), types.NamespacedName{Name: name, Namespace: ns}, &stored))
-	stored.Spec.Config.OpenAI.BaseURL = arkv1alpha1.ValueSource{Value: "http://new.example.com/v1"}
+	stored.Spec.Config.OpenAI.BaseURL = arkv1alpha1.ValueSource{Value: "https://new.example.com/v1"}
 	require.NoError(t, writer.Update(context.Background(), &stored))
 
-	require.Eventually(t, func() bool { return loadBaseURL() == "http://new.example.com/v1" },
+	require.Eventually(t, func() bool { return loadBaseURL() == "https://new.example.com/v1" },
 		20*time.Second, 100*time.Millisecond, "cached client must observe the updated baseURL via its watch")
 }

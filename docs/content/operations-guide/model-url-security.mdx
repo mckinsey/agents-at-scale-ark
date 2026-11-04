@@ -2,6 +2,16 @@
 
 Ark validates all model base URLs to protect against Server-Side Request Forgery (SSRF) attacks. These security checks prevent malicious URLs from accessing internal services, local files, or cloud metadata endpoints.
 
+## When the Checks Run
+
+The same rules run in three places, each time on the resolved value of `baseUrl` (a literal value, or the current content of the referenced ConfigMap or Secret):
+
+- **Admission:** when a Model is created or updated, the webhook rejects it.
+- **Controller probe:** before each availability probe, the controller checks the base URL. If it fails, the Model gets `ModelAvailable=False` with reason `BaseURLNotAllowed` and no probe is sent.
+- **Executor:** each time the completions executor loads a Model for a query, it checks the base URL before it reads the credentials or sends a request. If it fails, the query ends in `error`.
+
+Changing a ConfigMap or Secret that a Model reads its `baseUrl` from does not go through admission, so the runtime checks are what apply to the new value.
+
 ## Always-On Security Checks
 
 The following validations are always active and cannot be disabled:
@@ -75,13 +85,23 @@ baseUrl: "https://169.254.169.254/latest/meta-data"
 
 ## Validation Errors
 
-When a model URL fails validation, you'll see an error message indicating which check failed:
+When a model URL fails validation at admission, you'll see an error message indicating which check failed:
 
 ```
 Error: spec.config.openai.baseUrl validation failed: all URLs must use HTTPS; got http://
 Error: spec.config.azure.baseUrl validation failed: loopback IP addresses are not allowed: 127.0.0.1
 Error: spec.config.openai.baseUrl validation failed: private IP addresses are not allowed: 10.0.0.1
 ```
+
+At runtime the Model condition and the query error name the field and the rule, without the URL itself:
+
+```
+spec.config.openai.baseUrl is not allowed by the model URL policy: hosts outside the cluster must use HTTPS
+spec.config.anthropic.baseUrl is not allowed by the model URL policy: loopback addresses are not allowed
+spec.config.openai.baseUrl is not allowed by the model URL policy: the host is not in WHITELISTED_MODEL_DOMAINS
+```
+
+The controller log line `model probe failed` carries the detailed rule message, including the host, in `details`.
 
 ## Supported Model URLs
 
@@ -146,13 +166,26 @@ data:
 
 See [Common Configurations](#common-configurations) below for more specific examples (AWS, Azure, GCP, etc.).
 
-#### Step 3: Restart the controller
+#### Step 3: Enable the whitelist in the executor
+
+The completions executor reads the same ConfigMap. Enable the matching value on its chart, so queries apply the same whitelist:
 
 ```bash
-kubectl rollout restart deployment ark-controller -n ark-system
+helm upgrade ark-completions oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-completions \
+  --namespace ark-system \
+  --set modelUrlSecurity.domainWhitelist.enabled=true \
+  --reuse-values
 ```
 
-#### Step 4: Verify the configuration
+The executor reads the ConfigMap from the namespace it runs in. A per-tenant `ark-completions` install needs a copy of `model-url-security` in the tenant namespace; keep it writable only by platform administrators. If the ConfigMap or the key is missing, the executor runs without the allowlist. It logs the number of allowlist entries it loaded at startup (`model URL policy`).
+
+#### Step 4: Restart the controller and the executor
+
+```bash
+kubectl rollout restart deployment ark-controller ark-completions -n ark-system
+```
+
+#### Step 5: Verify the configuration
 
 Try creating a model with a non-whitelisted domain to confirm it's blocked:
 
@@ -280,7 +313,7 @@ helm upgrade ark-controller oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ar
   --reuse-values
 ```
 
-The ConfigMap will be removed automatically, and the controller will allow any HTTPS domain.
+The ConfigMap will be removed automatically, and the controller will allow any HTTPS domain. Set `modelUrlSecurity.domainWhitelist.enabled=false` on `ark-completions` as well.
 
 ## Allowing Internal Endpoints (Private IP Allowlist)
 
@@ -332,13 +365,22 @@ data:
 
 **Important:** Use CIDR notation (e.g., `10.0.0.0/24` for subnets, `192.168.1.1/32` for single IPs). See [CIDR Notation Examples](#cidr-notation-examples) below for more details.
 
-#### Step 3: Restart the controller
+#### Step 3: Enable the allowlist in the executor
 
 ```bash
-kubectl rollout restart deployment ark-controller -n ark-system
+helm upgrade ark-completions oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-completions \
+  --namespace ark-system \
+  --set modelUrlSecurity.privateIPAllowlist.enabled=true \
+  --reuse-values
 ```
 
-#### Step 4: Verify the configuration
+#### Step 4: Restart the controller and the executor
+
+```bash
+kubectl rollout restart deployment ark-controller ark-completions -n ark-system
+```
+
+#### Step 5: Verify the configuration
 
 Try creating a model with an allowed private IP:
 
@@ -422,4 +464,4 @@ helm upgrade ark-controller oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ar
   --reuse-values
 ```
 
-The ConfigMap will be removed automatically, and the controller will block all private IP addresses.
+The ConfigMap will be removed automatically, and the controller will block all private IP addresses. Set `modelUrlSecurity.privateIPAllowlist.enabled=false` on `ark-completions` as well.

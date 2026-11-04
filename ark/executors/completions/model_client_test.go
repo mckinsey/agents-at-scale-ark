@@ -18,14 +18,14 @@ import (
 
 func TestModelCachingClient_ServesModelReadsFromCache(t *testing.T) {
 	name, ns := "routed-model", defaultNamespace
-	cached := setupModelTestClient([]client.Object{openAIModelWithBaseURL(name, ns, "http://from-cache/v1")})
-	direct := setupModelTestClient([]client.Object{openAIModelWithBaseURL(name, ns, "http://from-direct/v1")})
+	cached := setupModelTestClient([]client.Object{openAIModelWithBaseURL(name, ns, "https://from-cache.example.com/v1")})
+	direct := setupModelTestClient([]client.Object{openAIModelWithBaseURL(name, ns, "https://from-direct.example.com/v1")})
 
 	routed := &modelCachingClient{Client: direct, models: cached}
 
 	var got arkv1alpha1.Model
 	require.NoError(t, routed.Get(context.Background(), types.NamespacedName{Name: name, Namespace: ns}, &got))
-	require.Equal(t, "http://from-cache/v1", got.Spec.Config.OpenAI.BaseURL.Value)
+	require.Equal(t, "https://from-cache.example.com/v1", got.Spec.Config.OpenAI.BaseURL.Value)
 }
 
 func TestModelCachingClient_ServesOtherReadsFromDirectClient(t *testing.T) {
@@ -50,7 +50,7 @@ func TestLoadModel_UsesCachedModelReader(t *testing.T) {
 	name, ns := "cached-reader-model", defaultNamespace
 	routed := &modelCachingClient{
 		Client: setupModelTestClient(nil),
-		models: setupModelTestClient([]client.Object{openAIModelWithBaseURL(name, ns, "http://from-cache/v1")}),
+		models: setupModelTestClient([]client.Object{openAIModelWithBaseURL(name, ns, "https://from-cache.example.com/v1")}),
 	}
 
 	loaded, err := LoadModel(context.Background(), routed, &arkv1alpha1.AgentModelRef{Name: name, Namespace: ns},
@@ -59,5 +59,5 @@ func TestLoadModel_UsesCachedModelReader(t *testing.T) {
 
 	provider, ok := loaded.Provider.(*OpenAIProvider)
 	require.True(t, ok)
-	require.Equal(t, "http://from-cache/v1", provider.BaseURL)
+	require.Equal(t, "https://from-cache.example.com/v1", provider.BaseURL)
 }

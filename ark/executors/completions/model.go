@@ -12,10 +12,36 @@ import (
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/common"
 	"mckinsey.com/ark/internal/eventing"
+	"mckinsey.com/ark/internal/modelurl"
 	"mckinsey.com/ark/internal/telemetry"
 )
 
 const defaultModelName = "default"
+
+var validateModelBaseURL = modelurl.Validate
+
+type BaseURLNotAllowedError struct {
+	Field string
+	Rule  modelurl.Rule
+	cause error
+}
+
+func (e *BaseURLNotAllowedError) Error() string {
+	return fmt.Sprintf("%s is not allowed by the model URL policy: %s", e.Field, e.Rule)
+}
+
+func (e *BaseURLNotAllowedError) Unwrap() error {
+	return e.cause
+}
+
+func checkBaseURL(field, baseURL string) error {
+	err := validateModelBaseURL(baseURL)
+	if err == nil {
+		return nil
+	}
+	rule, _ := modelurl.RuleOf(err)
+	return &BaseURLNotAllowedError{Field: field, Rule: rule, cause: err}
+}
 
 func ResolveModelSpec(modelSpec any, defaultNamespace string) (string, string, error) {
 	if modelSpec == nil {
