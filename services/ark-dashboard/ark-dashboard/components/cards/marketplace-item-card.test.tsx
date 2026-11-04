@@ -471,6 +471,18 @@ describe('InstallCommandDialog', () => {
     expect(screen.getByText('helm install my-chart')).toBeInTheDocument();
   });
 
+  it('shows only the helm command without a recommended label when no ark command is returned', async () => {
+    await openDialogWithCommands({ helmCommand: 'helm install my-chart' });
+
+    expect(
+      screen.queryByText('Using Ark CLI (Recommended)'),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText('Using Helm directly')).toBeInTheDocument();
+    expect(
+      screen.getByText(/Run this command in your terminal to install/),
+    ).toBeInTheDocument();
+  });
+
   it('shows kubectl tip', async () => {
     await openDialogWithCommands({ arkCommand: 'ark install test' });
 

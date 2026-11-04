@@ -376,7 +376,10 @@ export function useAgentForm({
 
   const handleToolToggle = useCallback((tool: Tool, checked: boolean) => {
     if (checked) {
-      const newTool: AgentTool = { type: 'custom', name: tool.name };
+      const newTool: AgentTool = {
+        type: tool.type ?? 'custom',
+        name: tool.name,
+      };
       setSelectedTools(prev => [...prev, newTool]);
     } else {
       setSelectedTools(prev => prev.filter(t => t.name !== tool.name));

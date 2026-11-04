@@ -4176,6 +4176,8 @@ export interface components {
             }[] | null;
             /** Source */
             source: string;
+            /** Url */
+            url?: string | null;
         };
         /**
          * MarketplacePermissionsResponse
