@@ -34,6 +34,8 @@ const (
 	Port        = 8080
 )
 
+const RevisionHeader = "X-Ark-Inline-Revision"
+
 // Config is the runner's whole configuration, all of it from the controller.
 type Config struct {
 	ToolName   string
@@ -69,6 +71,18 @@ func ConfigFromEnv() (Config, error) {
 func SourceHash(source string) string {
 	sum := sha256.Sum256([]byte(source))
 	return hex.EncodeToString(sum[:])
+}
+
+func Revision(language, source string) string {
+	return revision(language, SourceHash(source))
+}
+
+func (c Config) Revision() string {
+	return revision(c.Language, c.SourceHash)
+}
+
+func revision(language, hash string) string {
+	return language + "/" + hash
 }
 
 // Load resolves the interpreter and verifies the mounted snapshot against the
@@ -118,12 +132,23 @@ func Handler(cfg Config, script Script) http.Handler {
 	mcpHandler := transport.Handler(server)
 
 	mux := http.NewServeMux()
-	mux.Handle(MCPPath, limitBody(mcpHandler))
+	mux.Handle(MCPPath, requireRevision(cfg.Revision(), limitBody(mcpHandler)))
 	mux.HandleFunc(ReadyPath, func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
 	return mux
+}
+
+func requireRevision(want string, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get(RevisionHeader) != want {
+			w.Header().Set(RevisionHeader, want)
+			http.Error(w, "runner serves a different revision", http.StatusConflict)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // limitBody caps the request before the MCP layer decodes it, so an oversized
