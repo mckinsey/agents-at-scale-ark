@@ -1,8 +1,8 @@
 """The Deployment details settings page lists the namespace's Helm releases.
 
-The page shows the same data as `helm list` for the active namespace, so helm
-itself is the oracle: every release it reports must appear as a row, and a
-deployed one as Healthy. The suite installs mock-llm with helm, so the
+The page shows the same data as `helm list --deployed --failed --pending` for
+the active namespace, so helm itself is the oracle: every release it reports
+must appear as a row, and a deployed one as Healthy. The suite installs mock-llm with helm, so the
 namespace is never empty.
 """
 
@@ -24,7 +24,10 @@ def _page_url(page: Page) -> str:
 
 def _helm_releases(namespace: str) -> list[dict]:
     result = subprocess.run(
-        ["helm", "list", "--namespace", namespace, "--output", "json"],
+        [
+            "helm", "list", "--namespace", namespace,
+            "--deployed", "--failed", "--pending", "--output", "json",
+        ],
         capture_output=True, text=True, timeout=30, check=True,
     )
     return json.loads(result.stdout)
@@ -67,7 +70,7 @@ class TestDeploymentDetails:
         refresh = page.get_by_role("button", name="Refresh")
 
         with page.expect_response(
-            lambda r: "/api/v1/ark-services/marketplace-items" in r.url and r.ok
+            lambda r: "/api/v1/ark-services/helm-releases" in r.url and r.ok
         ):
             refresh.click()
 

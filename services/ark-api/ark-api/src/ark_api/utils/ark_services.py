@@ -1,11 +1,12 @@
 """ARK services utilities for Helm release management."""
 import logging
 from enum import Enum
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 
 import base64
 
 from pyhelm3 import Client
+from pyhelm3.errors import Error as HelmError
 from ark_sdk.impersonation import ImpersonationConfig
 from ark_sdk.k8s import SecretClient
 logger = logging.getLogger(__name__)
@@ -53,7 +54,7 @@ async def extract_helm_release_data(release) -> Dict[str, Any]:
     
     chart_name = chart_metadata_obj.name if chart_metadata_obj else ""
     chart_version = chart_metadata_obj.version if chart_metadata_obj else ""
-    app_version = chart_metadata_obj.app_version if chart_metadata_obj else ""
+    app_version = (chart_metadata_obj.app_version or "") if chart_metadata_obj else ""
     
     chart_metadata = await _extract_chart_metadata(chart_metadata_obj)
     updated_time = await _get_revision_timestamp(revision)
@@ -75,22 +76,37 @@ async def extract_helm_release_data(release) -> Dict[str, Any]:
     }
 
 
-async def get_helm_releases(namespace: str) -> List[Dict[str, Any]]:
-    """Get Helm releases in a namespace using pyhelm3."""
-    try:
-        helm_client = Client()
-        releases = await helm_client.list_releases(namespace=namespace)
-        
-        release_list = []
-        for release in releases:
-            release_data = await extract_helm_release_data(release)
-            release_list.append(release_data)
-        
-        return release_list
-        
-    except Exception as e:
-        logger.warning(f"Failed to get Helm releases for namespace {namespace}: {e}")
-        return []
+def _describe_release_error(error: Exception) -> str:
+    """Describe why a release could not be read, without exposing the underlying error."""
+    if isinstance(error, HelmError):
+        return "Helm couldn't return this release's details."
+    return "The release data has an unexpected format."
+
+
+async def get_helm_releases(namespace: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, str]]]:
+    """Get deployed, failed and pending Helm releases in a namespace using pyhelm3.
+
+    Raises if the releases cannot be listed. A release whose details cannot be
+    read is reported in the returned errors instead of failing the whole list.
+    """
+    helm_client = Client()
+    releases = await helm_client.list_releases(
+        namespace=namespace,
+        include_deployed=True,
+        include_failed=True,
+        include_pending=True,
+    )
+
+    release_list = []
+    errors = []
+    for release in releases:
+        try:
+            release_list.append(await extract_helm_release_data(release))
+        except Exception as e:
+            logger.warning(f"Failed to read Helm release {release.name} in namespace {namespace}: {e!r}")
+            errors.append({'name': release.name, 'message': _describe_release_error(e)})
+
+    return release_list, errors
 
 
 def get_chart_annotations(release_data: Dict[str, Any]) -> Dict[str, str]:

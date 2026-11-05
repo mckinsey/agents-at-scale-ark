@@ -6,14 +6,14 @@ from fastapi.testclient import TestClient
 os.environ["AUTH_MODE"] = "open"
 
 
-class TestMarketplaceItemsEndpoint(unittest.TestCase):
+class TestHelmReleasesEndpoint(unittest.TestCase):
     def setUp(self):
         from ark_api.main import app
         self.client = TestClient(app)
 
     @patch('ark_api.api.v1.ark_services.get_helm_releases')
     @patch('ark_api.api.v1.ark_services.get_context')
-    async def test_list_marketplace_items_success(self, mock_get_context, mock_get_helm_releases):
+    def test_list_helm_releases_success(self, mock_get_context, mock_get_helm_releases):
         mock_get_context.return_value = {"namespace": "default"}
 
         mock_releases = [
@@ -34,9 +34,9 @@ class TestMarketplaceItemsEndpoint(unittest.TestCase):
                 }
             }
         ]
-        mock_get_helm_releases.return_value = mock_releases
+        mock_get_helm_releases.return_value = (mock_releases, [])
 
-        response = self.client.get("/v1/marketplace-items")
+        response = self.client.get("/v1/ark-services/helm-releases")
 
         self.assertEqual(response.status_code, 200)
         data = response.json()
@@ -49,7 +49,7 @@ class TestMarketplaceItemsEndpoint(unittest.TestCase):
 
     @patch('ark_api.api.v1.ark_services.get_helm_releases')
     @patch('ark_api.api.v1.ark_services.get_context')
-    async def test_list_marketplace_items_with_namespace(self, mock_get_context, mock_get_helm_releases):
+    def test_list_helm_releases_with_namespace(self, mock_get_context, mock_get_helm_releases):
         mock_get_context.return_value = {"namespace": "default"}
 
         mock_releases = [
@@ -70,9 +70,9 @@ class TestMarketplaceItemsEndpoint(unittest.TestCase):
                 }
             }
         ]
-        mock_get_helm_releases.return_value = mock_releases
+        mock_get_helm_releases.return_value = (mock_releases, [])
 
-        response = self.client.get("/v1/marketplace-items?namespace=custom-ns")
+        response = self.client.get("/v1/ark-services/helm-releases?namespace=custom-ns")
 
         self.assertEqual(response.status_code, 200)
         data = response.json()
@@ -81,11 +81,11 @@ class TestMarketplaceItemsEndpoint(unittest.TestCase):
 
     @patch('ark_api.api.v1.ark_services.get_helm_releases')
     @patch('ark_api.api.v1.ark_services.get_context')
-    async def test_list_marketplace_items_empty(self, mock_get_context, mock_get_helm_releases):
+    def test_list_helm_releases_empty(self, mock_get_context, mock_get_helm_releases):
         mock_get_context.return_value = {"namespace": "default"}
-        mock_get_helm_releases.return_value = []
+        mock_get_helm_releases.return_value = ([], [])
 
-        response = self.client.get("/v1/marketplace-items")
+        response = self.client.get("/v1/ark-services/helm-releases")
 
         self.assertEqual(response.status_code, 200)
         data = response.json()
@@ -94,7 +94,7 @@ class TestMarketplaceItemsEndpoint(unittest.TestCase):
 
     @patch('ark_api.api.v1.ark_services.get_helm_releases')
     @patch('ark_api.api.v1.ark_services.get_context')
-    async def test_list_marketplace_items_includes_chart_metadata(self, mock_get_context, mock_get_helm_releases):
+    def test_list_helm_releases_includes_chart_metadata(self, mock_get_context, mock_get_helm_releases):
         mock_get_context.return_value = {"namespace": "default"}
 
         mock_releases = [
@@ -116,9 +116,9 @@ class TestMarketplaceItemsEndpoint(unittest.TestCase):
                 }
             }
         ]
-        mock_get_helm_releases.return_value = mock_releases
+        mock_get_helm_releases.return_value = (mock_releases, [])
 
-        response = self.client.get("/v1/marketplace-items")
+        response = self.client.get("/v1/ark-services/helm-releases")
 
         self.assertEqual(response.status_code, 200)
         data = response.json()
@@ -132,7 +132,7 @@ class TestMarketplaceItemsEndpoint(unittest.TestCase):
 
     @patch('ark_api.api.v1.ark_services.get_helm_releases')
     @patch('ark_api.api.v1.ark_services.get_context')
-    async def test_list_marketplace_items_multiple_releases(self, mock_get_context, mock_get_helm_releases):
+    def test_list_helm_releases_multiple_releases(self, mock_get_context, mock_get_helm_releases):
         mock_get_context.return_value = {"namespace": "default"}
 
         mock_releases = [
@@ -165,9 +165,12 @@ class TestMarketplaceItemsEndpoint(unittest.TestCase):
                 }
             }
         ]
-        mock_get_helm_releases.return_value = mock_releases
+        mock_get_helm_releases.return_value = (
+            mock_releases,
+            [{"name": "broken", "message": "The release data has an unexpected format."}]
+        )
 
-        response = self.client.get("/v1/marketplace-items")
+        response = self.client.get("/v1/ark-services/helm-releases")
 
         self.assertEqual(response.status_code, 200)
         data = response.json()
@@ -175,6 +178,7 @@ class TestMarketplaceItemsEndpoint(unittest.TestCase):
         self.assertEqual(len(data["items"]), 2)
         names = {item["name"] for item in data["items"]}
         self.assertEqual(names, {"phoenix", "langfuse"})
+        self.assertEqual(data["errors"], [{"name": "broken", "message": "The release data has an unexpected format."}])
 
 
 if __name__ == "__main__":

@@ -16,14 +16,17 @@ describe('arkServicesService', () => {
 
   it('lists every Helm release in the given namespace', async () => {
     const items = [{ name: 'ark-api' }];
-    vi.mocked(apiClient.get).mockResolvedValueOnce({ items, count: 1 });
+    const errors = [
+      { name: 'broken', message: 'The release data has an unexpected format.' },
+    ];
+    vi.mocked(apiClient.get).mockResolvedValueOnce({ items, count: 1, errors });
 
     const result = await arkServicesService.getAll('test-namespace');
 
     expect(apiClient.get).toHaveBeenCalledWith(
-      '/api/v1/ark-services/marketplace-items',
+      '/api/v1/ark-services/helm-releases',
       { params: { namespace: 'test-namespace' } },
     );
-    expect(result).toEqual(items);
+    expect(result).toEqual({ items, errors });
   });
 });

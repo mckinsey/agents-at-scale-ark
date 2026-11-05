@@ -8,6 +8,7 @@ import {
   DeploymentDetailsSettings,
 } from '@/components/settings/deployment-details-settings';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { APIError } from '@/lib/api/client';
 import {
   type HelmRelease,
   arkServicesService,
@@ -41,9 +42,7 @@ const release = (overrides: Partial<HelmRelease>): HelmRelease => ({
 });
 
 const renderPage = () => {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
+  const client = new QueryClient();
   return render(
     <QueryClientProvider client={client}>
       <TooltipProvider>
@@ -59,13 +58,21 @@ describe('DeploymentDetailsSettings', () => {
     vi.clearAllMocks();
   });
 
-  it('lists the namespace releases with their Helm health', async () => {
-    vi.mocked(arkServicesService.getAll).mockResolvedValue([
-      release({}),
-      release({ name: 'broken', app_version: '', status: 'failed' }),
-      release({ name: 'upgrading', status: 'pending_upgrade' }),
-      release({ name: 'odd', status: 'something-new' }),
-    ]);
+  it('lists the namespace releases with their Helm health and unreadable ones', async () => {
+    vi.mocked(arkServicesService.getAll).mockResolvedValue({
+      items: [
+        release({}),
+        release({ name: 'broken', app_version: '', status: 'failed' }),
+        release({ name: 'upgrading', status: 'pending_upgrade' }),
+        release({ name: 'odd', status: 'something-new' }),
+      ],
+      errors: [
+        {
+          name: 'unreadable',
+          message: 'The release data has an unexpected format.',
+        },
+      ],
+    });
 
     renderPage();
 
@@ -89,6 +96,15 @@ describe('DeploymentDetailsSettings', () => {
       within(screen.getByRole('row', { name: /odd/ })).getByText('Unknown'),
     ).toBeInTheDocument();
 
+    const unreadable = screen.getByRole('alert');
+    expect(unreadable).toHaveTextContent("1 release couldn't be read");
+    expect(unreadable).toHaveTextContent(
+      'unreadable: The release data has an unexpected format.',
+    );
+    expect(
+      screen.queryByRole('row', { name: /unreadable/ }),
+    ).not.toBeInTheDocument();
+
     expect(screen.getByRole('status')).toHaveTextContent(
       'Showing your namespace only.',
     );
@@ -97,7 +113,10 @@ describe('DeploymentDetailsSettings', () => {
   });
 
   it('refetches the releases on Refresh', async () => {
-    vi.mocked(arkServicesService.getAll).mockResolvedValue([release({})]);
+    vi.mocked(arkServicesService.getAll).mockResolvedValue({
+      items: [release({})],
+      errors: [],
+    });
 
     renderPage();
     await screen.findByRole('row', { name: /ark-api/ });
@@ -110,7 +129,10 @@ describe('DeploymentDetailsSettings', () => {
   });
 
   it('shows an empty message when the namespace has no releases', async () => {
-    vi.mocked(arkServicesService.getAll).mockResolvedValue([]);
+    vi.mocked(arkServicesService.getAll).mockResolvedValue({
+      items: [],
+      errors: [],
+    });
 
     renderPage();
 
@@ -121,15 +143,27 @@ describe('DeploymentDetailsSettings', () => {
 
   it('reports a failed load and retries it', async () => {
     vi.mocked(arkServicesService.getAll).mockRejectedValueOnce(
-      new Error('boom'),
+      new APIError(
+        "Ark doesn't have permission to read Helm releases in namespace 'test-namespace'.",
+        403,
+      ),
     );
-    vi.mocked(arkServicesService.getAll).mockResolvedValueOnce([release({})]);
+    vi.mocked(arkServicesService.getAll).mockResolvedValueOnce({
+      items: [release({})],
+      errors: [],
+    });
 
     renderPage();
 
     expect(
       await screen.findByText('Failed to load services'),
     ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Ark doesn't have permission to read Helm releases in namespace 'test-namespace'.",
+      ),
+    ).toBeInTheDocument();
+    expect(arkServicesService.getAll).toHaveBeenCalledTimes(1);
     await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
 
     expect(

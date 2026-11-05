@@ -23,7 +23,10 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { TruncatedTooltip } from '@/components/ui/truncated-tooltip';
-import type { HelmRelease } from '@/lib/services/ark-services';
+import type {
+  HelmRelease,
+  HelmReleaseError,
+} from '@/lib/services/ark-services';
 import { useGetAllArkServices } from '@/lib/services/ark-services-hooks';
 import { cn } from '@/lib/utils';
 import { useNamespace } from '@/providers/NamespaceProvider';
@@ -53,10 +56,7 @@ const RELEASE_STATUS_CONFIG: Record<string, ReleaseStatusConfig> = {
   pending_install: { label: 'Installing', variant: 'warning' },
   pending_upgrade: { label: 'Upgrading', variant: 'warning' },
   pending_rollback: { label: 'Rolling back', variant: 'warning' },
-  uninstalling: { label: 'Uninstalling', variant: 'warning' },
   failed: { label: 'Failed', variant: 'error' },
-  superseded: { label: 'Superseded', variant: 'neutral' },
-  uninstalled: { label: 'Uninstalled', variant: 'neutral' },
 };
 
 const UNKNOWN_RELEASE_STATUS: ReleaseStatusConfig = {
@@ -172,29 +172,58 @@ function ServicesTable({ services }: Readonly<{ services: HelmRelease[] }>) {
   );
 }
 
+function ReleaseErrorsAlert({
+  errors,
+}: Readonly<{ errors: HelmReleaseError[] }>) {
+  const title =
+    errors.length === 1
+      ? "1 release couldn't be read"
+      : `${errors.length} releases couldn't be read`;
+
+  return (
+    <ResourceErrorState
+      className="mt-4"
+      title={title}
+      description={errors.map(error => (
+        <span key={error.name} className="block break-words">
+          <strong className="paragraph-regular-emphasised-600 text-fg-primary">
+            {error.name}
+          </strong>
+          : {error.message}
+        </span>
+      ))}
+    />
+  );
+}
+
 function TenantServicesSection() {
   const { namespace } = useNamespace();
-  const { data, isPending, isError, refetch } = useGetAllArkServices();
+  const { data, error, isPending, isError, refetch } = useGetAllArkServices();
 
   let content;
   if (isError) {
     content = (
       <ResourceErrorState
+        className="mt-4"
         title="Failed to load services"
+        description={error instanceof Error ? error.message : undefined}
         onRetry={() => refetch()}
       />
     );
   } else if (isPending) {
     content = <TableSkeleton label="Loading services…" />;
-  } else if (data.length === 0) {
-    content = (
-      <p className="paragraph-regular-primary text-fg-secondary pt-4">
-        No Helm releases found in this namespace. If you expected some, Ark may
-        not have permission to read them.
-      </p>
-    );
   } else {
-    content = <ServicesTable services={data} />;
+    content = (
+      <>
+        {data.errors.length > 0 && <ReleaseErrorsAlert errors={data.errors} />}
+        {data.items.length > 0 && <ServicesTable services={data.items} />}
+        {data.items.length === 0 && data.errors.length === 0 && (
+          <p className="paragraph-regular-primary text-fg-secondary pt-4">
+            No Helm releases found in this namespace.
+          </p>
+        )}
+      </>
+    );
   }
 
   return (
