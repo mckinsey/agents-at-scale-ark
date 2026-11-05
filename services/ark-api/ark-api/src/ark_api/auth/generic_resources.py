@@ -22,6 +22,7 @@ CORE_GROUP = ""
 ALLOWED_GENERIC_RESOURCES: dict[tuple[str, str, str], frozenset[str]] = {
     ("argoproj.io", "v1alpha1", "WorkflowTemplate"): frozenset({"get", "list", "create", "update", "delete"}),
     ("argoproj.io", "v1alpha1", "Workflow"): frozenset({"get", "list", "create"}),
+    ("argoproj.io", "v1alpha1", "CronWorkflow"): frozenset({"get", "list", "create", "update", "delete"}),
     ("ark.mckinsey.com", "v1alpha1", "Agent"): frozenset({"get"}),
     ("ark.mckinsey.com", "v1alpha1", "Team"): frozenset({"get"}),
     ("ark.mckinsey.com", "v1prealpha1", "ExecutionEngine"): frozenset({"get", "list", "delete"}),
@@ -31,6 +32,7 @@ ALLOWED_GENERIC_RESOURCES: dict[tuple[str, str, str], frozenset[str]] = {
 GENERIC_WRITE_RESOURCES: frozenset[tuple[str, str]] = frozenset({
     ("argoproj.io", "workflowtemplates"),
     ("argoproj.io", "workflows"),
+    ("argoproj.io", "cronworkflows"),
     ("ark.mckinsey.com", "executionengines"),
 })
 

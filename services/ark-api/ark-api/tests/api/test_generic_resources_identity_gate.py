@@ -41,16 +41,21 @@ API_KEY = {"public_key": "pk-ark-test", "secret_name": "ark-api-key-test", "crea
 
 WT = "/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate"
 WF = "/v1/resources/apis/argoproj.io/v1alpha1/Workflow"
+CWF = "/v1/resources/apis/argoproj.io/v1alpha1/CronWorkflow"
 EE = "/v1/resources/apis/ark.mckinsey.com/v1prealpha1/ExecutionEngine"
 
 TEMPLATE = {"apiVersion": "argoproj.io/v1alpha1", "kind": "WorkflowTemplate", "metadata": {"name": "t", "resourceVersion": "7"}}
 RUN = {"apiVersion": "argoproj.io/v1alpha1", "kind": "Workflow", "metadata": {"name": "r"}}
+SCHEDULE = {"apiVersion": "argoproj.io/v1alpha1", "kind": "CronWorkflow", "metadata": {"name": "c", "resourceVersion": "3"}}
 
 WRITES = [
     ("POST", WT, TEMPLATE, 200),
     ("PUT", f"{WT}/t", TEMPLATE, 200),
     ("DELETE", f"{WT}/t", None, 204),
     ("POST", WF, RUN, 200),
+    ("POST", CWF, SCHEDULE, 200),
+    ("PUT", f"{CWF}/c", SCHEDULE, 200),
+    ("DELETE", f"{CWF}/c", None, 204),
     ("DELETE", f"{EE}/e", None, 204),
 ]
 
@@ -61,6 +66,8 @@ READS = [
     ("GET", f"{WT}/t"),
     ("GET", WF),
     ("GET", f"{WF}/r"),
+    ("GET", CWF),
+    ("GET", f"{CWF}/c"),
     ("GET", EE),
 ]
 
@@ -70,6 +77,7 @@ GATED_REVIEWS = [
     {"group": "argoproj.io", "resource": "workflowtemplates", "verb": "patch"},
     {"group": "argoproj.io", "resource": "workflowtemplates", "verb": "delete"},
     {"group": "argoproj.io", "resource": "workflows", "verb": "create"},
+    {"group": "argoproj.io", "resource": "cronworkflows", "verb": "update"},
     {"group": "ark.mckinsey.com", "resource": "executionengines", "verb": "delete"},
 ]
 
@@ -255,7 +263,7 @@ class TestServiceAccountCallersAreUnchanged(IdentityGateTestCase):
     def test_the_allowlist_is_checked_before_identity(self):
         client = self.client_for(SSO_WITHOUT_IMPERSONATION)
 
-        response = client.post("/v1/resources/apis/argoproj.io/v1alpha1/CronWorkflow", json={}, headers=bearer("alice"))
+        response = client.post("/v1/resources/apis/argoproj.io/v1alpha1/ClusterWorkflowTemplate", json={}, headers=bearer("alice"))
 
         self.assertEqual(response.status_code, 403)
         self.assertNotEqual(response.json()["detail"], IMPERSONATION_DISABLED_DETAIL)
