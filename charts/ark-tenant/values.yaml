@@ -57,7 +57,7 @@ aigwTokenRefresh:
   aigwSecret: aigw-secret
   saCredentialsSecret: aigw-sa-credentials
   schedule: "0 2 * * *"
-  saEndpoint: "https://service-account.prod.ai-gateway.quantumblack.com/api/service-account-credentials"
+  saEndpoint: "https://your-ai-gateway.example.com/api/service-account-credentials"
   image: alpine/kubectl:1.33.4
 
 # Builtin tools configuration
