@@ -116,6 +116,18 @@ func (a *Activator) Invoke(ctx context.Context, key types.NamespacedName, uid ty
 	if err != nil {
 		return nil, err
 	}
+	for {
+		result, err := a.call(ctx, activationCtx, initial, current, key, argument)
+		if !errors.Is(err, errOtherRevision) {
+			return result, err
+		}
+		if waitErr := a.wait(activationCtx); waitErr != nil {
+			return nil, fmt.Errorf("connect to inline runner: %w", err)
+		}
+	}
+}
+
+func (a *Activator) call(ctx, activationCtx context.Context, initial, current *target, key types.NamespacedName, argument string) (*mcp.CallToolResult, error) {
 	session, err := a.connect(activationCtx, current)
 	if err != nil {
 		return nil, err
@@ -125,7 +137,6 @@ func (a *Activator) Invoke(ctx context.Context, key types.NamespacedName, uid ty
 	if _, err := a.currentReady(activationCtx, initial); err != nil {
 		return nil, err
 	}
-	cancelActivation()
 	executionCtx, cancelExecution := context.WithTimeout(ctx, a.executionTimeout)
 	defer cancelExecution()
 	if err := executionCtx.Err(); err != nil {
@@ -143,24 +154,61 @@ func (a *Activator) Invoke(ctx context.Context, key types.NamespacedName, uid ty
 // of waiting out the budget.
 func (a *Activator) connect(ctx context.Context, current *target) (*mcp.ClientSession, error) {
 	mcpClient := mcp.NewClient(&mcp.Implementation{Name: inlinetools.ActivatorName, Version: "v1"}, nil)
+	httpClient := a.revisionClient(runner.Revision(current.tool.Spec.Inline.Language, current.tool.Spec.Inline.Source))
 	for {
 		session, err := mcpClient.Connect(ctx, &mcp.StreamableClientTransport{
-			Endpoint: current.address, HTTPClient: a.httpClient, MaxRetries: -1, DisableStandaloneSSE: true,
+			Endpoint: current.address, HTTPClient: httpClient, MaxRetries: -1, DisableStandaloneSSE: true,
 		}, nil)
 		if err == nil {
 			return session, nil
 		}
-		if !isDialError(err) {
+		if !isDialError(err) && !errors.Is(err, errOtherRevision) {
 			return nil, fmt.Errorf("connect to inline runner: %w", err)
 		}
-		timer := time.NewTimer(a.pollInterval)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
+		if waitErr := a.wait(ctx); waitErr != nil {
 			return nil, fmt.Errorf("connect to inline runner: %w", err)
-		case <-timer.C:
 		}
 	}
+}
+
+func (a *Activator) wait(ctx context.Context) error {
+	timer := time.NewTimer(a.pollInterval)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
+var errOtherRevision = errors.New("inline runner serves a different revision")
+
+func (a *Activator) revisionClient(revision string) *http.Client {
+	next := a.httpClient.Transport
+	if next == nil {
+		next = http.DefaultTransport
+	}
+	return &http.Client{CheckRedirect: a.httpClient.CheckRedirect, Transport: revisionTransport{next: next, revision: revision}}
+}
+
+type revisionTransport struct {
+	next     http.RoundTripper
+	revision string
+}
+
+func (t revisionTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	r = r.Clone(r.Context())
+	r.Header.Set(runner.RevisionHeader, t.revision)
+	resp, err := t.next.RoundTrip(r)
+	if err != nil || resp.StatusCode != http.StatusConflict || resp.Header.Get(runner.RevisionHeader) == "" {
+		return resp, err
+	}
+	_ = resp.Body.Close()
+	if idle, ok := t.next.(interface{ CloseIdleConnections() }); ok {
+		idle.CloseIdleConnections()
+	}
+	return nil, errOtherRevision
 }
 
 // isDialError reports whether err is a failure to establish the TCP

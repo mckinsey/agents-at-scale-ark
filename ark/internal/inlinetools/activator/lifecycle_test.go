@@ -3,6 +3,7 @@
 package activator
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -11,6 +12,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -902,4 +905,96 @@ func TestActivatorDoesNotRetryANonDialHandshakeError(t *testing.T) {
 	// pollInterval for the whole activation budget, which the timing assertion
 	// above already covers.
 	assert.Less(t, attempts.Load(), int32(5), "a non-dial handshake error must not be retried in the activator's own connect loop")
+}
+
+func previousRunner(t *testing.T, fixture *runnerFixture) (*url.URL, string) {
+	t.Helper()
+	dir := t.TempDir()
+	marker := filepath.Join(dir, "ran")
+	path := filepath.Join(dir, "source.sh")
+	require.NoError(t, os.WriteFile(path, []byte(fmt.Sprintf("touch %q\n", marker)), 0o600))
+	cfg := runner.Config{ToolName: fixture.tool.Name, Language: fixture.tool.Spec.Inline.Language, SourceHash: runner.SourceHash("previous source")}
+	server := httptest.NewServer(runner.Handler(cfg, runner.Script{Interpreter: "/bin/sh", Path: path}))
+	t.Cleanup(server.Close)
+	endpoint, err := url.Parse(server.URL)
+	require.NoError(t, err)
+	return endpoint, marker
+}
+
+func routeToPrevious(a *Activator, previous *url.URL, stale func(*http.Request, []byte) bool) {
+	current := a.httpClient.Transport
+	a.httpClient.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		var body []byte
+		if r.Body != nil {
+			body, _ = io.ReadAll(r.Body)
+			r.Body = io.NopCloser(bytes.NewReader(body))
+		}
+		if !stale(r, body) {
+			return current.RoundTrip(r)
+		}
+		copy := r.Clone(r.Context())
+		copy.Body = io.NopCloser(bytes.NewReader(body))
+		copy.URL.Scheme, copy.URL.Host, copy.Host = previous.Scheme, previous.Host, previous.Host
+		return http.DefaultTransport.RoundTrip(copy)
+	})
+}
+
+func TestActivatorRetriesAHandshakeAnsweredByThePreviousRevision(t *testing.T) {
+	fixture := lifeFixture("echo", 1)
+	a, _ := lifeActivator(t, fixture)
+	var calls atomic.Int32
+	backendServer(t, a, "echo", func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		calls.Add(1)
+		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: "current"}}}, nil
+	})
+	previous, marker := previousRunner(t, fixture)
+	var routed atomic.Int32
+	routeToPrevious(a, previous, func(*http.Request, []byte) bool { return routed.Add(1) <= 3 })
+
+	result, err := invoke(a, context.Background(), fixture)
+
+	require.NoError(t, err)
+	assert.Equal(t, "current", result.Content[0].(*mcp.TextContent).Text)
+	assert.EqualValues(t, 1, calls.Load())
+	assert.NoFileExists(t, marker, "the previous revision must never run")
+}
+
+func TestActivatorRetriesACallAnsweredByThePreviousRevision(t *testing.T) {
+	fixture := lifeFixture("echo", 1)
+	a, _ := lifeActivator(t, fixture)
+	var calls atomic.Int32
+	backendServer(t, a, "echo", func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		calls.Add(1)
+		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: "current"}}}, nil
+	})
+	previous, marker := previousRunner(t, fixture)
+	var staleCalls atomic.Int32
+	routeToPrevious(a, previous, func(_ *http.Request, body []byte) bool {
+		return bytes.Contains(body, []byte(`"tools/call"`)) && staleCalls.Add(1) == 1
+	})
+
+	result, err := invoke(a, context.Background(), fixture)
+
+	require.NoError(t, err)
+	assert.Equal(t, "current", result.Content[0].(*mcp.TextContent).Text)
+	assert.EqualValues(t, 1, calls.Load(), "the call runs once, on the current revision")
+	assert.EqualValues(t, 2, staleCalls.Load())
+	assert.NoFileExists(t, marker, "the previous revision must never run")
+}
+
+func TestActivatorFailsAtTheActivationBudgetWhenOnlyThePreviousRevisionAnswers(t *testing.T) {
+	fixture := lifeFixture("echo", 1)
+	a, _ := lifeActivator(t, fixture)
+	backendServer(t, a, "echo", func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		t.Error("the current backend is unreachable in this test")
+		return nil, fmt.Errorf("unreachable")
+	})
+	previous, marker := previousRunner(t, fixture)
+	routeToPrevious(a, previous, func(*http.Request, []byte) bool { return true })
+	a.activationTimeout = 100 * time.Millisecond
+
+	_, err := invoke(a, context.Background(), fixture)
+
+	require.ErrorContains(t, err, "connect to inline runner")
+	assert.NoFileExists(t, marker, "the previous revision must never run")
 }
