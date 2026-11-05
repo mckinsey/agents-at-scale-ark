@@ -112,6 +112,19 @@ kubectl get secrets -n <ark-api-namespace> -l ark.mckinsey.com/api-key=true \
 
 See [Revoked and Expired Key Retention](/developer-guide/authentication#revoked-and-expired-key-retention).
 
+### MCP Token Secrets Must Carry the Ark Label
+
+ark-api now acts on the Secret named by an MCPServer's `spec.authorization.tokenSecretRef` only if the Secret does not exist yet or carries the label `ark.mckinsey.com/mcp-token-secret: "true"`. Secrets that ark-api created already have it. If the Secret exists without the label, `auth/start`, `auth/status` and `auth/logout` return `409`, the OAuth callback marks the flow failed, and the Secret is left unchanged.
+
+**Migration:**
+- Label each token Secret you created yourself, for example one applied from an earlier copy of `samples/mcp-notion.yaml`:
+
+```bash
+kubectl label secret <name> -n <namespace> ark.mckinsey.com/mcp-token-secret=true
+```
+
+- If `tokenSecretRef` points at a Secret that holds other data, point it at a dedicated Secret instead.
+
 ## v0.1.72
 
 ### Argo Workflows Upgraded to v4.1
