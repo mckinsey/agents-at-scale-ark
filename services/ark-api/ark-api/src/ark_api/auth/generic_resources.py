@@ -18,11 +18,14 @@ from .impersonation_config import ImpersonationSettings
 logger = logging.getLogger(__name__)
 
 CORE_GROUP = ""
+ARGO_GROUP = "argoproj.io"
+
+MANAGE_VERBS = frozenset({"get", "list", "create", "update", "delete"})
 
 ALLOWED_GENERIC_RESOURCES: dict[tuple[str, str, str], frozenset[str]] = {
-    ("argoproj.io", "v1alpha1", "WorkflowTemplate"): frozenset({"get", "list", "create", "update", "delete"}),
-    ("argoproj.io", "v1alpha1", "Workflow"): frozenset({"get", "list", "create"}),
-    ("argoproj.io", "v1alpha1", "CronWorkflow"): frozenset({"get", "list", "create", "update", "delete"}),
+    (ARGO_GROUP, "v1alpha1", "WorkflowTemplate"): MANAGE_VERBS,
+    (ARGO_GROUP, "v1alpha1", "Workflow"): frozenset({"get", "list", "create"}),
+    (ARGO_GROUP, "v1alpha1", "CronWorkflow"): MANAGE_VERBS,
     ("ark.mckinsey.com", "v1alpha1", "Agent"): frozenset({"get"}),
     ("ark.mckinsey.com", "v1alpha1", "Team"): frozenset({"get"}),
     ("ark.mckinsey.com", "v1prealpha1", "ExecutionEngine"): frozenset({"get", "list", "delete"}),
@@ -30,9 +33,9 @@ ALLOWED_GENERIC_RESOURCES: dict[tuple[str, str, str], frozenset[str]] = {
 }
 
 GENERIC_WRITE_RESOURCES: frozenset[tuple[str, str]] = frozenset({
-    ("argoproj.io", "workflowtemplates"),
-    ("argoproj.io", "workflows"),
-    ("argoproj.io", "cronworkflows"),
+    (ARGO_GROUP, "workflowtemplates"),
+    (ARGO_GROUP, "workflows"),
+    (ARGO_GROUP, "cronworkflows"),
     ("ark.mckinsey.com", "executionengines"),
 })
 
