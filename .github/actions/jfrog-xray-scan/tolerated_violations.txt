@@ -72,3 +72,9 @@ XRAY-1152420 - GHSA-j38q-h3ph-jjpq (pgx SQL injection in simple-protocol batches
 - Verified at source: pgx v5.12.0 conn.go separates batched simple-protocol queries with a newline, ending any trailing line comment.
 - Not reachable in Ark regardless: the operator imports only pgconn and pgproto3 (internal/storage/postgresql, WAL replication and LISTEN/NOTIFY) and never calls SendBatch.
 - Remove this entry once Xray / the GHSA advisory record v5.12.0 as the patched version.
+
+XRAY-1156947 - CVE-2026-122146 (fflate unzipSync memory corruption)
+- fflate up to 0.8.3 can corrupt memory in unzipSync when given a crafted archive.
+- No fix available: 0.8.3 is the latest published release.
+- ark-dashboard: fflate is dev-only, pulled in via @vitest/ui (devDependency, used by `npm run test:ui`). The Dockerfile runner stage copies only .next/standalone and .next/static, so test tooling never ships in the container.
+- Remove this entry once fflate publishes a patched release.
