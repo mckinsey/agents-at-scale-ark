@@ -13,7 +13,8 @@ vi.mock('../../../lib/output.js', () => ({
   default: mockOutput,
 }));
 
-const {KubernetesSecretManager} = await import('./secret-manager.js');
+const {KubernetesSecretManager, SecretScopeError} =
+  await import('./secret-manager.js');
 
 const LABELS = {
   'ark.mckinsey.com/resource-type': 'secret',
@@ -146,6 +147,48 @@ describe('KubernetesSecretManager', () => {
 
     expect(manifest.data).toEqual({extra: 'a2VlcA=='});
     expect(manifest.stringData).toEqual({'bedrock-api-key': 'br-key'});
+  });
+
+  it('refuses to touch an existing personal secret', async () => {
+    mockExeca.mockResolvedValueOnce({
+      stdout: JSON.stringify({
+        ...EXISTING,
+        metadata: {
+          ...EXISTING.metadata,
+          labels: {
+            'ark.mckinsey.com/resource-type': 'secret',
+            'ark.mckinsey.com/scope': 'user-0123456789abcdef',
+          },
+        },
+      }),
+    });
+
+    await expect(
+      new KubernetesSecretManager().createSecret(openai)
+    ).rejects.toThrow(SecretScopeError);
+
+    expect(mockExeca).toHaveBeenCalledTimes(1);
+    expect(mockOutput.success).not.toHaveBeenCalled();
+  });
+
+  it('refuses a name with the personal secret prefix without reading it', async () => {
+    await expect(
+      new KubernetesSecretManager().createSecret({
+        ...openai,
+        secretName: 'u-0123456789abcdef-m-model-secret',
+      })
+    ).rejects.toThrow(SecretScopeError);
+
+    expect(mockExeca).not.toHaveBeenCalled();
+  });
+
+  it('still updates a secret whose name only looks like a personal one', async () => {
+    const {args} = await run(
+      {...openai, secretName: 'u-team-model-secret'},
+      true
+    );
+
+    expect(args).toEqual(['replace', '-f', '-']);
   });
 
   it('never puts secret values in argv or uses apply', async () => {
