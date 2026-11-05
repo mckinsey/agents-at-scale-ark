@@ -119,7 +119,7 @@ func DefaultTeam(team *arkv1alpha1.Team) {
 		team.Spec.Loops = &loopsFalse
 		team.Spec.Graph = nil
 		team.Spec.MaxTurns = nil
-		team.Annotations[annotations.MigrationWarningPrefix+"graph"] = "strategy 'graph' is deprecated - migrated to 'sequential'. Graph edges have been discarded. Will be removed in v1.0.0"
+		team.Annotations[annotations.MigrationWarningPrefix+"graph"] = "strategy 'graph' is deprecated - migrated to 'sequential'. Graph edges have been discarded; to keep edge constraints use strategy 'selector' with spec.graph, spec.selector.agent and spec.maxTurns. Only the 'graph' strategy value will be removed in v1.0.0"
 	}
 }
 
