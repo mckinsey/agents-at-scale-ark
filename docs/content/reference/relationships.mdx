@@ -94,7 +94,9 @@ Without the annotation, the admission webhook rejects an `Agent` or `Query` whos
 cross-namespace reference to Model platform/shared-gpt is not allowed: the Model must list namespace team-c in annotation ark.mckinsey.com/allowed-namespaces
 ```
 
-Removing a namespace from the annotation stops new queries from that namespace using the target. Existing `Agent` and `Query` objects are not rewritten, updates that leave the reference unchanged are still accepted, and an existing agent's `Available` condition reflects the change only at its next reconcile. Deleting a `Query` whose `Memory` no longer lists its namespace skips the broker message cleanup for that query.
+Removing a namespace from the annotation stops new queries from that namespace using the target. Existing `Agent` and `Query` objects are not rewritten, and updates that leave the reference unchanged are still accepted. Agents that reference the `Model` from another namespace are reconciled again when its annotation changes, so their `Available` condition follows it.
+
+Deleting a `Query` whose `Memory` no longer lists its namespace skips the broker message cleanup for that query, and its messages stay in the target namespace's broker. To remove them, delete the queries while the annotation still lists their namespace, or clean them up in the target broker afterwards (see [Query → Deletion and cleanup](/reference/resources/query#deletion-and-cleanup)).
 
 Because every resource is namespaced, a namespace acts as a tenant boundary. See [Tenant and Namespace Management](/operations-guide/tenant-namespace-management).
 

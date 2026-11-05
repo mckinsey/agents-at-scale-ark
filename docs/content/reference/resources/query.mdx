@@ -262,7 +262,7 @@ The controller transitions the query to `phase: canceled` once the in-flight dis
 When a `Query` is deleted, a controller finalizer removes the messages and operation events that query wrote to the broker, along with the query's entry in the broker's sessions index, so deleting a Query does not leave orphaned history behind.
 
 **Messages** go through the `Memory` contract:
-- **Memory resolution** mirrors execution: the controller uses `spec.memory` if set, otherwise a `Memory` named `default` in the query's namespace. If neither exists, cleanup is skipped.
+- **Memory resolution** mirrors execution: the controller uses `spec.memory` if set, otherwise a `Memory` named `default` in the query's namespace. If neither exists, cleanup is skipped. Cleanup is also skipped when `spec.memory` names a `Memory` in another namespace that no longer lists the query's namespace in `ark.mckinsey.com/allowed-namespaces`; the messages then stay in that namespace's broker (see [Cross-namespace references](/reference/relationships#namespace-scope)).
 - The controller resolves the backend address from the `Memory` resource (`status.lastResolvedAddress`, falling back to `spec.address`) and issues `DELETE /queries/{queryId}/messages` against it — see the [Memory delete endpoint](/reference/resources/memory#delete-query-messages).
 
 **Operation events** are not part of the Memory contract, so they use a separate path:
