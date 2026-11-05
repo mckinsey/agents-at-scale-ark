@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -544,8 +545,12 @@ func (p *PostgreSQLBackend) storePurgeFloor(floor int64) {
 // still accept a resume just below the new floor. That is the pre-existing
 // behavior for those 10s and is safe — the tombstones are not yet gone locally.
 func (p *PostgreSQLBackend) refreshPurgeFloor() {
+	p.refreshPurgeFloorContext(p.ctx)
+}
+
+func (p *PostgreSQLBackend) refreshPurgeFloorContext(ctx context.Context) {
 	var floor int64
-	err := p.db.QueryRowContext(p.ctx, `SELECT value FROM storage_metadata WHERE key = 'watch_purge_floor'`).Scan(&floor)
+	err := p.db.QueryRowContext(ctx, `SELECT value FROM storage_metadata WHERE key = 'watch_purge_floor'`).Scan(&floor)
 	if err != nil {
 		// ErrNoRows simply means no purge has happened yet; leave the mirror as is.
 		if !errors.Is(err, sql.ErrNoRows) {
@@ -697,58 +702,36 @@ func decodeListContinueToken(s string) (listContinueToken, error) {
 // pages filter to rows visible in that snapshot, keeping the paginated view
 // consistent under concurrent inserts.
 func (p *PostgreSQLBackend) List(ctx context.Context, kind, namespace string, opts storage.ListOptions) ([]runtime.Object, string, int64, error) {
+	rev, err := opts.Revision()
+	if err != nil {
+		return nil, "", 0, err
+	}
+
 	var contTok listContinueToken
 	if opts.Continue != "" {
-		var err error
 		contTok, err = decodeListContinueToken(opts.Continue)
 		if err != nil {
 			return nil, "", 0, err
 		}
 	}
 
-	query, args, err := p.buildListQuery(kind, namespace, opts, contTok)
+	page, err := p.readListPage(ctx, kind, namespace, opts, contTok)
 	if err != nil {
 		return nil, "", 0, err
 	}
 
-	rows, err := p.db.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, "", 0, fmt.Errorf("failed to query resources: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	firstPage := contTok.Snapshot == ""
-	objects, resourceVersions, pageSnapshot, err := p.scanListRows(rows, kind, firstPage)
-	if err != nil {
+	listRV := p.freshHead(ctx, page.maxRV, rev.RV)
+	if err := checkListRevision(listRV, rev); err != nil {
 		return nil, "", 0, err
 	}
 
-	if firstPage && pageSnapshot == "" {
-		if err := p.db.QueryRowContext(ctx, "SELECT pg_current_snapshot()::text").Scan(&pageSnapshot); err != nil {
-			return nil, "", 0, fmt.Errorf("failed to capture pg_current_snapshot: %w", err)
-		}
-	}
-	if !firstPage {
-		pageSnapshot = contTok.Snapshot
-	}
-
-	// Pin the list resourceVersion to the store head at page 1 and carry it
-	// forward, so every page reports the same RV and a resuming watch is never
-	// below the purge floor. Legacy tokens (HeadRV == 0) recompute here.
-	listRV := contTok.HeadRV
-	if listRV == 0 {
-		listRV, err = p.headResourceVersion(ctx, pageSnapshot)
-		if err != nil {
-			return nil, "", 0, err
-		}
-	}
-
+	objects, resourceVersions := page.objects, page.resourceVersions
 	var continueToken string
 	if opts.Limit > 0 && int64(len(objects)) > opts.Limit {
 		objects = objects[:opts.Limit]
 		resourceVersions = resourceVersions[:opts.Limit]
 		continueToken = encodeListContinueToken(listContinueToken{
-			Snapshot: pageSnapshot,
+			Snapshot: page.snapshot,
 			Cursor:   resourceVersions[len(resourceVersions)-1],
 			HeadRV:   listRV,
 		})
@@ -757,23 +740,15 @@ func (p *PostgreSQLBackend) List(ctx context.Context, kind, namespace string, op
 	return objects, continueToken, listRV, nil
 }
 
-// headResourceVersion returns the store head revision as of snapshot: the max
-// resource_version committed in that snapshot, lifted to the purge floor and the
-// head revision base. The floor term recovers the head when the highest-RV row
-// has itself been purged (e.g. the newest object was deleted and its tombstone
-// hard-deleted), where a plain MAX over surviving rows would fall back below the
-// floor and 410 every resume. A watch resuming from it is at or above the floor
-// yet never skips a committed change: the floor is at most the true head, and the
-// base is above every write because bootstrapHeadRevisionQuery burns its value.
-func (p *PostgreSQLBackend) headResourceVersion(ctx context.Context, snapshot string) (int64, error) {
+func snapshotMaxResourceVersion(ctx context.Context, q queryer, snapshot string) (int64, error) {
 	var maxRV int64
-	err := p.db.QueryRowContext(ctx,
+	err := q.QueryRowContext(ctx,
 		`SELECT COALESCE(MAX(resource_version), 0) FROM resources
 		 WHERE pg_visible_in_snapshot(xmin::text::xid8, $1::pg_snapshot)`, snapshot).Scan(&maxRV)
 	if err != nil {
 		return 0, fmt.Errorf("failed to compute list resourceVersion: %w", err)
 	}
-	return p.liftHead(maxRV), nil
+	return maxRV, nil
 }
 
 func (p *PostgreSQLBackend) buildListQuery(kind, namespace string, opts storage.ListOptions, contTok listContinueToken) (string, []interface{}, error) {
@@ -1070,26 +1045,29 @@ func (p *PostgreSQLBackend) Watch(ctx context.Context, kind, namespace string, o
 	// resourceVersion resume semantics: "" and "0" ("Start at Any") replay all
 	// current state then stream; a concrete RV ("Start at Exact") delivers only
 	// deltas after it, rather than re-adding every object on reconnect. See #2680.
-	var startRV int64
-	if opts.ResourceVersion != "" && opts.ResourceVersion != "0" {
-		// ParseUint (not ParseInt) so a signed value like "-5" or "+100" is rejected
-		// rather than parsed: a negative startRV would slip past every resume floor
-		// and silently degrade to replay-all. Matches setListItems' rv parsing.
-		rv, perr := strconv.ParseUint(opts.ResourceVersion, 10, 63)
-		if perr != nil {
-			return nil, fmt.Errorf("%w: invalid resourceVersion %q", storage.ErrInvalidRequest, opts.ResourceVersion)
-		}
-		startRV = int64(rv)
+	// ParseMinResourceVersion rejects a signed value like "-5" or "+100" rather than
+	// parsing it: a negative startRV would slip past every resume floor and silently
+	// degrade to replay-all.
+	requestedRV, err := storage.ParseMinResourceVersion(opts.ResourceVersion)
+	if err != nil {
+		return nil, err
 	}
 	// A WatchList (sendInitialEvents) wants the complete current state followed by
-	// the initial-events-end bookmark, whatever resourceVersion it carries: with
-	// resourceVersionMatch=NotOlderThan the current state always qualifies, and a
+	// the initial-events-end bookmark: with resourceVersionMatch=NotOlderThan the
+	// current state qualifies once the store has reached the requested version, and a
 	// reflector replaces its whole cache with what arrived before that bookmark.
 	// Streaming deltas only would make it prune every object it already held.
+	var startRV int64
 	if opts.SendInitialEvents {
-		startRV = 0
+		if err := p.RequireResourceVersion(ctx, requestedRV); err != nil {
+			return nil, err
+		}
+	} else {
+		if requestedRV > math.MaxInt64 {
+			return nil, fmt.Errorf("%w: invalid resourceVersion %q", storage.ErrInvalidRequest, opts.ResourceVersion)
+		}
+		startRV = int64(requestedRV)
 	}
-
 	if err := p.checkResourceVersionNotExpired(startRV); err != nil {
 		return nil, err
 	}
