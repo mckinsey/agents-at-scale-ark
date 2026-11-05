@@ -295,6 +295,10 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git checkout -b "$BRANCH"
           bash scripts/stamp-version.sh "${STABLE}"
+          # stamp does a blanket CURRENT->STABLE replace; upgrading.mdx holds
+          # historical "## vX" headings that must not be rewritten (the STABLE
+          # upgrade note is authored by the hotfix PR, not this version bump).
+          git checkout -- docs/content/reference/upgrading.mdx
           git add -A
           git commit -m "chore: sync version to ${STABLE} after hotfix release"
           git push origin "$BRANCH"
