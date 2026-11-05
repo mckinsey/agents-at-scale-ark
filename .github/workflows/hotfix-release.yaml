@@ -35,15 +35,13 @@ on:
         default: ''
         type: string
 
-permissions:
-  contents: write
-  packages: write
-  actions: write
-  pull-requests: write
+permissions: {}
 
 jobs:
   tag-and-release:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write
     outputs:
       stable: ${{ steps.v.outputs.stable }}
       tag: ${{ steps.v.outputs.tag }}
@@ -54,17 +52,23 @@ jobs:
           ref: ${{ inputs.source_ref }}
           fetch-depth: 0
           fetch-tags: true
+          persist-credentials: true
 
       - name: Resolve version and source commit
         id: v
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
-          STABLE="${{ inputs.version }}"
-          [ -z "$STABLE" ] && STABLE=$(tr -d '[:space:]' < version.txt)
+          STABLE="$INPUT_VERSION"
+          if [ -z "$STABLE" ]; then
+            [ -f version.txt ] || { echo "version input blank and version.txt missing at source_ref"; exit 1; }
+            STABLE=$(tr -d '[:space:]' < version.txt)
+          fi
           STABLE="${STABLE#v}"
-          case "$STABLE" in
-            *-rc*) echo "version '$STABLE' is an RC; hotfixes publish a stable version"; exit 1 ;;
-          esac
+          if ! printf '%s' "$STABLE" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "version '$STABLE' must be a stable semver like 0.1.73 (no -rc, no suffix)"; exit 1
+          fi
           TAG="v${STABLE}"
           git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null 2>&1 && { echo "${TAG} already exists"; exit 1; }
           RC_SHA=$(git rev-parse HEAD)
@@ -96,10 +100,13 @@ jobs:
   release-libs:
     needs: [tag-and-release]
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v6
         with:
           ref: ${{ needs.tag-and-release.outputs.rc_sha }}
+          persist-credentials: false
       - uses: astral-sh/setup-uv@v7
         with:
           version: "0.11.21"
@@ -112,13 +119,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          find . -name "*.whl" -type f | while read -r whl; do
+          find out -name "*.whl" -type f | while read -r whl; do
             gh release upload "${{ needs.tag-and-release.outputs.tag }}" "$whl" --clobber
           done
 
   release-charts:
     needs: [tag-and-release]
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write
     strategy:
       matrix:
         chart:
@@ -136,6 +145,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           ref: ${{ needs.tag-and-release.outputs.rc_sha }}
+          persist-credentials: false
       - name: Install Helm
         uses: azure/setup-helm@v5
         with:
@@ -156,10 +166,13 @@ jobs:
   release-ark-cli:
     needs: [tag-and-release]
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v6
         with:
           ref: ${{ needs.tag-and-release.outputs.rc_sha }}
+          persist-credentials: false
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
@@ -182,11 +195,14 @@ jobs:
   release-fark:
     needs: [tag-and-release]
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v6
         with:
           ref: ${{ needs.tag-and-release.outputs.rc_sha }}
           fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-go@v5
         with:
           go-version: "1.26.9"
@@ -218,8 +234,13 @@ jobs:
   trigger-deploy:
     needs: [tag-and-release, release-libs, release-charts, release-ark-cli]
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: write
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - name: Trigger Deploy (build from source_ref, publish as stable)
         env:
           GH_TOKEN: ${{ github.token }}
@@ -239,11 +260,15 @@ jobs:
   sync-main-version:
     needs: [tag-and-release]
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v6
         with:
           ref: main
           fetch-depth: 0
+          persist-credentials: true
       - name: Open PR bumping main to the released version
         env:
           GH_TOKEN: ${{ github.token }}
