@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/openai/openai-go"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/crossns"
 	"mckinsey.com/ark/internal/eventing"
@@ -151,8 +152,12 @@ func checkCrossNamespaceMemory(ctx context.Context, k8sClient client.Client, nam
 	if memoryNamespace == fromNamespace {
 		return nil
 	}
-	memory, err := getMemoryResource(ctx, k8sClient, name, memoryNamespace)
-	if err != nil || !crossns.Allowed(memory, fromNamespace) {
+	var memory arkv1alpha1.Memory
+	err := k8sClient.Get(ctx, client.ObjectKey{Name: name, Namespace: memoryNamespace}, &memory)
+	if err != nil && !apierrors.IsNotFound(err) {
+		return fmt.Errorf("failed to get memory resource %s/%s: %w", memoryNamespace, name, err)
+	}
+	if err != nil || !crossns.Allowed(&memory, fromNamespace) {
 		return crossns.DeniedError("Memory", memoryNamespace, name, fromNamespace)
 	}
 	return nil

@@ -9,8 +9,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
@@ -184,5 +186,48 @@ func TestNewMemoryForQueryCrossNamespace(t *testing.T) {
 			_, ok := mem.(*HTTPMemory)
 			require.True(t, ok)
 		}
+	})
+}
+
+func forbiddenReadsClient(objects ...client.Object) client.Client {
+	scheme := runtime.NewScheme()
+	_ = corev1.AddToScheme(scheme)
+	_ = arkv1alpha1.AddToScheme(scheme)
+	return fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(objects...).
+		WithInterceptorFuncs(interceptor.Funcs{
+			Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+				switch obj.(type) {
+				case *arkv1alpha1.Model:
+					return apierrors.NewForbidden(schema.GroupResource{Group: "ark.mckinsey.com", Resource: "models"}, key.Name, nil)
+				case *arkv1alpha1.Memory:
+					return apierrors.NewForbidden(schema.GroupResource{Group: "ark.mckinsey.com", Resource: "memories"}, key.Name, nil)
+				}
+				return c.Get(ctx, key, obj, opts...)
+			},
+		}).
+		Build()
+}
+
+func TestCrossNamespaceReadErrorsAreNotReportedAsDenied(t *testing.T) {
+	allowed := map[string]string{crossns.AllowedNamespacesAnnotation: refSourceNamespace}
+	k8sClient := forbiddenReadsClient(
+		crossNamespaceModel("listed", allowed),
+		&arkv1alpha1.Memory{ObjectMeta: metav1.ObjectMeta{Name: "listed", Namespace: refTargetNamespace, Annotations: allowed}},
+	)
+
+	t.Run("model", func(t *testing.T) {
+		_, err := LoadModel(context.Background(), k8sClient, &arkv1alpha1.AgentModelRef{Name: "listed", Namespace: refTargetNamespace}, refSourceNamespace, nil, telenoop.NewModelRecorder(), eventnoop.NewModelRecorder())
+		require.Error(t, err)
+		require.True(t, apierrors.IsForbidden(err), "got %v", err)
+		require.NotContains(t, err.Error(), crossns.AllowedNamespacesAnnotation)
+	})
+
+	t.Run("memory", func(t *testing.T) {
+		_, err := NewMemoryForQuery(context.Background(), k8sClient, &arkv1alpha1.MemoryRef{Name: "listed", Namespace: refTargetNamespace}, refSourceNamespace, "", "q", nil, &noOpMemoryRecorder{})
+		require.Error(t, err)
+		require.True(t, apierrors.IsForbidden(err), "got %v", err)
+		require.NotContains(t, err.Error(), crossns.AllowedNamespacesAnnotation)
 	})
 }
