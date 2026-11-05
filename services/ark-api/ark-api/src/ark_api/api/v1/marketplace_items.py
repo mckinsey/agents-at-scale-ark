@@ -128,7 +128,9 @@ async def _fetch_source(
     cache_key = (namespace, name, url)
     cached = _cache_get(cache_key)
     if cached is not None:
-        return MarketplaceItemsSourceResult(source=name, displayName=display_name, items=cached)
+        return MarketplaceItemsSourceResult(
+            source=name, displayName=display_name, url=url, items=cached
+        )
 
     logger.info("fetching marketplace items for source %s", name)
     try:
@@ -153,7 +155,9 @@ async def _fetch_source(
 
     items = manifest.get("items", []) if isinstance(manifest, dict) else []
     _cache_set(cache_key, items)
-    return MarketplaceItemsSourceResult(source=name, displayName=display_name, items=items)
+    return MarketplaceItemsSourceResult(
+        source=name, displayName=display_name, url=url, items=items
+    )
 
 
 @router.get("", response_model=list[MarketplaceItemsSourceResult])

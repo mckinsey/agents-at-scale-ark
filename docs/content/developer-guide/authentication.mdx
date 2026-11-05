@@ -433,10 +433,23 @@ DELETE /v1/api-keys/{public_key}
 - **Kubernetes RBAC**: Service accounts only have permissions within their deployment namespace
 - **Expiration**: API keys can have optional expiration dates for enhanced security
 - **Usage Signal**: Successful API-key authentication updates `last_used_at` for monitoring and audit review
-- **Soft Delete**: Revoked API keys are marked inactive but retained for audit trails
+- **Retention**: Revoked and expired API keys are kept for 90 days for audit trails, then deleted — see [Revoked and Expired Key Retention](#revoked-and-expired-key-retention)
 - **Creation Authorization**: With impersonation enabled, creating an API key requires the same permission as creating a Secret in the namespace, and listing/revoking keys is scoped to their creator
 - **Legacy Key Rejection**: In `hybrid` mode with impersonation enabled, keys with no recorded creator (minted before this authorization check existed) are rejected at authentication — see the breaking-change note above
 - **Per-Namespace Storage**: API keys are stored as Kubernetes secrets in their respective namespaces for true tenant isolation
+
+### Revoked and Expired Key Retention
+
+Revoking a key marks its Secret inactive and records `deletedAt`. Revoked and expired keys stop authenticating immediately. ark-api keeps the Secret for audit review, then deletes it once the retention period has passed. The period starts at revocation or expiry, whichever comes first. A key created with an expiry already in the past counts from its creation.
+
+Cleanup does not run when `READ_ONLY_MODE=true`. A Secret marked inactive without a `deletedAt`, which Ark never writes, is kept and logged as a warning on each run.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `API_KEY_RETENTION_SECONDS` | `7776000` (90 days) | How long a revoked or expired key's Secret is kept after it stops working. `0` keeps them indefinitely. |
+| `API_KEY_REAPER_INTERVAL_SECONDS` | `3600` (1 hour) | How often ark-api checks for revoked or expired keys past retention. |
+
+Both are listed with their defaults in the ark-api chart's `app.env`. Change the `value` of the entry to override it. Helm replaces lists whole, so a values file that sets `app.env` must repeat every entry it needs, not just these two.
 
 ## Security Features
 

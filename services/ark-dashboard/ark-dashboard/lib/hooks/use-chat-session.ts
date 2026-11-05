@@ -57,6 +57,12 @@ import {
   loadApprovalRequestMessage,
   stripEmptyAssistantPlaceholder,
 } from '@/lib/utils/chat-turn';
+import {
+  supportsOutputSchema as engineSupportsOutputSchema,
+  hasOutputSchemaAnnotation,
+  toOutputSchemaAnnotations,
+  validateOutputSchema,
+} from '@/lib/utils/output-schema';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 const STREAM_TERMINAL_STOP_GRACE_MS = 300;
@@ -142,6 +148,11 @@ interface UseChatSessionReturn {
   canAddParameterRow: boolean;
   missingParameters: string[];
   engineToolWarning: string | null;
+  supportsOutputSchema: boolean;
+  hasOwnOutputSchema: boolean;
+  outputSchemaOverride: string;
+  setOutputSchemaOverride: (value: string) => void;
+  isOutputSchemaOverrideValid: boolean;
 }
 
 export function useChatSession({
@@ -377,7 +388,35 @@ export function useChatSession({
     missingParameters,
     toApiParameters,
     engineToolWarning,
+    executionEngineName,
+    executionEngineAnnotations,
+    agentAnnotations,
   } = useAgentQueryParameters(name, type);
+
+  const supportsOutputSchema =
+    type === 'agent' &&
+    engineSupportsOutputSchema(executionEngineName, executionEngineAnnotations);
+  const hasOwnOutputSchema =
+    supportsOutputSchema &&
+    hasOutputSchemaAnnotation(executionEngineAnnotations, agentAnnotations);
+  const canOverrideOutputSchema = supportsOutputSchema && !hasOwnOutputSchema;
+  const [outputSchemaOverride, setOutputSchemaOverride] = useState('');
+  const isOutputSchemaOverrideValid =
+    validateOutputSchema(outputSchemaOverride) === null;
+  const outputSchemaAnnotations = useMemo(
+    () =>
+      canOverrideOutputSchema
+        ? toOutputSchemaAnnotations(outputSchemaOverride)
+        : undefined,
+    [canOverrideOutputSchema, outputSchemaOverride],
+  );
+  const isSendBlocked =
+    missingParameters.length > 0 ||
+    (canOverrideOutputSchema && !isOutputSchemaOverrideValid);
+
+  useEffect(() => {
+    setOutputSchemaOverride('');
+  }, [name, type]);
 
   useEffect(() => {
     leavingRef.current = false;
@@ -505,6 +544,7 @@ export function useChatSession({
           queryTimeout,
           chatStreamAbortControllerRef.current.signal,
           apiParameters,
+          outputSchemaAnnotations,
         );
 
       lastQueryName.current = streamQueryName;
@@ -595,6 +635,7 @@ export function useChatSession({
       name,
       namespace,
       queryTimeout,
+      outputSchemaAnnotations,
       recoverTurnFromQueryResult,
       sessionId,
       setActiveQueryName,
@@ -623,6 +664,7 @@ export function useChatSession({
           conversationId,
           queryTimeout,
           apiParameters,
+          outputSchemaAnnotations,
         );
         queryName = query.name;
         invalidateQueriesList();
@@ -681,6 +723,7 @@ export function useChatSession({
       invalidateQueriesList,
       name,
       namespace,
+      outputSchemaAnnotations,
       queryTimeout,
       sessionId,
       setActiveQueryName,
@@ -744,7 +787,7 @@ export function useChatSession({
       setError(null);
       resumeAutoScroll();
 
-      if (missingParameters.length > 0) {
+      if (isSendBlocked) {
         return;
       }
 
@@ -834,7 +877,7 @@ export function useChatSession({
       handlePollChatResponse,
       handleStreamChatResponse,
       isChatStreamingEnabled,
-      missingParameters,
+      isSendBlocked,
       name,
       recoverViaPolling,
       refreshMemoryNotice,
@@ -1066,5 +1109,10 @@ export function useChatSession({
     canAddParameterRow,
     missingParameters,
     engineToolWarning,
+    supportsOutputSchema,
+    hasOwnOutputSchema,
+    outputSchemaOverride,
+    setOutputSchemaOverride,
+    isOutputSchemaOverrideValid,
   };
 }
