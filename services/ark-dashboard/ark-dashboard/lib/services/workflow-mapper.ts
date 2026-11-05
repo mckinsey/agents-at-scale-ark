@@ -658,8 +658,21 @@ export function mapArgoWorkflowToSession(
   };
 }
 
+const sessionCache = new WeakMap<ArgoWorkflow, MappedWorkflowSession>();
+
+function mapArgoWorkflowToSessionCached(
+  workflow: ArgoWorkflow,
+): MappedWorkflowSession {
+  let session = sessionCache.get(workflow);
+  if (!session) {
+    session = mapArgoWorkflowToSession(workflow);
+    sessionCache.set(workflow, session);
+  }
+  return session;
+}
+
 export function mapArgoWorkflowsToSessions(
   workflows: ArgoWorkflow[],
 ): MappedWorkflowSession[] {
-  return workflows.map(mapArgoWorkflowToSession);
+  return workflows.map(mapArgoWorkflowToSessionCached);
 }
