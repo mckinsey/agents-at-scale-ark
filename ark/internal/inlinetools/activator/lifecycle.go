@@ -121,8 +121,8 @@ func (a *Activator) Invoke(ctx context.Context, key types.NamespacedName, uid ty
 		if !errors.Is(err, errOtherRevision) {
 			return result, err
 		}
-		if waitErr := a.wait(activationCtx); waitErr != nil {
-			return nil, fmt.Errorf("connect to inline runner: %w", err)
+		if a.wait(activationCtx) != nil {
+			return nil, connectError(err)
 		}
 	}
 }
@@ -163,10 +163,10 @@ func (a *Activator) connect(ctx context.Context, current *target) (*mcp.ClientSe
 			return session, nil
 		}
 		if !isDialError(err) && !errors.Is(err, errOtherRevision) {
-			return nil, fmt.Errorf("connect to inline runner: %w", err)
+			return nil, connectError(err)
 		}
-		if waitErr := a.wait(ctx); waitErr != nil {
-			return nil, fmt.Errorf("connect to inline runner: %w", err)
+		if a.wait(ctx) != nil {
+			return nil, connectError(err)
 		}
 	}
 }
@@ -183,6 +183,10 @@ func (a *Activator) wait(ctx context.Context) error {
 }
 
 var errOtherRevision = errors.New("inline runner serves a different revision")
+
+func connectError(err error) error {
+	return fmt.Errorf("connect to inline runner: %w", err)
+}
 
 func (a *Activator) revisionClient(revision string) *http.Client {
 	next := a.httpClient.Transport
