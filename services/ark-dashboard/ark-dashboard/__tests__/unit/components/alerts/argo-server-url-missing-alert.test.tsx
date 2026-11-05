@@ -22,7 +22,7 @@ describe('ArgoServerUrlMissingAlert', () => {
   it('shows the warning when ark-api reports ARGO_SERVER_URL is not set', () => {
     systemInfo.value = {
       kubernetes_version: 'v1.31.2',
-      system_version: 'v0.1.72',
+      system_version: 'v0.1.73',
       argo_server_configured: false,
     };
 
@@ -38,7 +38,7 @@ describe('ArgoServerUrlMissingAlert', () => {
   it('renders nothing when ARGO_SERVER_URL is set', () => {
     systemInfo.value = {
       kubernetes_version: 'v1.31.2',
-      system_version: 'v0.1.72',
+      system_version: 'v0.1.73',
       argo_server_configured: true,
     };
 
