@@ -156,7 +156,11 @@ jobs:
           username: ${{ secrets.DOCKER_REGISTRY_USERNAME || github.actor }}
           password: ${{ secrets.DOCKER_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
 
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+
       - name: Build and push multi-arch containers
+        id: build_image
         uses: ./.github/actions/build-image
         with:
           path: ${{ matrix.path }}
@@ -167,7 +171,21 @@ jobs:
           push: true
           prebuild: ${{ matrix.prebuild }}
           dockerfile: ${{ matrix.dockerfile || 'Dockerfile' }}
-      
+
+      - name: Sign container image with Cosign
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+          REGISTRY: ${{ vars.DOCKER_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}
+          IMAGE: ${{ matrix.image }}
+          DIGEST: ${{ steps.build_image.outputs.digest }}
+        run: |
+          if [ -z "$DIGEST" ]; then
+            echo "Error: no image digest returned from build step"
+            exit 1
+          fi
+          echo "Signing ${REGISTRY}/${IMAGE}@${DIGEST}"
+          cosign sign --yes "${REGISTRY}/${IMAGE}@${DIGEST}"
+
       - name: Push to "latest" tag
         if: ${{ inputs.deploy_containers_to_latest }}
         run: |
@@ -263,7 +281,10 @@ jobs:
         uses: azure/setup-helm@v5
         with:
           version: '3.14.0'
-          
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+
       - name: Download ${{ matrix.chart }} Helm chart from release
         run: |
           VERSION="${{ needs.resolve_version.outputs.version }}"
@@ -276,12 +297,23 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
       - name: Deploy ${{ matrix.chart }} to Container Registry
+        env:
+          COSIGN_EXPERIMENTAL: "1"
         run: |
           CLEAN_VERSION="${{ needs.resolve_version.outputs.clean_version }}"
           REGISTRY="${{ vars.DOCKER_REGISTRY || format('ghcr.io/{0}/{1}', github.repository_owner, github.event.repository.name) }}"
-          
+
           helm registry login $REGISTRY -u "${{ secrets.DOCKER_REGISTRY_USERNAME || github.actor }}" --password-stdin <<< "${{ secrets.DOCKER_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}"
-          helm push ${{ matrix.chart }}-${CLEAN_VERSION}.tgz oci://${REGISTRY}/charts
+          helm push ${{ matrix.chart }}-${CLEAN_VERSION}.tgz oci://${REGISTRY}/charts 2>&1 | tee helm-push-output.txt
+
+          DIGEST=$(grep -oP 'Digest:\s*\K(sha256:[a-f0-9]+)' helm-push-output.txt)
+          if [ -z "$DIGEST" ]; then
+            echo "Error: could not parse chart digest from helm push output"
+            exit 1
+          fi
+
+          echo "Signing oci://${REGISTRY}/charts/${{ matrix.chart }}@${DIGEST}"
+          cosign sign --yes "${REGISTRY}/charts/${{ matrix.chart }}@${DIGEST}"
 
   deploy-to-pages:
     needs: [resolve_version]
