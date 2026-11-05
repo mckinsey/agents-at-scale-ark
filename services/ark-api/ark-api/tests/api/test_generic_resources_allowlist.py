@@ -100,7 +100,8 @@ DENIED_REQUESTS = [
     ("DELETE", "/v1/resources/apis/argoproj.io/v1alpha1/Workflow/x", None),
     ("GET", "/v1/resources/apis/argoproj.io/v1/Workflow", None),
     ("GET", "/v1/resources/apis/argoproj.io/v1alpha1/workflowtemplate", None),
-    ("POST", "/v1/resources/apis/argoproj.io/v1alpha1/CronWorkflow", {"kind": "CronWorkflow"}),
+    ("POST", "/v1/resources/apis/argoproj.io/v1alpha1/ClusterWorkflowTemplate", {"kind": "ClusterWorkflowTemplate"}),
+    ("GET", "/v1/resources/apis/argoproj.io/v1alpha1/cronworkflow", None),
 ]
 
 UNROUTED_REQUESTS = [
