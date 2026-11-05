@@ -1426,7 +1426,7 @@ class TokenSecretLabelGateTests(_AuthBase):
         mock_failed.assert_awaited_once()
         self.assertEqual(mock_failed.await_args.args[1], "flow-secret")
 
-    def _callback_with(self, v1, *, redirect: bool):
+    def _callback_with(self, v1, *, redirect: bool, authorized_side_effect=None):
         from ark_api.services.mcp_auth_persistence import FlowState
         from ark_api.services.oauth_token import TokenResponse
 
@@ -1450,7 +1450,8 @@ class TokenSecretLabelGateTests(_AuthBase):
                 return_value=TokenResponse(access_token="at", refresh_token="rt", expires_in=3600, raw={})
             ),
         ), patch(
-            "ark_api.api.v1.mcp_auth.mark_flow_authorized", new=AsyncMock()
+            "ark_api.api.v1.mcp_auth.mark_flow_authorized",
+            new=AsyncMock(side_effect=authorized_side_effect),
         ) as mock_authorized, patch(
             "ark_api.api.v1.mcp_auth.strip_mcpserver_auth_annotations", new=AsyncMock()
         ) as mock_strip, patcher, api_patch, core_patch:
@@ -1497,6 +1498,52 @@ class TokenSecretLabelGateTests(_AuthBase):
         self.assertTrue(location.startswith("https://ark.example.com/mcp?"))
         self.assertIn("auth_error=invalid_request", location)
         v1.patch_namespaced_secret.assert_not_called()
+        mock_failed.assert_awaited_once()
+        mock_authorized.assert_not_awaited()
+
+    def test_callback_reports_a_flow_secret_that_changed_before_it_is_marked_authorized(self):
+        from ark_api.services.mcp_auth_persistence import NotATokenSecretError
+
+        v1 = _core_v1_with(_stored_secret(self.LABELLED))
+
+        response, mock_authorized, mock_strip = self._callback_with(
+            v1,
+            redirect=False,
+            authorized_side_effect=NotATokenSecretError("default", "flow-secret"),
+        )
+
+        self.assertEqual(response.status_code, 409, response.text)
+        self.assertIn("flow-secret", response.text)
+        mock_authorized.assert_awaited_once()
+        mock_strip.assert_not_awaited()
+
+    def test_callback_redirects_when_the_flow_secret_changed_before_it_is_marked_authorized(self):
+        from ark_api.services.mcp_auth_persistence import TokenSecretChangedError
+
+        v1 = _core_v1_with(_stored_secret(self.LABELLED))
+
+        response, _, mock_strip = self._callback_with(
+            v1,
+            redirect=True,
+            authorized_side_effect=TokenSecretChangedError("default", "flow-secret"),
+        )
+
+        self.assertEqual(response.status_code, 302, response.text)
+        self.assertIn("auth_error=invalid_request", response.headers["location"])
+        mock_strip.assert_not_awaited()
+
+    def test_callback_still_answers_when_the_failed_flow_cannot_be_recorded(self):
+        from ark_api.services.mcp_auth_persistence import NotATokenSecretError
+
+        v1 = _core_v1_with(_stored_secret(self.UNLABELLED))
+
+        with patch(
+            "ark_api.api.v1.mcp_auth.mark_flow_failed",
+            new=AsyncMock(side_effect=NotATokenSecretError("default", "flow-secret")),
+        ) as mock_failed:
+            response, mock_authorized, _ = self._callback_with(v1, redirect=False)
+
+        self.assertEqual(response.status_code, 409, response.text)
         mock_failed.assert_awaited_once()
         mock_authorized.assert_not_awaited()
 

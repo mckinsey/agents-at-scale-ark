@@ -352,6 +352,29 @@ def _cache_miss_response(cfg) -> Response:
     )
 
 
+async def _mark_flow_failed_quietly(namespace: str, secret_name: str, message: str) -> None:
+    try:
+        await mark_flow_failed(namespace, secret_name, message)
+    except TokenSecretError as exc:
+        logger.info("could not record the failed MCP auth flow in %s/%s: %s", namespace, secret_name, exc)
+
+
+def _callback_token_secret_conflict(cfg, *, use_redirect: bool, name: str, namespace: str, exc: TokenSecretError):
+    if use_redirect:
+        return _dashboard_error_redirect(
+            cfg,
+            name=name,
+            namespace=namespace,
+            code=INVALID_REQUEST_CODE,
+            desc=str(exc),
+        )
+    return _html_response(
+        title="Authorization failed",
+        body=str(exc),
+        status_code=409,
+    )
+
+
 @router.get("/mcp/auth/callback")
 async def mcp_auth_callback(
     request: Request,
@@ -388,7 +411,7 @@ async def mcp_auth_callback(
 
     if error:
         message = f"{error}: {error_description}" if error_description else error
-        await mark_flow_failed(secret_ns, secret_name_for_flow, message)
+        await _mark_flow_failed_quietly(secret_ns, secret_name_for_flow, message)
         if use_redirect:
             return _dashboard_error_redirect(
                 cfg, name=name, namespace=ns, code=error, desc=error_description
@@ -400,7 +423,7 @@ async def mcp_auth_callback(
         )
 
     if not code:
-        await mark_flow_failed(secret_ns, secret_name_for_flow, "missing authorization code")
+        await _mark_flow_failed_quietly(secret_ns, secret_name_for_flow, "missing authorization code")
         if use_redirect:
             return _dashboard_error_redirect(
                 cfg,
@@ -427,7 +450,7 @@ async def mcp_auth_callback(
             or not token_ref
             or not token_ref.name
         ):
-            await mark_flow_failed(secret_ns, secret_name_for_flow, "MCPServer authorization metadata went missing")
+            await _mark_flow_failed_quietly(secret_ns, secret_name_for_flow, "MCPServer authorization metadata went missing")
             if use_redirect:
                 return _dashboard_error_redirect(
                     cfg,
@@ -456,7 +479,7 @@ async def mcp_auth_callback(
                 timeout_seconds=cfg.token_timeout_seconds,
             )
         except TokenExchangeError as exc:
-            await mark_flow_failed(secret_ns, secret_name_for_flow, str(exc))
+            await _mark_flow_failed_quietly(secret_ns, secret_name_for_flow, str(exc))
             if use_redirect:
                 return _dashboard_error_redirect(
                     cfg,
@@ -486,21 +509,16 @@ async def mcp_auth_callback(
                 ),
             )
         except TokenSecretError as exc:
-            await mark_flow_failed(secret_ns, secret_name_for_flow, str(exc))
-            if use_redirect:
-                return _dashboard_error_redirect(
-                    cfg,
-                    name=name,
-                    namespace=ns,
-                    code=INVALID_REQUEST_CODE,
-                    desc=str(exc),
-                )
-            return _html_response(
-                title="Authorization failed",
-                body=str(exc),
-                status_code=409,
+            await _mark_flow_failed_quietly(secret_ns, secret_name_for_flow, str(exc))
+            return _callback_token_secret_conflict(
+                cfg, use_redirect=use_redirect, name=name, namespace=ns, exc=exc
             )
-        await mark_flow_authorized(secret_ns, secret_name_for_flow, expires_at)
+        try:
+            await mark_flow_authorized(secret_ns, secret_name_for_flow, expires_at)
+        except TokenSecretError as exc:
+            return _callback_token_secret_conflict(
+                cfg, use_redirect=use_redirect, name=name, namespace=ns, exc=exc
+            )
         await strip_mcpserver_auth_annotations(ark_client, flow.server_name)
 
     if use_redirect:
