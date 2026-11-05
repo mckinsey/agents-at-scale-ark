@@ -143,7 +143,7 @@ async def _list_helm_releases(namespace: str) -> Tuple[List[Dict[str, Any]], Lis
     try:
         return await get_helm_releases(namespace)
     except HelmError as e:
-        logger.error(f"Failed to list Helm releases in namespace {namespace}: {str(e).strip()}")
+        logger.error(f"Failed to list Helm releases: {str(e).strip()}")
         if "forbidden" in str(e).lower():
             raise HTTPException(
                 status_code=403,

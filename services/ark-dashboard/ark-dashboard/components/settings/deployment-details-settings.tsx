@@ -79,8 +79,9 @@ function NamespaceScopeAlert({ namespace }: Readonly<{ namespace: string }>) {
           <strong className="paragraph-regular-emphasised-600">
             {namespace}
           </strong>
-          . Services in other namespaces, such as the Ark controller,
-          aren&apos;t listed.
+          {
+            ". Services in other namespaces, such as the Ark controller, aren't listed."
+          }
         </AlertDescription>
       </AlertContent>
     </Alert>
@@ -189,7 +190,7 @@ function ReleaseErrorsAlert({
           <strong className="paragraph-regular-emphasised-600 text-fg-primary">
             {error.name}
           </strong>
-          : {error.message}
+          {`: ${error.message}`}
         </span>
       ))}
     />

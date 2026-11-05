@@ -103,7 +103,7 @@ async def get_helm_releases(namespace: str) -> Tuple[List[Dict[str, Any]], List[
         try:
             release_list.append(await extract_helm_release_data(release))
         except Exception as e:
-            logger.warning(f"Failed to read Helm release {release.name} in namespace {namespace}: {e!r}")
+            logger.warning(f"Failed to read Helm release {release.name}: {e!r}")
             errors.append({'name': release.name, 'message': _describe_release_error(e)})
 
     return release_list, errors

@@ -71,6 +71,10 @@ describe('DeploymentDetailsSettings', () => {
           name: 'unreadable',
           message: 'The release data has an unexpected format.',
         },
+        {
+          name: 'helm-error',
+          message: "Helm couldn't return this release's details.",
+        },
       ],
     });
 
@@ -97,9 +101,12 @@ describe('DeploymentDetailsSettings', () => {
     ).toBeInTheDocument();
 
     const unreadable = screen.getByRole('alert');
-    expect(unreadable).toHaveTextContent("1 release couldn't be read");
+    expect(unreadable).toHaveTextContent("2 releases couldn't be read");
     expect(unreadable).toHaveTextContent(
       'unreadable: The release data has an unexpected format.',
+    );
+    expect(unreadable).toHaveTextContent(
+      "helm-error: Helm couldn't return this release's details.",
     );
     expect(
       screen.queryByRole('row', { name: /unreadable/ }),
