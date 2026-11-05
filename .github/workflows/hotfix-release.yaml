@@ -39,6 +39,7 @@ permissions:
   contents: write
   packages: write
   actions: write
+  pull-requests: write
 
 jobs:
   tag-and-release:
@@ -232,3 +233,48 @@ jobs:
             --field deploy_to_npm=true \
             --field deploy_to_pypi=true \
             --field deploy_to_pages=true
+
+  # ---- Keep main's version past the hotfix so release-please never reuses it ----
+
+  sync-main-version:
+    needs: [tag-and-release]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Open PR bumping main to the released version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          STABLE="${{ needs.tag-and-release.outputs.stable }}"
+          CURRENT=$(tr -d '[:space:]' < version.txt)
+          HIGHER=$(printf '%s\n%s\n' "$CURRENT" "$STABLE" | sort -V | tail -1)
+          if [ "$CURRENT" = "$STABLE" ] || [ "$HIGHER" != "$STABLE" ]; then
+            echo "main is at ${CURRENT}, already >= ${STABLE}; nothing to sync"
+            exit 0
+          fi
+
+          BRANCH="chore/sync-version-${STABLE}"
+          EXISTING=$(gh pr list --base main --head "$BRANCH" --json number --jq '.[0].number' || true)
+          if [ -n "$EXISTING" ]; then
+            echo "sync PR #${EXISTING} already open for ${STABLE}"; exit 0
+          fi
+          if git ls-remote --heads origin "$BRANCH" | grep -q "$BRANCH"; then
+            git push origin --delete "$BRANCH" || true
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          bash scripts/stamp-version.sh "${STABLE}"
+          git add -A
+          git commit -m "chore: sync version to ${STABLE} after hotfix release"
+          git push origin "$BRANCH"
+          gh pr create --base main --head "$BRANCH" \
+            --title "chore: sync version to ${STABLE} after hotfix release" \
+            --body "## Summary
+          Bumps main from \`${CURRENT}\` to \`${STABLE}\` after the out-of-band hotfix release \`v${STABLE}\`.
+          release-please treats the manifest as the last released version, so without this its next release would reuse \`${STABLE}\` and collide with the hotfix tag. Merging this makes the next release start above \`${STABLE}\`."
