@@ -272,12 +272,13 @@ Telemetry the broker captures for a namespace. (The broker's own HTTP API, inclu
 
 ## Generic Resources API
 
-The generic endpoint returns **raw Kubernetes objects** for the resources the dashboard needs that have no typed endpoint. It serves a fixed allowlist of `(group, version, Kind, verb)` tuples and returns `403` for everything else, before any Kubernetes call.
+The generic endpoint returns **raw Kubernetes objects** for resources that have no typed endpoint. It serves a fixed allowlist of `(group, version, Kind, verb)` tuples and returns `403` for everything else, before any Kubernetes call.
 
 | Kind | Group / version | Operations |
 |------|-----------------|------------|
 | `WorkflowTemplate` | `argoproj.io/v1alpha1` | list, get, create, update, delete |
 | `Workflow` | `argoproj.io/v1alpha1` | list, get, create |
+| `CronWorkflow` | `argoproj.io/v1alpha1` | list, get, create, update, delete |
 | `Agent`, `Team` | `ark.mckinsey.com/v1alpha1` | get |
 | `ExecutionEngine` | `ark.mckinsey.com/v1prealpha1` | list, get, delete |
 | `Service` | core `v1` | list |

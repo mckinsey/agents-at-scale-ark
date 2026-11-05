@@ -93,6 +93,14 @@ ark import ark-export.yaml --upsert
 
 Exports created by older Ark CLI versions may contain stale `metadata.resourceVersion` and `status` fields. Regenerate or clean those files before importing them with `--upsert`.
 
+## v0.1.73
+
+### Generic Resources API Serves CronWorkflows
+
+The generic resources API under `/v1/resources` now serves `argoproj.io/v1alpha1` `CronWorkflow` with `get`, `list`, `create`, `update` and `delete`. Since v0.1.71 these requests returned `403`. To suspend or resume a CronWorkflow, update it with `spec.suspend` set to `true` or `false`.
+
+CronWorkflow writes follow the same identity rule as the other writes on this API. With `AUTH_MODE` set to `sso` or `hybrid`, a signed-in user's write needs [user impersonation](/developer-guide/authentication#user-impersonation), and the user needs RBAC on `cronworkflows` in `argoproj.io`. API key requests and `open` mode run as the `ark-api` service account, which the chart already allows to manage CronWorkflows.
+
 ## v0.1.72
 
 ### Argo Workflows Upgraded to v4.1
