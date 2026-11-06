@@ -228,6 +228,9 @@ spec:
         maximum: 1
 ```
 
+Ark does not rewrite the schema; the provider validates it, and an unsupported schema fails the Query.
+For `anthropic` and `bedrock` Models it becomes Claude's `output_config.format`, which needs a Claude model with structured outputs and a [JSON Schema subset](https://platform.claude.com/docs/en/build-with-claude/structured-outputs) (for example `additionalProperties: false` on every object and no `minimum`/`maximum`).
+
 ### Templated prompt from ConfigMap
 
 ```yaml
