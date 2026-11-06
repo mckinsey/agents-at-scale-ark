@@ -18,9 +18,50 @@ ARGO_SERVER_TIMEOUT_SECONDS = 10.0
 
 WORKFLOW_NAME_FILTER_PATTERN = re.compile(r"[a-z0-9.-]+")
 
+# Argo Workflows 4.1.0 auto-labels every Workflow with its originating
+# WorkflowTemplate, including ones created via spec.workflowTemplateRef through
+# the Kubernetes API rather than Argo's own submit API. Below this version the
+# label is missing and template filtering relies on a post-fetch workaround.
+MINIMUM_SUPPORTED_VERSION = (4, 1, 0)
+
+_VERSION_PATTERN = re.compile(r"v?(\d+)\.(\d+)\.(\d+)(-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$")
+
 
 def get_argo_server_url() -> str:
     return os.getenv(ARGO_SERVER_URL_ENV, "").rstrip("/")
+
+
+async def get_argo_server_version(base_url: str) -> Optional[str]:
+    """Fetch the Argo Server version string, or None if it cannot be determined."""
+    url = f"{base_url}/api/v1/version"
+    try:
+        async with httpx.AsyncClient(timeout=ARGO_SERVER_TIMEOUT_SECONDS) as http_client:
+            response = await http_client.get(url)
+        response.raise_for_status()
+        return response.json().get("version")
+    except (httpx.HTTPError, ValueError) as e:
+        logger.warning(f"Argo Server version check failed: {e}")
+        return None
+
+
+def is_version_supported(version: Optional[str]) -> Optional[bool]:
+    """Compare an Argo Server version against MINIMUM_SUPPORTED_VERSION.
+
+    Returns None when the version is missing or unparseable, so callers can
+    distinguish "known unsupported" from "unknown" rather than guessing. A
+    pre-release (e.g. "4.1.0-rc1") is never supported, regardless of its
+    numeric component, since it has no guarantee of the stable release's
+    auto-labeling behavior.
+    """
+    if not version:
+        return None
+    match = _VERSION_PATTERN.match(version)
+    if not match:
+        return None
+    major, minor, patch, prerelease = match.groups()
+    if prerelease:
+        return False
+    return (int(major), int(minor), int(patch)) >= MINIMUM_SUPPORTED_VERSION
 
 
 def _workflow_list(
