@@ -62,10 +62,10 @@ func anthropicRequestBody(t *testing.T, schema *runtime.RawExtension) map[string
 }
 
 func TestAnthropicChatCompletion_SendsOutputSchema(t *testing.T) {
-	body := anthropicRequestBody(t, &runtime.RawExtension{Raw: []byte(`{"type":"object","properties":{"ok":{"type":"boolean"}},"required":["ok"],"additionalProperties":false}`)})
+	body := anthropicRequestBody(t, &runtime.RawExtension{Raw: []byte(`{"type":"object","properties":{"ok":{"type":"boolean"},"score":{"type":"number","minimum":0,"maximum":1}},"required":["ok"],"additionalProperties":false}`)})
 
 	require.JSONEq(t,
-		`{"format":{"type":"json_schema","schema":{"type":"object","properties":{"ok":{"type":"boolean"}},"required":["ok"],"additionalProperties":false}}}`,
+		`{"format":{"type":"json_schema","schema":{"type":"object","properties":{"ok":{"type":"boolean"},"score":{"type":"number","minimum":0,"maximum":1}},"required":["ok"],"additionalProperties":false}}}`,
 		mustJSON(t, body["output_config"]))
 }
 

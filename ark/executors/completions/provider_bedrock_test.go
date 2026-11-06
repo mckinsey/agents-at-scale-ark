@@ -83,6 +83,7 @@ func TestBedrockChatCompletion_APIKeySendsBearerOverWire(t *testing.T) {
 	require.Equal(t, "Bearer test-bedrock-key", gotAuth)
 	require.Equal(t, "/model/anthropic.claude-v2/invoke", gotPath)
 	require.Contains(t, string(gotBody), "bedrock-2023-05-31")
+	require.NotContains(t, string(gotBody), "output_config")
 	require.Len(t, completion.Choices, 1)
 	require.Equal(t, "hello from mock bedrock", completion.Choices[0].Message.Content)
 }
