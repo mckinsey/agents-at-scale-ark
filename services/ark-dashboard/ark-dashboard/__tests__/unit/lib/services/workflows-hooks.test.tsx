@@ -175,6 +175,48 @@ describe('useWorkflow', () => {
     unmount();
   });
 
+  it('drops cached runs when refreshKey changes so a retried run is refetched', async () => {
+    let wf1Phase = 'Failed';
+    vi.mocked(workflowsService.get).mockImplementation(async (_ns, name) =>
+      makeWorkflow({
+        metadata: { name, namespace: 'default' },
+        status: { phase: name === 'wf-1' ? wf1Phase : 'Succeeded', nodes: {} },
+      }),
+    );
+
+    const { result, rerender, unmount } = renderHook(
+      ({ name, refreshKey }) => useWorkflow('default', name, 20, refreshKey),
+      { initialProps: { name: 'wf-1', refreshKey: 0 } },
+    );
+
+    await waitFor(() =>
+      expect(result.current.workflow?.status?.phase).toBe('Failed'),
+    );
+
+    rerender({ name: 'wf-2', refreshKey: 0 });
+    await waitFor(() =>
+      expect(result.current.workflow?.metadata.name).toBe('wf-2'),
+    );
+
+    wf1Phase = 'Running';
+    rerender({ name: 'wf-2', refreshKey: 1 });
+    await waitFor(() =>
+      expect(
+        vi
+          .mocked(workflowsService.get)
+          .mock.calls.filter(call => call[1] === 'wf-2').length,
+      ).toBe(2),
+    );
+
+    rerender({ name: 'wf-1', refreshKey: 1 });
+    await waitFor(() =>
+      expect(result.current.workflow?.status?.phase).toBe('Running'),
+    );
+    expect(workflowsService.get).toHaveBeenCalledWith('default', 'wf-1');
+
+    unmount();
+  });
+
   it('bypasses the cache when refreshKey changes for the same name', async () => {
     const terminal = makeWorkflow({
       status: { phase: 'Succeeded', nodes: {} },
