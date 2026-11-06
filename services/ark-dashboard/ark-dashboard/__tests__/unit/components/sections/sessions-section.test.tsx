@@ -15,6 +15,7 @@ import {
   getAppRouterMock,
   resetAppRouterMock,
 } from '@/__tests__/setup/mock-app-router';
+import { Schedule } from '@/components/icons';
 import { SessionsSection } from '@/components/sections/sessions-section';
 import { toast } from '@/components/ui/sonner';
 import { APIError } from '@/lib/api/client';
@@ -56,6 +57,11 @@ vi.mock('@/lib/services/workflows-hooks', () => ({
   useWorkflow: vi.fn(),
   useWorkflowLifecycleActions: vi.fn(),
 }));
+
+vi.mock('@/components/icons', async importOriginal => {
+  const actual = await importOriginal<typeof import('@/components/icons')>();
+  return { ...actual, Schedule: vi.fn(actual.Schedule) };
+});
 
 vi.mock('@/components/ui/sonner', () => ({
   toast: { error: vi.fn(), success: vi.fn() },
@@ -485,6 +491,21 @@ describe('SessionsSection', () => {
       render(<SessionsSection />);
 
       expect(screen.getByText(/Network error/i)).toBeInTheDocument();
+    });
+  });
+
+  describe('Render memoization', () => {
+    it('should not re-render list items while typing in the template filter', () => {
+      render(<SessionsSection />);
+      expect(Schedule).toHaveBeenCalled();
+      vi.mocked(Schedule).mockClear();
+
+      fireEvent.change(screen.getByPlaceholderText('All templates'), {
+        target: { value: 'data' },
+      });
+
+      expect(screen.getByPlaceholderText('All templates')).toHaveValue('data');
+      expect(Schedule).not.toHaveBeenCalled();
     });
   });
 
