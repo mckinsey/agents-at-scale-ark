@@ -81,6 +81,55 @@ describe('ToolApprovalsSection', () => {
     );
   });
 
+  it('associates the timeout and on-timeout labels with their controls', () => {
+    render(
+      <ToolApprovalsSection
+        selectedTools={selectedTools}
+        getToolApproval={() => ({ required: true, timeout: '5m' })}
+        onApprovalChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByLabelText('Timeout')).toBe(
+      screen.getByPlaceholderText('e.g., 5m'),
+    );
+    expect(screen.getByLabelText('On timeout')).toBeInTheDocument();
+  });
+
+  it('flags an invalid timeout and marks the input invalid', () => {
+    render(
+      <ToolApprovalsSection
+        selectedTools={selectedTools}
+        getToolApproval={() => ({ required: true, timeout: 'abc' })}
+        onApprovalChange={vi.fn()}
+      />,
+    );
+
+    const timeout = screen.getByLabelText('Timeout');
+    expect(timeout).toHaveAttribute('aria-invalid', 'true');
+    expect(
+      screen.getByText('Enter a duration like 30s, 5m, or 1h30m.'),
+    ).toBeInTheDocument();
+  });
+
+  it('accepts a compound duration without flagging it', () => {
+    render(
+      <ToolApprovalsSection
+        selectedTools={selectedTools}
+        getToolApproval={() => ({ required: true, timeout: '1h30m' })}
+        onApprovalChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByLabelText('Timeout')).toHaveAttribute(
+      'aria-invalid',
+      'false',
+    );
+    expect(
+      screen.queryByText('Enter a duration like 30s, 5m, or 1h30m.'),
+    ).not.toBeInTheDocument();
+  });
+
   it('clears approval when the toggle is unchecked', async () => {
     const onApprovalChange = vi.fn();
     const user = userEvent.setup();

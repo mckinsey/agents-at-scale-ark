@@ -35,7 +35,7 @@ spec:
       name: my-mcp-tool
       approval:                                 # optional; require human approval before this tool runs
         required: true
-        timeout: 5m                             # optional; wait indefinitely if unset
+        timeout: 5m                             # optional; defaults to 5m
         onTimeout: reject                       # reject | proceed (default reject)
 
   parameters:                                   # values for {{.name}} templating in prompt
@@ -88,7 +88,7 @@ spec:
 | `spec.tools[].partial` | object | no | Overrides the tool's exposed name and preconfigures/hides parameters from the model. See [Partial tools](#partial-tools). |
 | `spec.tools[].approval` | object | no | Requires human approval before this tool executes. See [Tool approval](#tool-approval). |
 | `spec.tools[].approval.required` | boolean | no | Whether human approval is required before executing this tool. Defaults to `false`. |
-| `spec.tools[].approval.timeout` | duration | no | How long to wait for a decision (e.g. `30s`, `5m`). Waits indefinitely if unset. |
+| `spec.tools[].approval.timeout` | duration | no | How long to wait for a decision (e.g. `30s`, `5m`). Defaults to `5m`. |
 | `spec.tools[].approval.onTimeout` | enum (`reject`, `proceed`) | no | Action when `timeout` elapses: `reject` fails the query, `proceed` executes the tool. Defaults to `reject`. |
 | `spec.parameters[]` | list | no | Template values substituted into `spec.prompt`. Each entry has a `name` (minLength 1) and either a `value` or `valueFrom` (`configMapKeyRef`, `secretKeyRef`, `serviceRef`, `queryParameterRef`). `value` and `valueFrom` are mutually exclusive. |
 | `spec.outputSchema` | JSON schema | no | JSON schema for structured output. Preserves unknown fields — supply any valid JSON Schema object. |

@@ -89,7 +89,9 @@ describe('listApprovals', () => {
     expect(client.getA2ATask).not.toHaveBeenCalled();
   });
 
-  it('falls back to a minimal entry when a pending task has no metadata', async () => {
+  it('excludes input-required tasks that carry no approval metadata', async () => {
+    // A2A also uses input-required for ordinary remote-agent input requests;
+    // those are not approvals and must not be listed.
     const client = {
       listA2ATasks: vi
         .fn()
@@ -111,9 +113,28 @@ describe('listApprovals', () => {
 
     const result = await listApprovals(client, 'default');
 
+    expect(result).toEqual([]);
+  });
+
+  it('skips a task whose lookup fails without failing the whole list', async () => {
+    const client = {
+      listA2ATasks: vi.fn().mockResolvedValue([
+        {name: 't1', namespace: 'default', taskId: 't1-id', phase: 'input-required'},
+        {name: 't2', namespace: 'default', taskId: 't2-id', phase: 'input-required'},
+      ]),
+      getA2ATask: vi
+        .fn()
+        .mockImplementation((name: string) =>
+          name === 't1'
+            ? Promise.reject(new Error('boom'))
+            : Promise.resolve(detail('t2'))
+        ),
+    };
+
+    const result = await listApprovals(client, 'default');
+
     expect(result).toHaveLength(1);
-    expect(result[0].name).toBe('t1');
-    expect(result[0].toolCalls).toEqual([]);
+    expect(result[0].name).toBe('t2');
   });
 });
 

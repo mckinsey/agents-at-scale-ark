@@ -26,7 +26,7 @@ Only the tools you mark require approval; all other tools on the agent run norma
 
 1. Open the agent in the dashboard — **Create agent** or an existing agent.
 2. Select the tools the agent should use in the **Tools** field.
-3. In the **Tool approvals** section below, turn on **Require approval** for a tool.
+3. In the **Tool approvals** section below, check the box labelled with the tool's name to require approval for it.
 4. Optionally set **Timeout** (for example, `5m`) and **On timeout** (`reject` or `proceed`).
 5. Save the agent.
 
@@ -61,7 +61,7 @@ Apply it with `kubectl apply -f hitl-agent.yaml`. A complete example ships at `s
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `required` | boolean | No | Whether human approval is required before executing this tool. Defaults to `false`. |
-| `timeout` | duration | No | How long to wait for a decision (for example, `30s`, `5m`, `1h`). Omit to wait indefinitely. |
+| `timeout` | duration | No | How long to wait for a decision (for example, `30s`, `5m`, `1h`). Defaults to `5m`. |
 | `onTimeout` | enum | No | Action when `timeout` elapses: `reject` (fail the query) or `proceed` (execute the tool). Defaults to `reject`. |
 
 ## Respond to a pending approval

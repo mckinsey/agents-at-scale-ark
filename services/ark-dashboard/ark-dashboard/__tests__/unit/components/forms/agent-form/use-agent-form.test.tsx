@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { storedIsExperimentalExecutionEngineEnabledAtom } from '@/atoms/experimental-features';
 import { AgentFormMode } from '@/components/forms/agent-form/types';
 import { useAgentForm } from '@/components/forms/agent-form/use-agent-form';
+import { toast } from '@/components/ui/sonner';
 import type { AgentTool } from '@/lib/services';
 import { agentsService, executionEnginesService } from '@/lib/services';
 
@@ -363,6 +364,25 @@ describe('useAgentForm tool approvals', () => {
             approval: { required: true, timeout: '5m', onTimeout: 'reject' },
           },
         ],
+      }),
+    );
+  });
+
+  it('surfaces the server error reason when a save fails', async () => {
+    mockAgentWithTools([{ type: 'custom', name: 'write' }]);
+    vi.mocked(agentsService.update).mockRejectedValue(
+      new Error('admission webhook denied: invalid timeout "abc"'),
+    );
+    const { result } = await renderLoadedForm();
+
+    await act(async () => {
+      await result.current.actions.onSubmit(result.current.form.getValues());
+    });
+
+    expect(toast.error).toHaveBeenCalledWith(
+      'Unable to update agent',
+      expect.objectContaining({
+        description: 'admission webhook denied: invalid timeout "abc"',
       }),
     );
   });

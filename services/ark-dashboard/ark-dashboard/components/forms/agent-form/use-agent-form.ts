@@ -354,7 +354,9 @@ export function useAgentForm({
       } catch (error) {
         const action = mode === AgentFormMode.CREATE ? 'create' : 'update';
         console.error(`Failed to ${action} agent`, error);
-        toast.error(`Unable to ${action} agent`);
+        toast.error(`Unable to ${action} agent`, {
+          description: error instanceof Error ? error.message : undefined,
+        });
       } finally {
         setSaving(false);
       }

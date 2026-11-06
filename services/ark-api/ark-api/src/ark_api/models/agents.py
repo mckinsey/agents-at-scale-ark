@@ -73,11 +73,18 @@ class AgentLabelSelector(BaseModel):
     matchExpressions: Optional[List[AgentLabelSelectorRequirement]] = None
 
 
+class ArgumentMatch(BaseModel):
+    """Narrows approval to tool calls whose arguments match a pattern."""
+    argument: str
+    pattern: str
+
+
 class ToolApprovalConfig(BaseModel):
     """Approval configuration for human-in-the-loop tool execution."""
     required: Optional[bool] = None
     timeout: Optional[str] = None
     onTimeout: Optional[str] = None
+    argumentMatches: Optional[List[ArgumentMatch]] = None
 
 
 class AgentTool(BaseModel):

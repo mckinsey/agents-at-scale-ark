@@ -32,8 +32,10 @@ function resolveOptions(command: Command): ApprovalsCommandOptions {
 type ApprovalsClient = Pick<ArkApiClient, 'listA2ATasks' | 'getA2ATask'>;
 
 /**
- * List tool approvals awaiting a human decision (A2ATasks in the
- * `input-required` phase), resolving each task's approval details.
+ * List tool approvals awaiting a human decision. A2A also uses the
+ * `input-required` phase for ordinary remote-agent input requests, so only
+ * tasks that carry approval metadata (recognised by `buildApprovalDetails`) are
+ * returned. A failed lookup for one task does not fail the whole list.
  */
 export async function listApprovals(
   client: ApprovalsClient,
@@ -42,20 +44,21 @@ export async function listApprovals(
   const tasks = await client.listA2ATasks(namespace);
   const pending = tasks.filter((t) => t.phase === INPUT_REQUIRED_PHASE);
 
-  const details = await Promise.all(
-    pending.map(async (item) => {
-      const detail = await client.getA2ATask(item.name, namespace);
-      return (
-        buildApprovalDetails(detail) ?? {
-          name: item.name,
-          taskId: item.taskId,
-          toolCalls: [],
-          phase: item.phase ?? INPUT_REQUIRED_PHASE,
-          expired: false,
-        }
-      );
-    })
+  const results = await Promise.allSettled(
+    pending.map((item) => client.getA2ATask(item.name, namespace))
   );
+
+  const details: ApprovalDetails[] = [];
+  for (const [index, result] of results.entries()) {
+    if (result.status === 'rejected') {
+      const reason =
+        result.reason instanceof Error ? result.reason.message : result.reason;
+      output.warning(`skipping ${pending[index].name}: ${reason}`);
+      continue;
+    }
+    const approval = buildApprovalDetails(result.value);
+    if (approval) details.push(approval);
+  }
 
   return details;
 }

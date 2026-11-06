@@ -90,6 +90,24 @@ describe('buildApprovalDetails', () => {
     expect(details?.expired).toBe(false);
   });
 
+  it('computes expiry from the controller compound duration format', () => {
+    // The controller writes metav1.Duration output (e.g. "5m0s"), not "5m".
+    const task: A2ATaskDetail = {
+      name: 't1',
+      namespace: 'default',
+      taskId: 'id1',
+      status: {
+        phase: 'input-required',
+        startTime: '2000-01-01T00:00:00Z',
+        protocolMetadata: {timeout: '5m0s'},
+      },
+    };
+
+    const details = buildApprovalDetails(task);
+    expect(details?.expiresAt).toBeInstanceOf(Date);
+    expect(details?.expired).toBe(true);
+  });
+
   it('treats an unparseable timeout as no expiry', () => {
     const task: A2ATaskDetail = {
       name: 't1',
