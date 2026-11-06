@@ -29,7 +29,7 @@ export const TOUR_STEPS: TourStep[] = [
   step(
     '',
     'Home',
-    'Your platform hub. Monitor and manage your agents, teams, models, and infrastructure from one central location.',
+    'See how many agents, teams, MCP servers, and more you have in this project.',
   ),
   step(
     'models',
@@ -52,7 +52,7 @@ export const TOUR_STEPS: TourStep[] = [
   step(
     'teams',
     'Teams',
-    'Coordinate multiple agents to work together on complex tasks. Define a mission and prompt to orchestrate their collaboration.',
+    'Coordinate multiple agents to work together on complex tasks.',
     createAction('Build a team of agents', 'teams', 'teams'),
   ),
   step(
@@ -74,6 +74,6 @@ export const TOUR_STEPS: TourStep[] = [
   step(
     'settings',
     'Settings',
-    'Manage platform preferences, A2A servers, and secure your API keys and secrets.',
+    'Manage platform preferences and A2A servers, and create secrets, configurations, and API keys.',
   ),
 ];
