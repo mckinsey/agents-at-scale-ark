@@ -62,6 +62,7 @@ func (ap *AnthropicProvider) ChatCompletion(ctx context.Context, messages []Mess
 
 	request := buildAnthropicRequest(anthropicMessages, systemPrompt, anthropicTools, toolChoice, ap.Properties)
 	request.Model = ap.Model
+	request.OutputConfig = anthropicOutputConfigFor(ap.outputSchema)
 
 	version := ap.Version
 	if version == "" {
