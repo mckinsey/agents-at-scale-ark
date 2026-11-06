@@ -17,7 +17,7 @@ export async function GET(
         { status: 400 },
       );
     }
-    const item = await getMarketplaceItemById(id, namespace);
+    const item = await getMarketplaceItemById(request, id, namespace);
 
     if (!item) {
       return NextResponse.json(

@@ -11,10 +11,15 @@ import {
 } from '@/components/common/detail-card';
 import { JsonViewer } from '@/components/common/json-viewer';
 import { NamespacedLink } from '@/components/namespaced-link';
+import { A2AEndpointValue } from '@/components/sections/a2a-endpoint-value';
 import { A2AServerStatus } from '@/components/sections/a2a-server-status';
 import { ResourceErrorState } from '@/components/sections/resource-list-states';
 import { Button } from '@/components/ui/button';
-import { summarizeA2AServerStatus } from '@/lib/services/a2a-servers';
+import { useListReturnHref } from '@/lib/hooks/use-list-return-href';
+import {
+  hasEndpointPathMismatch,
+  summarizeA2AServerStatus,
+} from '@/lib/services/a2a-servers';
 import { useA2AServer } from '@/lib/services/a2a-servers-hooks';
 
 const EMPTY = '—';
@@ -31,6 +36,7 @@ export default function A2AServerPage() {
   const name = decodeURIComponent(params.name as string);
 
   const { data: server, isLoading, error } = useA2AServer(name);
+  const a2aReturnHref = useListReturnHref('/a2a');
 
   const status = useMemo(
     () => summarizeA2AServerStatus(server?.status),
@@ -80,7 +86,9 @@ export default function A2AServerPage() {
             </p>
           )}
           <Button variant="outline" asChild>
-            <NamespacedLink href="/a2a">Back to A2A servers</NamespacedLink>
+            <NamespacedLink href={a2aReturnHref}>
+              Back to A2A servers
+            </NamespacedLink>
           </Button>
         </div>
       </div>
@@ -112,10 +120,34 @@ export default function A2AServerPage() {
               label="Description"
               value={server.description || EMPTY}
             />
+            <DetailRow label="Address" value={status.address || EMPTY} />
             <DetailRow
-              label="Address"
-              value={status.address || EMPTY}
-              valueClassName="min-w-0 break-all"
+              label="Endpoint"
+              value={
+                status.endpoint ? (
+                  <A2AEndpointValue
+                    endpoint={status.endpoint}
+                    mismatch={hasEndpointPathMismatch(
+                      status.endpoint,
+                      status.cardUrl,
+                    )}
+                  />
+                ) : (
+                  EMPTY
+                )
+              }
+              valueClassName="min-w-0"
+              tooltip="Where Ark sends messages to this server"
+            />
+            <DetailRow
+              label="Card URL"
+              value={status.cardUrl || EMPTY}
+              tooltip="Where the agent card says messages should go"
+            />
+            <DetailRow
+              label="Card Version"
+              value={status.cardVersion || EMPTY}
+              tooltip="Agent version declared in the agent card"
               last
             />
           </DetailCard>
@@ -140,7 +172,21 @@ export default function A2AServerPage() {
             <DetailRow
               label="Status message"
               value={status.statusMessage || EMPTY}
-              valueClassName="min-w-0 break-words"
+            />
+            <DetailRow
+              label="Negotiated Protocol"
+              value={status.negotiatedProtocol || EMPTY}
+              tooltip="A2A protocol version Ark detected when it read this server's agent card"
+            />
+            <DetailRow
+              label="Streaming"
+              value={formatCondition(status.streamingSupported)}
+              tooltip="Whether the agent card declares streaming support"
+            />
+            <DetailRow
+              label="Available Skills"
+              value={status.skillCount ?? EMPTY}
+              tooltip="Number of skills declared in the agent card"
               last
             />
           </DetailCard>

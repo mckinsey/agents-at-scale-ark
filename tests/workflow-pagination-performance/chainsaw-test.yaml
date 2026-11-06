@@ -44,6 +44,7 @@ spec:
             --set argo-workflows.singleNamespace=true \
             --set argo-workflows.controller.replicas=0 \
             --set argo-workflows.server.enabled=false \
+            --set argo-workflows.crds.full=false \
             --set minio.enabled=false \
             --set httpRoute.argo.enabled=false \
             | kubectl apply -f -

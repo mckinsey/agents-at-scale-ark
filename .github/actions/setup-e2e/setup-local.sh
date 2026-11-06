@@ -124,11 +124,12 @@ fi
 if [ "${PREFETCH_ARGO_IMAGES}" = "true" ]; then
   echo "=== Pre-pulling Argo Workflows images (background) ==="
   # Argo image tags track the argo-workflows chart (services/argo-workflows/chart,
-  # dep 0.45.26 -> Argo v3.7.2); bump these when that chart is upgraded.
+  # dep 2.0.13 -> Argo v4.1.5); bump these when that chart is upgraded.
   for img in \
-    quay.io/argoproj/workflow-controller:v3.7.2 \
-    quay.io/argoproj/argocli:v3.7.2 \
-    quay.io/argoproj/argoexec:v3.7.2 \
+    quay.io/argoproj/workflow-controller:v4.1.5 \
+    quay.io/argoproj/argocli:v4.1.5 \
+    quay.io/argoproj/argoexec:v4.1.5-nonroot \
+    quay.io/argoproj/argo-workflows-crdinstaller:v4.1.5 \
     docker.io/alpine/k8s:1.28.13; do
     sudo k3s crictl pull "$img" > /dev/null 2>&1 &
     IMAGE_PULL_PIDS+=($!)

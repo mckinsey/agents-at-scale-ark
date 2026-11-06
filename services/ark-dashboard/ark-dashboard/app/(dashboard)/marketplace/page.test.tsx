@@ -1,33 +1,28 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { resetAppRouterMock } from '@/__tests__/setup/mock-app-router';
+import type {
+  MarketplaceItem,
+  MarketplaceResponse,
+} from '@/lib/api/generated/marketplace-types';
 import { useGetMarketplaceItems } from '@/lib/services/marketplace-hooks';
-import type { MarketplaceItem, MarketplaceResponse } from '@/lib/api/generated/marketplace-types';
 
 import MarketplacePage from './page';
 
 // Mock the hooks and services
 vi.mock('@/lib/services/marketplace-hooks');
-vi.mock('next/navigation', () => ({
-  useRouter: vi.fn(() => ({
-    push: vi.fn(),
-    replace: vi.fn(),
-    prefetch: vi.fn(),
-  })),
-  usePathname: vi.fn(() => '/marketplace'),
-  useSearchParams: vi.fn(() => new URLSearchParams()),
-}));
+vi.mock('next/navigation', async () => {
+  const { createAppRouterMock } =
+    await import('@/__tests__/setup/mock-app-router');
+  return createAppRouterMock('/marketplace');
+});
 
-// Mock the PageHeader component to avoid SidebarProvider dependency
-vi.mock('@/components/common/page-header', () => ({
-  PageHeader: vi.fn(({ actions }) => (
-    <div data-testid="page-header">
-      {actions}
-    </div>
-  )),
-}));
+beforeEach(() => {
+  resetAppRouterMock();
+});
 
 // Mock the MarketplaceItemCard component
 vi.mock('@/components/cards/marketplace-item-card', () => ({
@@ -105,7 +100,7 @@ function renderWithProviders(ui: React.ReactElement) {
     },
   });
   return render(
-    <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>
+    <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>,
   );
 }
 
@@ -123,7 +118,10 @@ describe('MarketplacePage', () => {
       refetch: vi.fn(),
     } as any);
 
-    localStorage.setItem('marketplace-sources', JSON.stringify([{ url: 'https://x' }]));
+    localStorage.setItem(
+      'marketplace-sources',
+      JSON.stringify([{ url: 'https://x' }]),
+    );
     renderWithProviders(<MarketplacePage />);
     expect(localStorage.getItem('marketplace-sources')).toBeNull();
   });
@@ -180,9 +178,14 @@ describe('MarketplacePage', () => {
     // Check that category filter buttons are present
     expect(screen.getByRole('button', { name: 'All' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Agents/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /Workflows/i }),
+    ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /MCPs/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Demos/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Services/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /Services/i }),
+    ).toBeInTheDocument();
   });
 
   it('should filter items when category button is clicked', async () => {
@@ -206,7 +209,27 @@ describe('MarketplacePage', () => {
       expect(mockUseGetMarketplaceItems).toHaveBeenCalledWith(
         expect.objectContaining({
           category: 'agents',
-        })
+        }),
+      );
+    });
+  });
+
+  it('should filter by the workflows category', async () => {
+    mockUseGetMarketplaceItems.mockReturnValue({
+      data: mockMarketplaceData,
+      isPending: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as any);
+
+    renderWithProviders(<MarketplacePage />);
+
+    await userEvent.click(screen.getByRole('button', { name: /Workflows/i }));
+
+    await waitFor(() => {
+      expect(mockUseGetMarketplaceItems).toHaveBeenCalledWith(
+        expect.objectContaining({ category: 'workflows' }),
       );
     });
   });
@@ -223,7 +246,7 @@ describe('MarketplacePage', () => {
     renderWithProviders(<MarketplacePage />);
 
     // Find and type in search input
-    const searchInput = screen.getByPlaceholderText('Search marketplace...');
+    const searchInput = screen.getByPlaceholderText('Search');
     await userEvent.type(searchInput, 'test query');
 
     // Verify that useGetMarketplaceItems was called with search filter
@@ -231,7 +254,7 @@ describe('MarketplacePage', () => {
       expect(mockUseGetMarketplaceItems).toHaveBeenCalledWith(
         expect.objectContaining({
           search: 'test query',
-        })
+        }),
       );
     });
   });
@@ -295,21 +318,15 @@ describe('MarketplacePage', () => {
 
     renderWithProviders(<MarketplacePage />);
 
-    // Check pagination controls are rendered
-    expect(screen.getByText('Page 1 of 3')).toBeInTheDocument();
     expect(screen.getByText('Showing 1-6 of 15 items')).toBeInTheDocument();
 
-    // Click next page
-    const nextButton = screen.getAllByRole('button').find(
-      btn => btn.querySelector('.lucide-chevron-right')
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Go to next page' }),
     );
 
-    if (nextButton) {
-      await userEvent.click(nextButton);
-      await waitFor(() => {
-        expect(screen.getByText('Page 2 of 3')).toBeInTheDocument();
-      });
-    }
+    await waitFor(() => {
+      expect(screen.getByText('Showing 7-12 of 15 items')).toBeInTheDocument();
+    });
   });
 
   it('should reset to first page when searching', async () => {
@@ -324,7 +341,7 @@ describe('MarketplacePage', () => {
     renderWithProviders(<MarketplacePage />);
 
     // Type in search to trigger page reset
-    const searchInput = screen.getByPlaceholderText('Search marketplace...');
+    const searchInput = screen.getByPlaceholderText('Search');
     await userEvent.type(searchInput, 'search term');
 
     // The component should reset to page 1 (this is internal state, so we verify indirectly)
@@ -333,7 +350,7 @@ describe('MarketplacePage', () => {
       expect(mockUseGetMarketplaceItems).toHaveBeenCalledWith(
         expect.objectContaining({
           search: 'search term',
-        })
+        }),
       );
     });
   });
@@ -358,7 +375,7 @@ describe('MarketplacePage', () => {
       expect(mockUseGetMarketplaceItems).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'service',
-        })
+        }),
       );
     });
   });

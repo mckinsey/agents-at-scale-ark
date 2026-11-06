@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: dashboard-probe
+  labels:
+    app: dashboard-probe
+spec:
+  restartPolicy: Never
+  terminationGracePeriodSeconds: 0
+  automountServiceAccountToken: false
+  containers:
+    - name: probe
+      image: curlimages/curl:8.10.1
+      command: ["sleep", "600"]

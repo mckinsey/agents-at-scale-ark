@@ -17,10 +17,10 @@ spec:
     try:
     - script:
         timeout: 300s
-        # The argo-workflows subchart ships its CRDs as regular templates
-        # (templates/crds/*.yaml), not Helm's special top-level crds/
-        # directory - so they're subject to the normal release-ownership
-        # check. A plain `helm install` then fails with "invalid ownership
+        # With crds.full=false the argo-workflows subchart renders its minimal
+        # CRDs as regular templates (templates/crds.yaml), not Helm's special
+        # top-level crds/ directory - so they're subject to the normal
+        # release-ownership check. A plain `helm install` then fails with "invalid ownership
         # metadata" the moment any other release, or an unowned `kubectl
         # apply` of the same CRDs (e.g. workflow-pagination-performance,
         # which applies them this way on purpose since it only needs the
@@ -35,14 +35,8 @@ spec:
             --set argo-workflows.singleNamespace=true \
             --set httpRoute.argo.enabled=false \
             --set minio.enabled=false \
-            --show-only charts/argo-workflows/templates/crds/argoproj.io_workflows.yaml \
-            --show-only charts/argo-workflows/templates/crds/argoproj.io_workflowtemplates.yaml \
-            --show-only charts/argo-workflows/templates/crds/argoproj.io_clusterworkflowtemplates.yaml \
-            --show-only charts/argo-workflows/templates/crds/argoproj.io_cronworkflows.yaml \
-            --show-only charts/argo-workflows/templates/crds/argoproj.io_workflowtaskresults.yaml \
-            --show-only charts/argo-workflows/templates/crds/argoproj.io_workflowtasksets.yaml \
-            --show-only charts/argo-workflows/templates/crds/argoproj.io_workfloweventbindings.yaml \
-            --show-only charts/argo-workflows/templates/crds/argoproj.io_workflowartifactgctasks.yaml \
+            --set argo-workflows.crds.full=false \
+            --show-only charts/argo-workflows/templates/crds.yaml \
             | kubectl apply -f -
           helm install argo ../../services/argo-workflows/chart \
             --namespace "$NAMESPACE" \

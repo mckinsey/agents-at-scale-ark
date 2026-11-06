@@ -1,16 +1,17 @@
 import { trackError } from '@/lib/analytics/singleton';
 
 import { API_CONFIG } from './config';
+import { APIError } from './errors';
 
-export class APIError extends Error {
-  constructor(
-    message: string,
-    public status?: number,
-    public data?: unknown,
-  ) {
-    super(message);
-    this.name = 'APIError';
-  }
+export { APIError } from './errors';
+
+const ADMISSION_WEBHOOK_PREFIX =
+  /^admission webhook "[^"]+" denied the request:\s*/;
+
+function formatErrorDetail(detail: unknown): string {
+  return typeof detail === 'string'
+    ? detail.replace(ADMISSION_WEBHOOK_PREFIX, '')
+    : JSON.stringify(detail);
 }
 
 interface RequestOptions extends RequestInit {
@@ -73,7 +74,7 @@ class APIClient {
   private extractErrorMessage(errorData: unknown): string {
     if (typeof errorData === 'object' && errorData !== null) {
       if ('detail' in errorData && errorData.detail) {
-        return String(errorData.detail);
+        return formatErrorDetail(errorData.detail);
       }
       if ('message' in errorData && errorData.message) {
         return String(errorData.message);

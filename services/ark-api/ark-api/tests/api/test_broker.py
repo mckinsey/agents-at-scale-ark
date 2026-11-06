@@ -64,6 +64,8 @@ class TestBrokerAPI(unittest.TestCase):
         data = response.json()
         self.assertIn("error", data)
         self.assertEqual(data["error"]["type"], "service_unavailable")
+        self.assertEqual(data["code"], "broker_unavailable")
+        self.assertEqual(data["fallback"], "poll")
 
     @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
     @patch('ark_api.api.v1.broker.httpx.AsyncClient')
@@ -80,6 +82,8 @@ class TestBrokerAPI(unittest.TestCase):
         data = response.json()
         self.assertIn("error", data)
         self.assertEqual(data["error"]["type"], "connection_error")
+        self.assertEqual(data["code"], "broker_unavailable")
+        self.assertEqual(data["fallback"], "poll")
 
     @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
     @patch('ark_api.api.v1.broker.httpx.AsyncClient')
@@ -314,6 +318,8 @@ class TestBrokerAPI(unittest.TestCase):
         data = response.json()
         self.assertIn("error", data)
         self.assertEqual(data["error"]["type"], "service_unavailable")
+        self.assertEqual(data["code"], "broker_unavailable")
+        self.assertEqual(data["fallback"], "poll")
 
     @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
     @patch('ark_api.api.v1.broker.httpx.AsyncClient')
@@ -330,6 +336,8 @@ class TestBrokerAPI(unittest.TestCase):
         data = response.json()
         self.assertIn("error", data)
         self.assertEqual(data["error"]["type"], "connection_error")
+        self.assertEqual(data["code"], "broker_unavailable")
+        self.assertEqual(data["fallback"], "poll")
 
     @patch('ark_api.api.v1.broker.get_broker_url', new_callable=AsyncMock)
     @patch('ark_api.api.v1.broker.httpx.AsyncClient')
@@ -463,6 +471,8 @@ class TestBrokerAPI(unittest.TestCase):
         data = response.json()
         self.assertIn("error", data)
         self.assertEqual(data["error"]["type"], "service_unavailable")
+        self.assertEqual(data["code"], "broker_unavailable")
+        self.assertEqual(data["fallback"], "poll")
 
 
 class TestHelperFunctions(unittest.IsolatedAsyncioTestCase):
@@ -588,6 +598,11 @@ class TestHelperFunctions(unittest.IsolatedAsyncioTestCase):
 
             self.assertEqual(len(result), 1)
             self.assertIn("connection_error", result[0])
+
+            payload = json.loads(result[0].removeprefix("data: ").strip())
+            self.assertEqual(payload["error"]["type"], "connection_error")
+            self.assertEqual(payload["code"], "broker_unavailable")
+            self.assertEqual(payload["fallback"], "poll")
 
     async def test_proxy_sse_stream_generic_exception(self):
         from ark_api.api.v1.broker import proxy_sse_stream

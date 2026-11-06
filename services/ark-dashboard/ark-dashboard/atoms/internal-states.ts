@@ -2,38 +2,6 @@ import { atom } from 'jotai';
 
 import type { GraphEdge } from '@/lib/types/chat-message';
 
-const SESSION_STORAGE_KEY = 'files-browser-prefix';
-
-const filesBrowserPrefixBaseAtom = atom<string | null>(null);
-
-export const filesBrowserPrefixAtom = atom(
-  get => {
-    const value = get(filesBrowserPrefixBaseAtom);
-    if (value !== null) {
-      return value;
-    }
-
-    // First read - initialize from sessionStorage
-    if (typeof globalThis.window !== 'undefined') {
-      try {
-        const stored = sessionStorage.getItem(SESSION_STORAGE_KEY);
-        if (stored) {
-          return JSON.parse(stored) as string;
-        }
-      } catch {
-        // Ignore parse errors
-      }
-    }
-    return '';
-  },
-  (get, set, newValue: string) => {
-    set(filesBrowserPrefixBaseAtom, newValue);
-    if (typeof globalThis.window !== 'undefined') {
-      sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(newValue));
-    }
-  },
-);
-
 const LAST_CONVERSATION_ID_KEY = 'last-conversation-id';
 const lastConversationIdBaseAtom = atom<string | null>(null);
 export const lastConversationIdAtom = atom(

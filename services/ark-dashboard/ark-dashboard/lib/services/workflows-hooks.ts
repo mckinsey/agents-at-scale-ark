@@ -2,35 +2,184 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { ArgoWorkflow } from '@/lib/types/argo-workflow';
 
-import { type WorkflowFilters, workflowsService } from './workflows';
+import { isTerminalPhase } from './workflow-mapper';
+import {
+  type WorkflowFilters,
+  type WorkflowLifecycleAction,
+  type WorkflowPage,
+  workflowsService,
+} from './workflows';
+
+const SHUTDOWN_POLL_INTERVAL_MS = 2000;
+const WATCH_POLL_INTERVAL_MS = 5000;
+
+function isShuttingDown(workflow: ArgoWorkflow): boolean {
+  return (
+    Boolean(workflow.spec?.shutdown) && !isTerminalPhase(workflow.status?.phase)
+  );
+}
+
+function usePollWorkflows(
+  namespace: string,
+  joinedNames: string,
+  intervalMs: number,
+  onUpdate: (workflow: ArgoWorkflow) => void,
+) {
+  useEffect(() => {
+    if (!namespace || !joinedNames) {
+      return;
+    }
+
+    const names = joinedNames.split(',');
+    const intervalId = setInterval(() => {
+      for (const name of names) {
+        workflowsService
+          .get(namespace, name)
+          .then(onUpdate)
+          .catch(refreshError => {
+            console.error(`Failed to refresh workflow ${name}`, refreshError);
+          });
+      }
+    }, intervalMs);
+
+    return () => clearInterval(intervalId);
+  }, [namespace, joinedNames, intervalMs, onUpdate]);
+}
 
 const DEFAULT_PAGE_SIZE = 25;
+const OFFSET_TOKEN_PATTERN = /^\d+$/;
+const UNREACHABLE_PAGE_STATUSES = new Set([400, 410]);
+
+function computeTotalCount(offset: number, page: WorkflowPage): number | null {
+  if (page.remainingItemCount === undefined) {
+    return null;
+  }
+  return offset + page.items.length + page.remainingItemCount;
+}
+
+function resolveContinueToken(
+  targetPage: number,
+  pageSize: number,
+  offsetPaging: boolean | null,
+  tokenStack: Array<string | undefined>,
+): string | undefined {
+  if (targetPage === 0) {
+    return undefined;
+  }
+  if (offsetPaging === false) {
+    return tokenStack[targetPage];
+  }
+  return String(targetPage * pageSize);
+}
+
+function withPinnedFirst(
+  items: ArgoWorkflow[],
+  pinned: ArgoWorkflow | null,
+): ArgoWorkflow[] {
+  if (!pinned) {
+    return items;
+  }
+  return [
+    pinned,
+    ...items.filter(item => item.metadata.name !== pinned.metadata.name),
+  ];
+}
+
+function isUnreachablePage(err: unknown, targetPage: number): boolean {
+  if (targetPage === 0) {
+    return false;
+  }
+  const status = (err as { status?: number }).status;
+  return status !== undefined && UNREACHABLE_PAGE_STATUSES.has(status);
+}
+
+function isOffsetPaging(page: WorkflowPage): boolean {
+  if (page.continueToken !== undefined) {
+    return OFFSET_TOKEN_PATTERN.test(page.continueToken);
+  }
+  return page.remainingItemCount !== undefined;
+}
+
+export interface UseWorkflowsOptions {
+  page?: number;
+  pageSize?: number;
+  onPageError?: (error: Error) => void;
+  onPageReset?: () => void;
+}
 
 export function useWorkflows(
   namespace: string,
   filters?: WorkflowFilters,
-  pageSize: number = DEFAULT_PAGE_SIZE,
-  onPageError?: (error: Error) => void,
+  {
+    page = 0,
+    pageSize = DEFAULT_PAGE_SIZE,
+    onPageError,
+    onPageReset,
+  }: UseWorkflowsOptions = {},
 ) {
   const [workflows, setWorkflows] = useState<ArgoWorkflow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
-  const [page, setPage] = useState(0);
   const [hasNext, setHasNext] = useState(false);
+  const [totalCount, setTotalCount] = useState<number | null>(null);
 
   // tokenStack[i] holds the continue token needed to fetch page i.
   // tokenStack[0] is always undefined (the first page has no cursor).
   const tokenStackRef = useRef<Array<string | undefined>>([undefined]);
 
+  const offsetPagingRef = useRef<boolean | null>(null);
+
   // Lets a newer fetch cancel a stale in-flight one.
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  const pinnedWorkflowRef = useRef<ArgoWorkflow | null>(null);
+
+  const namespaceRef = useRef(namespace);
+  useEffect(() => {
+    namespaceRef.current = namespace;
+  }, [namespace]);
+
+  const handleFetchError = useCallback(
+    (err: unknown, targetPage: number, silent?: boolean) => {
+      // Cancelled on purpose, not a failure.
+      if ((err as Error).name === 'AbortError') {
+        return;
+      }
+      // A cached token's snapshot gets compacted by etcd after ~5 min, and a
+      // deep-linked page cannot be reached with cursors - recover instead of dead-ending.
+      if (isUnreachablePage(err, targetPage)) {
+        tokenStackRef.current = [undefined];
+        onPageError?.(new Error('List changed — back to the first page'));
+        onPageReset?.();
+        return;
+      }
+      if (silent) {
+        onPageError?.(err as Error);
+      } else {
+        setError(err as Error);
+      }
+    },
+    [onPageError, onPageReset],
+  );
 
   const fetchPage = useCallback(
     async (targetPage: number, options?: { silent?: boolean }) => {
       if (!namespace) {
         setWorkflows([]);
+        setTotalCount(null);
         setError(null);
         setLoading(false);
+        return;
+      }
+
+      const continueToken = resolveContinueToken(
+        targetPage,
+        pageSize,
+        offsetPagingRef.current,
+        tokenStackRef.current,
+      );
+      if (targetPage > 0 && continueToken === undefined) {
+        onPageReset?.();
         return;
       }
 
@@ -40,7 +189,6 @@ export function useWorkflows(
 
       try {
         setLoading(true);
-        const continueToken = tokenStackRef.current[targetPage];
         const result = await workflowsService.list(namespace, filters, {
           limit: pageSize,
           continueToken,
@@ -50,90 +198,182 @@ export function useWorkflows(
         if (abortControllerRef.current !== controller) {
           return;
         }
-        setWorkflows(result.items);
+        offsetPagingRef.current = isOffsetPaging(result);
+        const pinned = pinnedWorkflowRef.current;
+        pinnedWorkflowRef.current = null;
+        setWorkflows(
+          withPinnedFirst(result.items, targetPage === 0 ? pinned : null),
+        );
         setHasNext(result.hasMore);
+        setTotalCount(computeTotalCount(targetPage * pageSize, result));
         if (result.continueToken) {
           tokenStackRef.current[targetPage + 1] = result.continueToken;
         }
-        setPage(targetPage);
         setError(null);
       } catch (err) {
-        // Cancelled on purpose, not a failure.
-        if ((err as Error).name === 'AbortError') {
-          return;
-        }
-        // A cached token's snapshot gets compacted by etcd after ~5 min - recover instead of dead-ending.
-        const status = (err as { status?: number }).status;
-        if (options?.silent && status === 410) {
-          tokenStackRef.current = [undefined];
-          onPageError?.(new Error('List changed — back to the first page'));
-          fetchPage(0, { silent: true });
-          return;
-        }
-        if (options?.silent) {
-          onPageError?.(err as Error);
-        } else {
-          setError(err as Error);
-        }
+        handleFetchError(err, targetPage, options?.silent);
       } finally {
         if (abortControllerRef.current === controller) {
           setLoading(false);
         }
       }
     },
-    [namespace, filters, pageSize, onPageError],
+    [namespace, filters, pageSize, onPageReset, handleFetchError],
   );
 
-  // Filters/namespace narrow what a page shows, so restart at page 0 whenever
-  // they change instead of reusing a token stack built for a different query.
+  // Filters/namespace narrow what a page shows, so a token stack built for a
+  // different query is dropped before the requested page is loaded.
+  const queryKey = `${namespace}|${JSON.stringify(filters ?? {})}|${pageSize}`;
+  const lastQueryKeyRef = useRef<string | null>(null);
   useEffect(() => {
-    tokenStackRef.current = [undefined];
-    fetchPage(0);
+    if (lastQueryKeyRef.current !== queryKey) {
+      lastQueryKeyRef.current = queryKey;
+      tokenStackRef.current = [undefined];
+      offsetPagingRef.current = null;
+    }
+    fetchPage(page, { silent: page > 0 });
     return () => {
       abortControllerRef.current?.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [namespace, filters, pageSize]);
-
-  const goToNextPage = useCallback(() => {
-    if (hasNext) {
-      fetchPage(page + 1, { silent: true });
-    }
-  }, [hasNext, page, fetchPage]);
-
-  const goToPreviousPage = useCallback(() => {
-    if (page > 0) {
-      fetchPage(page - 1, { silent: true });
-    }
-  }, [page, fetchPage]);
+  }, [queryKey, page]);
 
   // Patches one item in place - avoids re-fetching with a stale cached token.
   const updateWorkflowItem = useCallback((updated: ArgoWorkflow) => {
     setWorkflows(prev =>
       prev.map(workflow =>
-        workflow.metadata.name === updated.metadata.name ? updated : workflow,
+        workflow.metadata.name === updated.metadata.name &&
+        workflow.metadata.namespace === updated.metadata.namespace
+          ? updated
+          : workflow,
       ),
     );
   }, []);
+
+  const showCreatedWorkflow = useCallback(
+    (created: ArgoWorkflow): boolean => {
+      if (created.metadata.namespace !== namespaceRef.current) {
+        return false;
+      }
+      setWorkflows(current => [
+        created,
+        ...current.filter(
+          workflow => workflow.metadata.name !== created.metadata.name,
+        ),
+      ]);
+      pinnedWorkflowRef.current = created;
+      tokenStackRef.current = [undefined];
+      if (page > 0) {
+        onPageReset?.();
+      } else {
+        fetchPage(0, { silent: true });
+      }
+      return true;
+    },
+    [fetchPage, page, onPageReset],
+  );
+
+  const [watchedNames, setWatchedNames] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+
+  const watchWorkflow = useCallback((name: string) => {
+    setWatchedNames(current =>
+      current.has(name) ? current : new Set(current).add(name),
+    );
+  }, []);
+
+  const shuttingDownNames = workflows
+    .filter(isShuttingDown)
+    .map(workflow => workflow.metadata.name)
+    .join(',');
+
+  const watchedActiveNames = workflows
+    .filter(
+      workflow =>
+        watchedNames.has(workflow.metadata.name) &&
+        !isTerminalPhase(workflow.status?.phase) &&
+        !isShuttingDown(workflow),
+    )
+    .map(workflow => workflow.metadata.name)
+    .join(',');
+
+  usePollWorkflows(
+    namespace,
+    shuttingDownNames,
+    SHUTDOWN_POLL_INTERVAL_MS,
+    updateWorkflowItem,
+  );
+  usePollWorkflows(
+    namespace,
+    watchedActiveNames,
+    WATCH_POLL_INTERVAL_MS,
+    updateWorkflowItem,
+  );
 
   return {
     workflows,
     loading,
     error,
-    page,
     hasNext,
-    hasPrevious: page > 0,
-    goToNextPage,
-    goToPreviousPage,
+    totalCount,
     updateWorkflowItem,
+    showCreatedWorkflow,
+    watchWorkflow,
     refetch: () => fetchPage(page),
   };
+}
+
+export function useWorkflowLifecycleActions(
+  namespace: string,
+  onWorkflowUpdated: (workflow: ArgoWorkflow) => void,
+) {
+  const [pendingNames, setPendingNames] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const inFlightRef = useRef(new Set<string>());
+
+  const runAction = useCallback(
+    async (
+      name: string,
+      action: WorkflowLifecycleAction,
+    ): Promise<ArgoWorkflow | undefined> => {
+      if (inFlightRef.current.has(name)) {
+        return undefined;
+      }
+
+      inFlightRef.current.add(name);
+      setPendingNames(new Set(inFlightRef.current));
+
+      try {
+        const updated = await workflowsService.runLifecycleAction(
+          namespace,
+          name,
+          action,
+        );
+        onWorkflowUpdated(updated);
+        return updated;
+      } finally {
+        inFlightRef.current.delete(name);
+        setPendingNames(new Set(inFlightRef.current));
+      }
+    },
+    [namespace, onWorkflowUpdated],
+  );
+
+  const isPending = useCallback(
+    (name: string) => pendingNames.has(name),
+    [pendingNames],
+  );
+
+  return { runAction, isPending };
 }
 
 export function useWorkflow(
   namespace: string,
   name: string,
   refreshInterval: number = 5000,
+  refreshKey: number = 0,
 ) {
   const [workflow, setWorkflow] = useState<ArgoWorkflow | null>(null);
   const [loading, setLoading] = useState(true);
@@ -157,12 +397,7 @@ export function useWorkflow(
           setError(null);
           setLoading(false);
 
-          const isTerminalState =
-            data.status?.phase === 'Succeeded' ||
-            data.status?.phase === 'Failed' ||
-            data.status?.phase === 'Error';
-
-          if (isTerminalState && intervalId) {
+          if (isTerminalPhase(data.status?.phase) && intervalId) {
             clearInterval(intervalId);
             intervalId = null;
           }
@@ -182,12 +417,7 @@ export function useWorkflow(
       const initialData = await fetchWorkflow();
 
       if (mounted && initialData) {
-        const isTerminalState =
-          initialData.status?.phase === 'Succeeded' ||
-          initialData.status?.phase === 'Failed' ||
-          initialData.status?.phase === 'Error';
-
-        if (!isTerminalState) {
+        if (!isTerminalPhase(initialData.status?.phase)) {
           intervalId = setInterval(fetchWorkflow, refreshInterval);
         }
       }
@@ -202,7 +432,7 @@ export function useWorkflow(
         intervalId = null;
       }
     };
-  }, [name, namespace, refreshInterval]);
+  }, [name, namespace, refreshInterval, refreshKey]);
 
   return { workflow, loading, error };
 }

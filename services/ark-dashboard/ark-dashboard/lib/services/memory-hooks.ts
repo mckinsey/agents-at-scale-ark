@@ -6,17 +6,11 @@ import { useNamespace } from '@/providers/NamespaceProvider';
 
 import type { MemoryMessagesFilters } from './memory';
 import { memoryService } from './memory';
+import { getErrorMessage } from './resource-error-message';
 
 export const GET_MEMORY_RESOURCES_QUERY_KEY = 'get-memory-resources';
 export const GET_CONVERSATIONS_QUERY_KEY = 'get-conversations';
 export const GET_ALL_MEMORY_MESSAGES_QUERY_KEY = 'get-all-memory-messages';
-
-const getErrorMessage = (error: unknown): string => {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return 'An unexpected error occurred';
-};
 
 export const useGetMemoryResources = () => {
   const { namespace } = useNamespace();

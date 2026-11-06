@@ -72,7 +72,7 @@ References resolve within a single namespace unless the reference type carries i
 | --- | --- |
 | `Agent.spec.modelRef` | Yes — honours `modelRef.namespace` (defaults to the agent's namespace). |
 | `Agent.spec.executionEngine` | Yes — honours `executionEngine.namespace` (except the built-in `a2a` engine, which needs no resource). |
-| `Query.spec.memory` | Yes — honours `memory.namespace` (resolved by the execution engine). |
+| `Query.spec.memory` | Yes — honours `memory.namespace` (resolved by the execution engine). Don't use it to reach a `Memory` backed by another namespace's ark-broker: the broker serves only its own namespace (see [Broker storage isolation](/operations-guide/tenant-namespace-management#broker-storage-isolation)). |
 | `Query.spec.target` / `spec.selector` | **No** — resolved in the query's namespace. There is no namespace field on a target. |
 | `Team.spec.members[]` | **No** — members must live in the team's namespace. |
 
@@ -86,7 +86,7 @@ The admission webhooks reject relationships that can't work, so most problems su
 - **Query targets are same-namespace.** The named target (or selector match) must exist in the query's namespace.
 - **Teams can't reference themselves.** A member can't share the team's own name; nested teams (`members[].type: team`) are allowed otherwise.
 - **Deprecated team strategies are migrated.** `round-robin` and standalone `graph` are accepted but rewritten by the mutating webhook (`round-robin` → `sequential` with loops; `graph` → `sequential`, with the graph edges discarded). Author new teams with `sequential` or `selector`. See [Teams](/reference/resources/team).
-- **Missing dependencies block readiness.** If a referenced Model, Tool, or engine doesn't exist, the dependent resource's `Available` condition stays `False` with a reason such as `ModelNotFound`, and flips to `True` automatically once the dependency appears.
+- **Missing dependencies block readiness.** If a referenced Model, Tool, or engine doesn't exist, the dependent resource's `Available` condition stays `False` with a reason such as `ModelNotFound` or `ModelNotReady`, and flips to `True` automatically once the dependency appears.
 
 ```yaml
 status:
@@ -94,7 +94,7 @@ status:
     - type: Available
       status: "False"
       reason: ModelNotFound
-      message: "Model 'gpt-4o' is not available"
+      message: "Model 'gpt-4o' not found in namespace 'default'"
 ```
 
 ## Creating and deleting related resources

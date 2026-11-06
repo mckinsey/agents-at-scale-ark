@@ -2,12 +2,14 @@
 import json
 import logging
 from functools import wraps
-from typing import Callable, Any
+from typing import Callable, Any, Optional
 
 from fastapi import HTTPException
 from kubernetes_asyncio.client.rest import ApiException
 from kubernetes_asyncio.dynamic.exceptions import ResourceNotFoundError
 from kubernetes.client.exceptions import ApiException as SyncApiException
+
+from ark_sdk.impersonation import ImpersonationConfig
 
 from ...auth.impersonation_config import ImpersonationSettings
 from ...auth.impersonation_errors import build_impersonation_forbidden_response
@@ -32,9 +34,24 @@ def _extract_error_detail(exception: ApiException | SyncApiException) -> str:
     return error_detail
 
 
+def _is_admission_denial(exception: ApiException | SyncApiException) -> bool:
+    detail = _extract_error_detail(exception) or ""
+    return detail.startswith("admission webhook ") and "denied the request" in detail
+
+
+def _rbac_impersonation(
+    exception: ApiException | SyncApiException,
+    impersonation: Optional[ImpersonationConfig],
+) -> Optional[ImpersonationConfig]:
+    if _is_admission_denial(exception):
+        return None
+    return impersonation
+
+
 def handle_k8s_errors(
     operation: str = "operation",
-    resource_type: str = "resource"
+    resource_type: str = "resource",
+    impersonation_fallback: bool = True,
 ) -> Callable:
     """
     Decorator to handle common Kubernetes API errors.
@@ -42,6 +59,8 @@ def handle_k8s_errors(
     Args:
         operation: Description of the operation being performed (e.g., "list", "get", "create")
         resource_type: Type of resource being operated on (e.g., "secret", "namespace")
+        impersonation_fallback: Whether IMPERSONATION_FALLBACK may retry a denied
+            impersonated call as the service account
         
     Returns:
         Decorated function with standardized error handling
@@ -99,10 +118,10 @@ def handle_k8s_errors(
                     raise HTTPException(status_code=422, detail=_extract_error_detail(e))
                 
                 elif e.status == 403:
-                    impersonation = kwargs.get("impersonation")
+                    impersonation = _rbac_impersonation(e, kwargs.get("impersonation"))
                     if impersonation is not None:
                         settings = ImpersonationSettings.from_env()
-                        if settings.fallback:
+                        if settings.fallback and impersonation_fallback:
                             logger.warning(
                                 f"Impersonation fallback: user={impersonation.username} "
                                 f"action={operation} resource={resource_type} namespace={namespace}"

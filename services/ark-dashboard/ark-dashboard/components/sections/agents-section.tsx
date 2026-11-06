@@ -3,11 +3,13 @@
 import { AgentsApiAccess } from '@/components/dialogs/agents-api-access';
 import { SmartToy } from '@/components/icons';
 import { AgentsTable } from '@/components/sections/agents-table';
-import { ResourceListSection } from '@/components/sections/resource-list-section';
-import { ARK_ANNOTATIONS } from '@/lib/constants/annotations';
+import {
+  ResourceListCreateButton,
+  ResourceListSection,
+} from '@/components/sections/resource-list-section';
 import { DOCS_URLS } from '@/lib/constants/docs';
 import { useDeleteAgent, useGetAllAgents } from '@/lib/services/agents-hooks';
-import { getOriginLabel } from '@/lib/utils/origin-icon';
+import { getAgentOriginLabel } from '@/lib/utils/origin-icon';
 
 export function AgentsSection() {
   const {
@@ -24,8 +26,9 @@ export function AgentsSection() {
       icon={<SmartToy />}
       title="Agents"
       subtitle="Create and manage agents to automate tasks"
-      createHref="/agents/new"
-      createLabel="Create agent"
+      createAction={
+        <ResourceListCreateButton href="/agents/new" label="Create agent" />
+      }
       learnMoreUrl={DOCS_URLS.agents}
       entityLabel="Agent"
       entityPluralLabel="agents"
@@ -39,8 +42,7 @@ export function AgentsSection() {
       headerActions={<AgentsApiAccess />}
       originFilter={{
         label: 'Origin',
-        getValue: agent =>
-          getOriginLabel(agent.annotations?.[ARK_ANNOTATIONS.ORIGIN]),
+        getValue: agent => getAgentOriginLabel(agent.annotations),
       }}
       items={agents}
       loading={isPending}

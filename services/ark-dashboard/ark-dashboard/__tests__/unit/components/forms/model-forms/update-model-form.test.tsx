@@ -37,6 +37,19 @@ vi.mock('@/lib/analytics/hooks', () => ({
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
+const headers = [
+  {
+    name: 'X-Secret',
+    value: {
+      valueFrom: { secretKeyRef: { name: 'openai-token', key: 'api-key' } },
+    },
+  },
+  {
+    name: 'X-Tenant',
+    value: { valueFrom: { configMapKeyRef: { name: 'cfg', key: 'tenant' } } },
+  },
+];
+
 const legacyLiteralModel: Model = {
   id: 'legacy-openai',
   name: 'legacy-openai',
@@ -48,6 +61,7 @@ const legacyLiteralModel: Model = {
         valueFrom: { secretKeyRef: { name: 'openai-token', key: 'token' } },
       },
       baseUrl: { value: 'https://legacy.example/v1' },
+      headers,
     },
   },
 } as unknown as Model;
@@ -110,6 +124,7 @@ describe('UpdateModelForm - editing a model with a legacy literal base URL', () 
               },
             },
             baseUrl: { value: 'https://legacy.example/v1' },
+            headers,
           },
         },
       });

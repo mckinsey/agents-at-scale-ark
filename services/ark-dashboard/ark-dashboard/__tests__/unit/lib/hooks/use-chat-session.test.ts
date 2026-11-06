@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import type { ReactNode } from 'react';
@@ -12,6 +13,7 @@ import {
 import { storedIsChatStreamingEnabledAtom } from '@/atoms/experimental-features';
 import { lastConversationIdAtom } from '@/atoms/internal-states';
 import { useChatSession } from '@/lib/hooks/use-chat-session';
+import { BrokerUnavailableError } from '@/lib/services/chat';
 
 vi.mock('@/providers/NamespaceProvider', () => ({
   useNamespace: () => ({
@@ -39,7 +41,14 @@ const mockGetQuery = vi.fn();
 const mockCancelQuery = vi.fn();
 const mockGetByName = vi.fn();
 const mockTeamGetByName = vi.fn();
+const mockEngineGetByName = vi.fn();
 const mockResolveMemoryNotice = vi.fn();
+
+vi.mock('@/lib/services/agents', () => ({
+  agentsService: {
+    getByName: (...args: unknown[]) => mockGetByName(...args),
+  },
+}));
 
 vi.mock('@/lib/services', () => ({
   chatService: {
@@ -59,6 +68,9 @@ vi.mock('@/lib/services', () => ({
   },
   teamsService: {
     getByName: (...args: unknown[]) => mockTeamGetByName(...args),
+  },
+  executionEnginesService: {
+    getByName: (...args: unknown[]) => mockEngineGetByName(...args),
   },
 }));
 
@@ -128,19 +140,28 @@ async function* asyncIterableFrom<T>(items: T[]): AsyncGenerator<T> {
 
 describe('useChatSession', () => {
   let store: ReturnType<typeof createStore>;
+  let queryClient: QueryClient;
 
   function wrapper({ children }: { children: ReactNode }) {
-    return React.createElement(Provider, { store }, children);
+    return React.createElement(
+      QueryClientProvider,
+      { client: queryClient },
+      React.createElement(Provider, { store }, children),
+    );
   }
 
   beforeEach(() => {
     vi.clearAllMocks();
     store = createStore();
+    queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
     store.set(storedIsChatStreamingEnabledAtom, true);
     store.set(lastConversationIdAtom, null);
     mockSubmitChatQuery.mockResolvedValue({ name: 'test-query' });
     mockGetByName.mockResolvedValue({ parameters: [] });
     mockTeamGetByName.mockResolvedValue({ members: [] });
+    mockEngineGetByName.mockResolvedValue(null);
     sessionStorage.clear();
 
     mockStartStreamChatResponse.mockImplementation((...args: unknown[]) => {
@@ -549,6 +570,222 @@ describe('useChatSession', () => {
           result.current.messages[result.current.messages.length - 1];
         expect(lastMessage.content).toBe('Query execution failed');
       });
+    });
+
+    it('falls back to polling the existing query when the stream rejects with a 503 BrokerUnavailableError', async () => {
+      mockStreamChatResponse.mockImplementation(async function* () {
+        throw new BrokerUnavailableError(
+          'Failed to connect to stream: Service Unavailable',
+          503,
+          'broker_unavailable',
+          'poll',
+          'test-query',
+        );
+      });
+      mockGetQueryResult.mockResolvedValue({
+        status: 'done',
+        terminal: true,
+        response: 'Polled response',
+      });
+
+      const { result } = renderHook(
+        () => useChatSession({ name: 'test-agent', type: 'agent' }),
+        { wrapper },
+      );
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+
+      await waitFor(() => {
+        expect(result.current.isProcessing).toBe(false);
+      });
+
+      expect(mockSubmitChatQuery).not.toHaveBeenCalled();
+      expect(mockGetQueryResult).toHaveBeenCalledWith(
+        'default',
+        'test-query',
+      );
+
+      expect(result.current.error).toBeNull();
+      const lastMessage =
+        result.current.messages[result.current.messages.length - 1];
+      expect(lastMessage.content).toBe('Polled response');
+      expect(
+        result.current.messages.some(
+          m => m.content === 'Failed to connect to stream: Service Unavailable',
+        ),
+      ).toBe(false);
+      expect(
+        result.current.messages.filter(
+          m => m.role === 'assistant' && !m.content,
+        ),
+      ).toHaveLength(0);
+      expect(result.current.brokerFallbackNoticeVisible).toBe(true);
+    });
+
+    it('falls back to polling on an in-band broker_unavailable stream chunk', async () => {
+      mockStreamChatResponse.mockReturnValue(
+        asyncIterableFrom([
+          {
+            error: {
+              message: 'Failed to connect to broker service',
+              type: 'connection_error',
+            },
+            code: 'broker_unavailable',
+            fallback: 'poll',
+          },
+        ]),
+      );
+      mockGetQueryResult.mockResolvedValue({
+        status: 'done',
+        terminal: true,
+        response: 'Polled from chunk',
+      });
+
+      const { result } = renderHook(
+        () => useChatSession({ name: 'test-agent', type: 'agent' }),
+        { wrapper },
+      );
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+
+      await waitFor(() => {
+        expect(result.current.isProcessing).toBe(false);
+      });
+
+      expect(mockSubmitChatQuery).not.toHaveBeenCalled();
+      expect(mockGetQueryResult).toHaveBeenCalledWith(
+        'default',
+        'test-query',
+      );
+      expect(result.current.messages.at(-1)?.content).toBe('Polled from chunk');
+      expect(result.current.brokerFallbackNoticeVisible).toBe(true);
+    });
+
+    it('tries streaming again on later turns after a broker fallback', async () => {
+      mockStreamChatResponse.mockImplementation(async function* () {
+        throw new BrokerUnavailableError(
+          'Failed to connect to stream: Service Unavailable',
+          503,
+          'broker_unavailable',
+          'poll',
+          'test-query',
+        );
+      });
+      mockGetQueryResult
+        .mockResolvedValueOnce({
+          status: 'done',
+          terminal: true,
+          response: 'First polled',
+        })
+        .mockResolvedValueOnce({
+          status: 'done',
+          terminal: true,
+          response: 'Second polled',
+        });
+      const { result } = renderHook(
+        () => useChatSession({ name: 'test-agent', type: 'agent' }),
+        { wrapper },
+      );
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+
+      await waitFor(() => {
+        expect(result.current.isProcessing).toBe(false);
+      });
+
+      mockStartStreamChatResponse.mockClear();
+      mockSubmitChatQuery.mockClear();
+
+      await act(async () => {
+        await result.current.sendMessage('Again');
+      });
+
+      await waitFor(() => {
+        expect(result.current.isProcessing).toBe(false);
+      });
+
+      expect(mockStartStreamChatResponse).toHaveBeenCalledTimes(1);
+      expect(mockSubmitChatQuery).not.toHaveBeenCalled();
+      expect(result.current.messages.at(-1)?.content).toBe('Second polled');
+    });
+
+    it('does not show the notice for a 503 without a broker_unavailable code', async () => {
+      mockStreamChatResponse.mockImplementation(async function* () {
+        throw new BrokerUnavailableError(
+          'Failed to connect to stream: Service Unavailable',
+          503,
+          undefined,
+          undefined,
+          'test-query',
+        );
+      });
+      mockGetQueryResult.mockResolvedValue({
+        status: 'done',
+        terminal: true,
+        response: 'Polled',
+      });
+
+      const { result } = renderHook(
+        () => useChatSession({ name: 'test-agent', type: 'agent' }),
+        { wrapper },
+      );
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+
+      await waitFor(() => {
+        expect(result.current.isProcessing).toBe(false);
+      });
+
+      expect(result.current.messages.at(-1)?.content).toBe('Polled');
+      expect(result.current.brokerFallbackNoticeVisible).toBe(false);
+    });
+
+    it('does not show the notice again after it is dismissed', async () => {
+      mockStreamChatResponse.mockImplementation(async function* () {
+        throw new BrokerUnavailableError(
+          'Failed to connect to stream: Service Unavailable',
+          503,
+          'broker_unavailable',
+          'poll',
+          'test-query',
+        );
+      });
+      mockGetQueryResult.mockResolvedValue({
+        status: 'done',
+        terminal: true,
+        response: 'Polled',
+      });
+
+      const { result } = renderHook(
+        () => useChatSession({ name: 'test-agent', type: 'agent' }),
+        { wrapper },
+      );
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+
+      expect(result.current.brokerFallbackNoticeVisible).toBe(true);
+
+      act(() => {
+        result.current.dismissBrokerFallbackNotice();
+      });
+
+      expect(result.current.brokerFallbackNoticeVisible).toBe(false);
+
+      await act(async () => {
+        await result.current.sendMessage('Again');
+      });
+
+      expect(result.current.brokerFallbackNoticeVisible).toBe(false);
     });
   });
 
@@ -1322,9 +1559,188 @@ describe('useChatSession', () => {
       });
 
       const lastCall = mockStartStreamChatResponse.mock.calls.at(-1);
-      expect(lastCall?.at(-1)).toEqual([
-        { name: 'muting', value: 'BANANAPHONE' },
-      ]);
+      expect(lastCall?.[8]).toEqual([{ name: 'muting', value: 'BANANAPHONE' }]);
+    });
+  });
+
+  describe('output schema override', () => {
+    const SCHEMA = '{"type":"object"}';
+
+    function streamReply() {
+      mockStreamChatResponse.mockReturnValue(
+        asyncIterableFrom([
+          createContentChunk('{}'),
+          createStopChunk(),
+          createArkFinalChunk({}),
+        ]),
+      );
+    }
+
+    it('forwards the override as a query annotation for openai-responses agents', async () => {
+      mockGetByName.mockResolvedValue({
+        executionEngine: { name: 'executor-openai-responses' },
+      });
+      streamReply();
+
+      const { result } = renderHook(
+        () => useChatSession({ name: 'schema-agent', type: 'agent' }),
+        { wrapper },
+      );
+
+      await waitFor(() => {
+        expect(result.current.supportsOutputSchema).toBe(true);
+      });
+
+      act(() => {
+        result.current.setOutputSchemaOverride(SCHEMA);
+      });
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+
+      const lastCall = mockStartStreamChatResponse.mock.calls.at(-1);
+      expect(lastCall?.[9]).toEqual({
+        'executor-openai-responses.ark.mckinsey.com/output-schema': SCHEMA,
+      });
+    });
+
+    it('sends no annotation when the override is empty', async () => {
+      mockGetByName.mockResolvedValue({
+        executionEngine: { name: 'executor-openai-responses' },
+      });
+      streamReply();
+
+      const { result } = renderHook(
+        () => useChatSession({ name: 'schema-agent', type: 'agent' }),
+        { wrapper },
+      );
+
+      await waitFor(() => {
+        expect(result.current.supportsOutputSchema).toBe(true);
+      });
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+
+      const lastCall = mockStartStreamChatResponse.mock.calls.at(-1);
+      expect(lastCall?.[9]).toBeUndefined();
+    });
+
+    it('does not support the override for other engines', async () => {
+      mockGetByName.mockResolvedValue({
+        executionEngine: { name: 'executor-langchain' },
+      });
+
+      const { result } = renderHook(
+        () => useChatSession({ name: 'other-agent', type: 'agent' }),
+        { wrapper },
+      );
+
+      await waitFor(() => {
+        expect(mockGetByName).toHaveBeenCalled();
+      });
+
+      expect(result.current.supportsOutputSchema).toBe(false);
+    });
+
+    it('does not send while the override is invalid', async () => {
+      mockGetByName.mockResolvedValue({
+        executionEngine: { name: 'executor-openai-responses' },
+      });
+
+      const { result } = renderHook(
+        () => useChatSession({ name: 'schema-agent', type: 'agent' }),
+        { wrapper },
+      );
+
+      await waitFor(() => {
+        expect(result.current.supportsOutputSchema).toBe(true);
+      });
+
+      act(() => {
+        result.current.setOutputSchemaOverride('{"type":');
+      });
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+
+      expect(mockStartStreamChatResponse).not.toHaveBeenCalled();
+      expect(mockSubmitChatQuery).not.toHaveBeenCalled();
+    });
+
+    it('detects openai-responses engines by their service annotation', async () => {
+      mockGetByName.mockResolvedValue({
+        executionEngine: { name: 'structured' },
+      });
+      mockEngineGetByName.mockResolvedValue({
+        name: 'structured',
+        annotations: {
+          'ark.mckinsey.com/service': 'executor-openai-responses',
+        },
+      });
+
+      const { result } = renderHook(
+        () => useChatSession({ name: 'schema-agent', type: 'agent' }),
+        { wrapper },
+      );
+
+      await waitFor(() => {
+        expect(result.current.supportsOutputSchema).toBe(true);
+      });
+    });
+
+    it('ignores the override when the agent has its own schema', async () => {
+      mockGetByName.mockResolvedValue({
+        executionEngine: { name: 'executor-openai-responses' },
+        annotations: {
+          'executor-openai-responses.ark.mckinsey.com/output-schema': SCHEMA,
+        },
+      });
+      streamReply();
+
+      const { result } = renderHook(
+        () => useChatSession({ name: 'schema-agent', type: 'agent' }),
+        { wrapper },
+      );
+
+      await waitFor(() => {
+        expect(result.current.hasOwnOutputSchema).toBe(true);
+      });
+
+      act(() => {
+        result.current.setOutputSchemaOverride('{"type":');
+      });
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+
+      const lastCall = mockStartStreamChatResponse.mock.calls.at(-1);
+      expect(lastCall?.[9]).toBeUndefined();
+    });
+
+    it('treats an engine-level schema as the agent own schema', async () => {
+      mockGetByName.mockResolvedValue({
+        executionEngine: { name: 'executor-openai-responses' },
+      });
+      mockEngineGetByName.mockResolvedValue({
+        name: 'executor-openai-responses',
+        annotations: {
+          'executor-openai-responses.ark.mckinsey.com/output-schema': SCHEMA,
+        },
+      });
+
+      const { result } = renderHook(
+        () => useChatSession({ name: 'schema-agent', type: 'agent' }),
+        { wrapper },
+      );
+
+      await waitFor(() => {
+        expect(result.current.hasOwnOutputSchema).toBe(true);
+      });
     });
   });
 

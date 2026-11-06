@@ -2,7 +2,6 @@ import { apiClient } from '@/lib/api/client';
 import type {
   MarketplaceFilters,
   MarketplaceItem,
-  MarketplaceItemDetail,
   MarketplaceResponse,
   MarketplaceSourceError,
 } from '@/lib/api/generated/marketplace-types';
@@ -117,27 +116,12 @@ const marketplaceService = {
     return { items, total: items.length, page: 1, pageSize: items.length, sourceErrors };
   },
 
-  async getMarketplaceItemById(
-    id: string,
-    namespace: string,
-  ): Promise<MarketplaceItemDetail> {
-    return await apiClient.get<MarketplaceItemDetail>(`/api/marketplace/${id}`, {
-      params: { namespace },
-    });
-  },
-
   async installMarketplaceItem(id: string, namespace: string): Promise<unknown> {
     return await apiClient.post(
       `/api/marketplace/${id}/install`,
       { mode: 'command' },
       { params: { namespace } },
     );
-  },
-
-  async uninstallMarketplaceItem(id: string, namespace: string): Promise<unknown> {
-    return await apiClient.delete(`/api/marketplace/${id}/install`, {
-      params: { namespace },
-    });
   },
 };
 

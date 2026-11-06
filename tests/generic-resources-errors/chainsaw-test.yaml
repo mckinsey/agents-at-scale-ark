@@ -1,0 +1,204 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: generic-resources-errors
+  labels:
+    requires-images: "true"
+spec:
+  description: >
+    #3781: the generic resources routes of ark-api must pass Kubernetes errors
+    through as HTTP errors. Deploys a real ark-api from this build's image and
+    checks that reads, writes and the six workflow lifecycle actions on missing
+    objects answer 404 or 409 with a JSON detail, never 200 or 204 with a
+    Kubernetes Status body, and that the lifecycle actions still work on a
+    workflow that exists.
+  timeouts:
+    apply: 120s
+    assert: 120s
+    exec: 180s
+
+  steps:
+  - name: install-argo-crds
+    try:
+    - script:
+        timeout: 300s
+        content: |
+          helm dependency update ../../services/argo-workflows/chart >/dev/null
+          helm template argo-workflows ../../services/argo-workflows/chart \
+            --namespace "$NAMESPACE" \
+            --set argo-workflows.singleNamespace=true \
+            --set argo-workflows.controller.replicas=0 \
+            --set argo-workflows.server.enabled=false \
+            --set argo-workflows.crds.full=false \
+            --set minio.enabled=false \
+            --set httpRoute.argo.enabled=false \
+            | kubectl apply -f -
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - assert:
+        resource:
+          apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata:
+            name: workflows.argoproj.io
+          status:
+            (conditions[?type == 'Established']):
+              - status: "True"
+
+  - name: install-ark-api
+    try:
+    - script:
+        timeout: 240s
+        content: |
+          helm upgrade --install ark-api ../../services/ark-api/chart \
+            --namespace "$NAMESPACE" \
+            ${ARK_API_IMAGE:+--set app.image.repository=${ARK_API_IMAGE}} \
+            ${ARK_API_IMAGE_TAG:+--set app.image.tag=${ARK_API_IMAGE_TAG}} \
+            --wait --timeout=180s
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - script:
+        content: |
+          kubectl -n $NAMESPACE get pods -o wide
+          kubectl -n $NAMESPACE logs -l app=ark-api --tail=200 || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    cleanup:
+    - script:
+        content: |
+          helm uninstall ark-api --namespace $NAMESPACE --wait --timeout=120s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: probe-pod
+    try:
+    - apply:
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: errors-curl
+          spec:
+            containers:
+              - name: curl
+                image: curlimages/curl:8.11.1
+                command: ["sleep", "300"]
+            restartPolicy: Never
+            terminationGracePeriodSeconds: 0
+    - wait:
+        apiVersion: v1
+        kind: Pod
+        name: errors-curl
+        timeout: 120s
+        for:
+          condition:
+            name: Ready
+            value: 'True'
+
+  - name: missing-objects-are-not-found
+    try:
+    - script:
+        timeout: 120s
+        content: |
+          set -eu
+          BASE_URL="http://ark-api.$NAMESPACE.svc.cluster.local/v1/resources"
+          call() {
+            kubectl exec errors-curl -n "$NAMESPACE" -- \
+              curl -s -o /tmp/body -w '%{http_code}' -X "$1" "$BASE_URL/$2" \
+              -H 'Content-Type: application/json' ${3:+-d "$3"}
+          }
+          body() { kubectl exec errors-curl -n "$NAMESPACE" -- cat /tmp/body; }
+          expect() {
+            CODE=$(call "$1" "$2" "${5:-}")
+            BODY=$(body)
+            echo "$1 $2 -> $CODE $BODY"
+            [ "$CODE" = "$3" ] || { echo "FAIL: expected $3"; exit 1; }
+            echo "$BODY" | jq -e '.kind != "Status"' >/dev/null || { echo "FAIL: Kubernetes Status in body"; exit 1; }
+            [ -z "$4" ] || [ "$(echo "$BODY" | jq -r .detail)" = "$4" ] || { echo "FAIL: expected detail '$4'"; exit 1; }
+          }
+
+          MISSING="Resource 'does-not-exist' not found in namespace $NAMESPACE"
+          expect GET "apis/ark.mckinsey.com/v1alpha1/Agent/does-not-exist?namespace=$NAMESPACE" 404 "$MISSING"
+          expect GET "apis/argoproj.io/v1alpha1/Workflow/does-not-exist?namespace=$NAMESPACE" 404 "$MISSING"
+          expect GET "apis/argoproj.io/v1alpha1/WorkflowTemplate/does-not-exist?namespace=$NAMESPACE" 404 "$MISSING"
+          expect DELETE "apis/ark.mckinsey.com/v1prealpha1/ExecutionEngine/does-not-exist?namespace=$NAMESPACE" 404 "$MISSING"
+
+          BEFORE=$(kubectl get workflows.argoproj.io -n "$NAMESPACE" --no-headers 2>/dev/null | wc -l)
+          for action in suspend resume stop terminate retry resubmit; do
+            expect PUT "apis/argoproj.io/v1alpha1/namespaces/$NAMESPACE/workflows/does-not-exist/$action" 404 \
+              "Workflow 'does-not-exist' not found in namespace $NAMESPACE"
+          done
+          AFTER=$(kubectl get workflows.argoproj.io -n "$NAMESPACE" --no-headers 2>/dev/null | wc -l)
+          [ "$BEFORE" = "$AFTER" ] || { echo "FAIL: workflow count changed from $BEFORE to $AFTER"; exit 1; }
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: writes-report-conflicts
+    try:
+    - script:
+        timeout: 120s
+        content: |
+          set -eu
+          BASE_URL="http://ark-api.$NAMESPACE.svc.cluster.local/v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate"
+          TEMPLATE='{"apiVersion":"argoproj.io/v1alpha1","kind":"WorkflowTemplate","metadata":{"name":"errors-wt"},"spec":{"entrypoint":"main","templates":[{"name":"main","container":{"image":"busybox","command":["echo","hi"]}}]}}'
+          status() {
+            kubectl exec errors-curl -n "$NAMESPACE" -- \
+              curl -s -o /dev/null -w '%{http_code}' -X "$1" "$BASE_URL$2?namespace=$NAMESPACE" \
+              -H 'Content-Type: application/json' ${3:+-d "$3"}
+          }
+          expect() {
+            CODE=$(status "$1" "$2" "${4:-}")
+            echo "$1 $2 -> $CODE"
+            [ "$CODE" = "$3" ] || { echo "FAIL: expected $3"; exit 1; }
+          }
+
+          expect POST "" 200 "$TEMPLATE"
+          expect POST "" 409 "$TEMPLATE"
+          expect DELETE /errors-wt 204
+          expect DELETE /errors-wt 404
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: lifecycle-actions-still-work
+    try:
+    - create:
+        file: manifests/a01-workflow.yaml
+    - script:
+        timeout: 120s
+        content: |
+          set -eu
+          BASE_URL="http://ark-api.$NAMESPACE.svc.cluster.local/v1/resources/apis/argoproj.io/v1alpha1/namespaces/$NAMESPACE/workflows/errors-wf"
+          status() {
+            kubectl exec errors-curl -n "$NAMESPACE" -- \
+              curl -s -o /dev/null -w '%{http_code}' -X PUT "$BASE_URL/$1"
+          }
+
+          CODE=$(status suspend)
+          echo "suspend -> $CODE"
+          [ "$CODE" = "200" ] || { echo "FAIL: expected 200"; exit 1; }
+          SUSPENDED=$(kubectl get workflows.argoproj.io errors-wf -n "$NAMESPACE" -o jsonpath='{.spec.suspend}')
+          [ "$SUSPENDED" = "true" ] || { echo "FAIL: spec.suspend is '$SUSPENDED'"; exit 1; }
+
+          CODE=$(status resubmit)
+          echo "resubmit -> $CODE"
+          [ "$CODE" = "200" ] || { echo "FAIL: expected 200"; exit 1; }
+          COUNT=$(kubectl get workflows.argoproj.io -n "$NAMESPACE" --no-headers | wc -l | tr -d ' ')
+          [ "$COUNT" = "2" ] || { echo "FAIL: expected 2 workflows after resubmit, got $COUNT"; exit 1; }
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - script:
+        content: |
+          kubectl -n $NAMESPACE get workflows.argoproj.io -o yaml || true
+          kubectl -n $NAMESPACE logs -l app=ark-api --tail=200 || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)

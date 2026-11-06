@@ -50,7 +50,7 @@ spec:
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `spec.address` | `ValueSource` | yes | Where the MCP server is reachable. Supports a direct `value`, or `valueFrom` with `serviceRef` (in-cluster service), `secretKeyRef`, `configMapKeyRef`, or `queryParameterRef`. Resolved value is published to `status.resolvedAddress`. |
-| `spec.transport` | enum (`http`, `sse`) | yes | Transport protocol. Defaults to `http`. |
+| `spec.transport` | enum (`http`, `sse`) | yes | Transport protocol. Defaults to `http` (Streamable HTTP). `sse` is the legacy HTTP+SSE transport, deprecated by the MCP specification; Ark still supports it for servers that do not support Streamable HTTP and returns a warning when it is used. |
 | `spec.description` | string | no | Human-readable description of the server. |
 | `spec.timeout` | duration | no | Maximum duration to establish a connection to this server, including the connection retry window. Defaults to `30s`. This does **not** bound tool calls — use `spec.toolCallTimeout` for that. |
 | `spec.toolCallTimeout` | duration | no | Maximum duration for each individual tool call to this server (`30s`, `5m`, `10m`), including any [transient error retries](#transient-error-retry). Raise it for long-running operations. When unset, a tool call is bounded only by the execution budget of the query that triggered it (`spec.timeout` on the Query). |

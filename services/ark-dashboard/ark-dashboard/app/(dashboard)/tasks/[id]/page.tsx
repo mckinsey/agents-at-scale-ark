@@ -13,6 +13,7 @@ import { NamespacedLink } from '@/components/namespaced-link';
 import { TaskStatus } from '@/components/sections/a2a-tasks-section/task-status';
 import { Button } from '@/components/ui/button';
 import { TruncatedTooltip } from '@/components/ui/truncated-tooltip';
+import { useListReturnHref } from '@/lib/hooks/use-list-return-href';
 import { useA2ATask } from '@/lib/services/a2a-tasks-hooks';
 import { formatTimestamp, simplifyDuration } from '@/lib/utils/time';
 
@@ -21,6 +22,7 @@ export default function A2ATaskPage() {
   const taskId = params.id as string;
 
   const { data: task, isLoading, error } = useA2ATask(taskId);
+  const tasksReturnHref = useListReturnHref('/tasks');
 
   const breadcrumb = (
     <DetailBreadcrumb
@@ -57,7 +59,7 @@ export default function A2ATaskPage() {
               {error instanceof Error ? error.message : String(error)}
             </p>
           )}
-          <NamespacedLink href="/tasks">
+          <NamespacedLink href={tasksReturnHref}>
             <Button variant="outline">Back to A2A tasks</Button>
           </NamespacedLink>
         </div>

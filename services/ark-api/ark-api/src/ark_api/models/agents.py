@@ -1,7 +1,7 @@
 """Agent CRD response models."""
 from typing import List, Dict, Optional, Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 from .common import AvailabilityStatus, PaginatedListResponse
 
@@ -107,6 +107,35 @@ class AgentOverride(BaseModel):
     labelSelector: Optional[AgentLabelSelector] = None
 
 
+def ensure_unique_header_names(headers: Optional[List[AgentHeader]]) -> Optional[List[AgentHeader]]:
+    """Reject header lists that repeat a name; HTTP header names are case-insensitive."""
+    if not headers:
+        return headers
+    seen = set()
+    for header in headers:
+        normalized = header.name.strip().lower()
+        if normalized in seen:
+            raise ValueError(f"duplicate header name: {header.name}")
+        seen.add(normalized)
+    return headers
+
+
+def _has_label_selector(selector: Optional[AgentLabelSelector]) -> bool:
+    return selector is not None and bool(selector.matchLabels or selector.matchExpressions)
+
+
+def ensure_unique_override_header_names(overrides: Optional[List[AgentOverride]]) -> Optional[List[AgentOverride]]:
+    """Apply header name uniqueness across model overrides that have no label selector."""
+    model_headers = [
+        header
+        for override in overrides or []
+        if override.resourceType == "model" and not _has_label_selector(override.labelSelector)
+        for header in override.headers
+    ]
+    ensure_unique_header_names(model_headers)
+    return overrides
+
+
 class Skill(BaseModel):
     """Skill configuration for an A2A agent."""
     id: str
@@ -143,6 +172,11 @@ class AgentCreateRequest(BaseModel):
     tools: Optional[List[AgentTool]] = None
     overrides: Optional[List[AgentOverride]] = None
 
+    @field_validator("overrides")
+    @classmethod
+    def validate_override_headers(cls, overrides: Optional[List[AgentOverride]]) -> Optional[List[AgentOverride]]:
+        return ensure_unique_override_header_names(overrides)
+
 
 class AgentUpdateRequest(BaseModel):
     """Request model for updating an agent."""
@@ -153,6 +187,15 @@ class AgentUpdateRequest(BaseModel):
     prompt: Optional[str] = None
     tools: Optional[List[AgentTool]] = None
     overrides: Optional[List[AgentOverride]] = None
+    annotations: Optional[Dict[str, Optional[str]]] = Field(
+        None,
+        description="Merged into the existing annotations; a null value removes the key. Only the openai-responses output-schema annotation is accepted.",
+    )
+
+    @field_validator("overrides")
+    @classmethod
+    def validate_override_headers(cls, overrides: Optional[List[AgentOverride]]) -> Optional[List[AgentOverride]]:
+        return ensure_unique_override_header_names(overrides)
 
 
 class AgentDetailResponse(BaseModel):

@@ -203,7 +203,7 @@ spec:
 EOF
 
 kubectl apply -f queries/team-test.yaml
-kubectl get query team-test -o jsonpath='{.status.responses}' | jq
+kubectl get query team-test -o jsonpath='{.status.response}' | jq
 ```
 
 ## Next Steps

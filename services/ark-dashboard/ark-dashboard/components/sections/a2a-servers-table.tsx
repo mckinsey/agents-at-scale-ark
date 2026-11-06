@@ -28,14 +28,37 @@ interface A2AServersTableProps {
 }
 
 const COL = {
-  name: 'w-[200px]',
-  address: 'w-[200px]',
-  statusMessage: 'w-[200px]',
-  status: 'w-[130px]',
-  action: 'w-[100px]',
+  name: 'w-[130px]',
+  address: 'w-[140px]',
+  statusMessage: 'w-[140px]',
+  protocol: 'w-[80px]',
+  version: 'w-[72px]',
+  streaming: 'w-[84px]',
+  skills: 'w-[60px]',
+  status: 'w-[116px]',
+  action: 'w-[88px]',
 };
 
 const EMPTY = '—';
+
+function formatStreaming(value?: boolean | null): string {
+  if (value === null || value === undefined) {
+    return EMPTY;
+  }
+  return value ? 'Yes' : 'No';
+}
+
+interface HeaderLabelProps {
+  readonly label: string;
+}
+
+function HeaderLabel({ label }: Readonly<HeaderLabelProps>) {
+  return (
+    <TruncatedTooltip label={label}>
+      <span className="block truncate">{label}</span>
+    </TruncatedTooltip>
+  );
+}
 
 interface TruncatedCellProps {
   readonly value?: string | null;
@@ -103,6 +126,18 @@ function A2AServerTableRow({
           className={cn(COL.statusMessage, 'relative z-10')}>
           <TruncatedCell value={server.status_message} href={detailHref} />
         </TableCell>
+        <TableCell size="small" className={cn(COL.protocol, 'relative z-10')}>
+          <TruncatedCell value={server.negotiated_protocol} href={detailHref} />
+        </TableCell>
+        <TableCell size="small" className={cn(COL.version, 'relative z-10')}>
+          <TruncatedCell value={server.card_version} href={detailHref} />
+        </TableCell>
+        <TableCell size="small" className={COL.streaming}>
+          {formatStreaming(server.streaming_supported)}
+        </TableCell>
+        <TableCell size="small" className={COL.skills}>
+          {server.skill_count ?? EMPTY}
+        </TableCell>
         <TableCell size="small" className={COL.status}>
           <A2AServerStatus ready={server.ready} />
         </TableCell>
@@ -149,21 +184,35 @@ export function A2AServersTable({
   return (
     <Table
       aria-label="A2A servers"
-      className="min-w-[1104px] table-fixed border-separate border-spacing-x-4 border-spacing-y-0">
+      className="min-w-[1120px] table-fixed border-separate border-spacing-x-2 border-spacing-y-0">
       <TableHeader>
         <TableRow>
           <TableHead size="small" className={COL.name}>
-            Name
+            <HeaderLabel label="Name" />
           </TableHead>
-          <TableHead size="small">Description</TableHead>
+          <TableHead size="small">
+            <HeaderLabel label="Description" />
+          </TableHead>
           <TableHead size="small" className={COL.address}>
-            Address
+            <HeaderLabel label="Address" />
           </TableHead>
           <TableHead size="small" className={COL.statusMessage}>
-            Status message
+            <HeaderLabel label="Status message" />
+          </TableHead>
+          <TableHead size="small" className={COL.protocol}>
+            <HeaderLabel label="Protocol" />
+          </TableHead>
+          <TableHead size="small" className={COL.version}>
+            <HeaderLabel label="Version" />
+          </TableHead>
+          <TableHead size="small" className={COL.streaming}>
+            <HeaderLabel label="Streaming" />
+          </TableHead>
+          <TableHead size="small" className={COL.skills}>
+            <HeaderLabel label="Skills" />
           </TableHead>
           <TableHead size="small" className={COL.status}>
-            Status
+            <HeaderLabel label="Status" />
           </TableHead>
           <TableHead size="small" className={COL.action}>
             <span className="sr-only">Action</span>

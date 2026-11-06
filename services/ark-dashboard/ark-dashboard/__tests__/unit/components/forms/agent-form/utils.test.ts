@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { agentParametersChanged } from '@/components/forms/agent-form/utils';
+import {
+  agentParametersChanged,
+  buildAgentOverrides,
+  getModelOverrideHeaders,
+} from '@/components/forms/agent-form/utils';
 import type { Parameter } from '@/components/ui/parameter-editor';
 
 const queryParam = (overrides: Partial<Parameter> = {}): Parameter => ({
@@ -59,5 +63,39 @@ describe('agentParametersChanged', () => {
         [queryParam({ overrideQueryName: false })],
       ),
     ).toBe(true);
+  });
+});
+
+describe('agent model header overrides', () => {
+  const header = (name: string) => ({ name, value: { value: 'v' } });
+  const existing = [
+    { resourceType: 'model', headers: [header('A')] },
+    { resourceType: 'model', headers: [header('B')] },
+    {
+      resourceType: 'model',
+      labelSelector: { matchLabels: { tier: 'premium' } },
+      headers: [header('C')],
+    },
+    { resourceType: 'mcpserver', headers: [header('D')] },
+  ];
+
+  it('edits only selector-less model overrides', () => {
+    expect(getModelOverrideHeaders(existing)).toEqual([
+      header('A'),
+      header('B'),
+    ]);
+    expect(getModelOverrideHeaders(undefined)).toEqual([]);
+  });
+
+  it('replaces editable overrides and keeps the rest', () => {
+    expect(buildAgentOverrides(existing, [header('E')])).toEqual([
+      { resourceType: 'model', headers: [header('E')] },
+      existing[2],
+      existing[3],
+    ]);
+    expect(buildAgentOverrides(existing, [])).toEqual([
+      existing[2],
+      existing[3],
+    ]);
   });
 });

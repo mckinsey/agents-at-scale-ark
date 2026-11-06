@@ -61,6 +61,8 @@ spec:
 
 The controller resolves the address and records the result in `status.lastResolvedAddress`. Consumers (the completions executor, the Query cleanup finalizer) read the resolved address, falling back to `spec.address` if the status field is empty.
 
+A `Memory` backed by ark-broker must point at the broker in its own namespace. The broker does not separate data by namespace, so a `Memory` that reaches another namespace's broker mixes conversation history across the two namespaces. See [Broker storage isolation](/operations-guide/tenant-namespace-management#broker-storage-isolation).
+
 ## Using memory from a query
 
 A query selects a `Memory` via `spec.memory.name`. If a `Memory` named `default` exists in the namespace, it is used automatically for queries that don't name one — unless `ArkConfig` names a different one (see below). Memory works with all query target types — agents, models, and tools. When a `conversationId` is provided, messages are persisted to the memory chain regardless of the target type.

@@ -1,7 +1,6 @@
 'use client';
 
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useId, useMemo } from 'react';
+import { useEffect, useId, useMemo } from 'react';
 
 import { ResourcePageHeader } from '@/components/common/resource-page-header';
 import { SortableColumnHeader } from '@/components/common/sortable-column-header';
@@ -36,12 +35,14 @@ import {
 } from '@/components/ui/table';
 import { TruncatedTooltip } from '@/components/ui/truncated-tooltip';
 import { DOCS_URLS } from '@/lib/constants/docs';
+import { useUrlState } from '@/lib/hooks/use-url-state';
 import { useValueSort } from '@/lib/hooks/use-value-sort';
 import {
   useGetAllMemoryMessages,
   useGetConversations,
   useGetMemoryResources,
 } from '@/lib/services/memory-hooks';
+import { parsePage, parsePageSize } from '@/lib/utils/pagination';
 import { formatAge } from '@/lib/utils/time';
 
 import { MemoryDeleteActions } from './delete-memory';
@@ -67,6 +68,19 @@ const getSequence = (message: { sequence?: number | null }) =>
 
 /** URL query parameters the filters are stored in. */
 type MemoryFilterParam = 'memory' | 'conversationId' | 'queryId';
+
+// A filter left at "all" is no filter, and is dropped rather than carried.
+function parseFilterValue(raw: string): string {
+  return raw === ALL ? '' : raw;
+}
+
+const URL_STATE_SPEC = {
+  page: { default: DEFAULT_PAGE, parse: parsePage },
+  limit: { default: DEFAULT_LIMIT, parse: parsePageSize },
+  memory: { default: '', parse: parseFilterValue },
+  conversationId: { default: '', parse: parseFilterValue },
+  queryId: { default: '', parse: parseFilterValue },
+};
 
 interface FilterOption {
   readonly value: string;
@@ -139,26 +153,14 @@ function FilterCombobox({
 }
 
 export function MemorySection() {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-
-  const readPositiveInt = (key: string, fallback: number) => {
-    const parsed = Number.parseInt(searchParams.get(key) ?? '', 10);
-    return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
-  };
-
-  const readFilter = (key: MemoryFilterParam) => {
-    const value = searchParams.get(key);
-    return value && value !== ALL ? value : undefined;
-  };
+  const [urlState, setUrlState] = useUrlState(URL_STATE_SPEC);
 
   const filters = {
-    page: readPositiveInt('page', DEFAULT_PAGE),
-    limit: readPositiveInt('limit', DEFAULT_LIMIT),
-    memoryName: readFilter('memory'),
-    conversationId: readFilter('conversationId'),
-    queryId: readFilter('queryId'),
+    page: urlState.page,
+    limit: urlState.limit,
+    memoryName: urlState.memory || undefined,
+    conversationId: urlState.conversationId || undefined,
+    queryId: urlState.queryId || undefined,
   };
 
   const memoryResources = useGetMemoryResources();
@@ -223,54 +225,34 @@ export function MemorySection() {
     startIndex + filters.limit,
   );
 
-  const updateUrlParams = useCallback(
-    (params: Record<string, string | number | undefined>) => {
-      const newParams = new URLSearchParams(searchParams.toString());
+  // The page is restorable from a bookmark, from browser back and from the
+  // Settings return, so a value past the end has to be corrected rather than
+  // rendering an empty slice.
+  useEffect(() => {
+    if (memoryMessages.isPending) return;
+    if (filters.page > totalPages) {
+      setUrlState({ page: DEFAULT_PAGE });
+    }
+  }, [memoryMessages.isPending, filters.page, totalPages, setUrlState]);
 
-      Object.entries(params).forEach(([key, value]) => {
-        if (value === undefined || value === null || value === '') {
-          newParams.delete(key);
-        } else {
-          newParams.set(key, String(value));
-        }
-      });
-
-      const newUrl =
-        pathname + (newParams.toString() ? `?${newParams.toString()}` : '');
-      router.push(newUrl, { scroll: false });
-    },
-    [pathname, router, searchParams],
-  );
-
+  // Changing any of these resets the page, so none of them sets it explicitly.
   const handleFilterChange = (
     key: MemoryFilterParam,
     value: string | undefined,
   ) => {
-    updateUrlParams({
-      [key]: value === ALL ? undefined : value,
-      page: DEFAULT_PAGE,
-    });
+    setUrlState({ [key]: value === ALL ? '' : (value ?? '') });
   };
 
   const clearFilters = () => {
-    updateUrlParams({
-      page: DEFAULT_PAGE,
-      limit: filters.limit,
-      memory: undefined,
-      conversationId: undefined,
-      queryId: undefined,
-    });
+    setUrlState({ memory: '', conversationId: '', queryId: '' });
   };
 
   const handlePageChange = (newPage: number) => {
-    updateUrlParams({ page: newPage });
+    setUrlState({ page: newPage });
   };
 
   const handleItemsPerPageChange = (newLimit: number) => {
-    updateUrlParams({
-      limit: newLimit,
-      page: DEFAULT_PAGE,
-    });
+    setUrlState({ limit: newLimit });
   };
 
   const hasActiveFilters = Boolean(

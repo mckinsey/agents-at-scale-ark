@@ -45,3 +45,36 @@ XRAY-1100109 - CVE-2023-54404 (zod@4.4.3)
 - Verified against zod@4.4.3: parsing a 5,000,000-element array with the broker's schema succeeds with 0 issues and about 43MB heap growth; the control (z.array(z.string()) with failing elements) collects 2,500,000 issues and about 1.8GB heap growth.
 - ark-dashboard uses Zod only for client-side form validation and a marketplace install route; ark-cli and docs pull Zod transitively (MCP SDK, nextra) and do not validate attacker-controlled arrays.
 - Remove this entry once a patched Zod is released, or if any ark-broker schema gains an array with a validated element type.
+
+XRAY-1146824 - CVE-2026-112366 (picomatch@4.0.4)
+- ReDoS in picomatch's analyzeRepeatedExtglob: a single-branch repeated extglob pattern (e.g. +(*)) triggers exponential backtracking against short crafted strings, blocking the event loop.
+- No fix available: 4.0.7 is the latest published release and the advisory states the vulnerability affects versions "through 4.0.7".
+- ark-broker / ark-dashboard / ark-landing-page: picomatch is dev-only, pulled in transitively via tinyglobby/micromatch/jest/lint-staged (build and test tooling); each Dockerfile runs `npm ci --only=production`, excluding it from the deployed container.
+- ark-cli: picomatch is a direct dependency in package.json, but nothing in tools/ark-cli/src requires() or imports it — no reachable code path accepts attacker-controlled glob input through this package.
+- docs: picomatch is a devDependency and a version override (forcing a consistent resolved version across the tree), pulled in transitively via tinyglobby for build-time globbing; docs/next.config.mjs sets `output: 'export'`, so the site ships as a static build with no Node.js server evaluating globs against external input at request time.
+- Remove this entry once picomatch publishes a release patching analyzeRepeatedExtglob.
+
+XRAY-1104189 - CVE-2026-104056 (authlib@1.8.0)
+- OIDC discovery metadata is cached without issuer-origin validation, so a poisoned discovery response can redirect the auth endpoints to attacker-controlled values. The advisory states Authlib "1.7.2 and below" is affected.
+- FALSE POSITIVE: Ark ships authlib 1.8.0 (services/ark-mcp), the patched release. authlib is transitive via fastmcp; pyproject pins constraint-dependencies = ["authlib>=1.8.0"] so the floor cannot regress. Xray's "fixed" metadata omits 1.8.0 and flags it anyway, the same defect as nanoid XRAY-1051070.
+- Verified independently of the advisory text: OSV reports zero known vulnerabilities for authlib 1.8.0, and 1.8.0 (released 2026-08-30) is the latest version on PyPI — there is no higher release to upgrade to.
+- Remove this entry once Xray corrects its fixed-version metadata, or a newer patched authlib is published.
+
+XRAY-1152418 - GHSA-95fj-3fxw-g62g (pgx require_auth / channel_binding bypass)
+- In pgx v5.9.0 through v5.11.0, a rogue or man-in-the-middle PostgreSQL server could skip AuthenticationOk and bypass require_auth and channel_binding=require when the server identity is not verified via TLS.
+- FALSE POSITIVE: Ark ships pgx v5.12.0 (ark/go.mod), the patched release per the upstream CHANGELOG. The GHSA advisory lists the affected range as ">= 5.9.0" with no patched_versions, so Xray flags every release including the fixed one.
+- Verified at source: pgx v5.12.0 pgconn/pgconn.go rejects the connection with "received ReadyForQuery before AuthenticationOk" and enforces required channel binding before accepting it.
+- Remove this entry once Xray / the GHSA advisory record v5.12.0 as the patched version.
+
+XRAY-1152420 - GHSA-j38q-h3ph-jjpq (pgx SQL injection in simple-protocol batches)
+- In pgx v5 before v5.12.0, SendBatch with the non-default simple protocol could execute arbitrary SQL when a queued query ends in a `--` comment without a newline and the next query has an attacker-controlled string argument.
+- FALSE POSITIVE: Ark ships pgx v5.12.0 (ark/go.mod), the patched release per the upstream CHANGELOG. The GHSA advisory lists the affected range as ">= 5.0.0" with no patched_versions, so Xray flags every release including the fixed one.
+- Verified at source: pgx v5.12.0 conn.go separates batched simple-protocol queries with a newline, ending any trailing line comment.
+- Not reachable in Ark regardless: the operator imports only pgconn and pgproto3 (internal/storage/postgresql, WAL replication and LISTEN/NOTIFY) and never calls SendBatch.
+- Remove this entry once Xray / the GHSA advisory record v5.12.0 as the patched version.
+
+XRAY-1156947 - CVE-2026-122146 (fflate unzipSync memory corruption)
+- fflate up to 0.8.3 can corrupt memory in unzipSync when given a crafted archive.
+- No fix available: 0.8.3 is the latest published release.
+- ark-dashboard: fflate is dev-only, pulled in via @vitest/ui (devDependency, used by `npm run test:ui`). The Dockerfile runner stage copies only .next/standalone and .next/static, so test tooling never ships in the container.
+- Remove this entry once fflate publishes a patched release.

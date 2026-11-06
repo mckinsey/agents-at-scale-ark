@@ -43,6 +43,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { WorkflowDagViewer } from '@/components/workflow-dag-viewer';
+import { useListReturnHref } from '@/lib/hooks/use-list-return-href';
 import { workflowTemplatesService } from '@/lib/services/workflow-templates';
 import { parseWorkflowParameters } from '@/lib/utils/parse-workflow-parameters';
 import { validateWorkflowYaml } from '@/lib/utils/validate-workflow-yaml';
@@ -67,6 +68,8 @@ interface WorkflowStudioProps {
   initialName?: string;
   initialTitle?: string;
   initialDescription?: string;
+  canRun?: boolean;
+  canDelete?: boolean;
 }
 
 interface EditMetaDialogProps {
@@ -251,6 +254,8 @@ export function WorkflowStudio({
   initialName,
   initialTitle,
   initialDescription,
+  canRun = true,
+  canDelete = true,
 }: Readonly<WorkflowStudioProps>) {
   const studio = useWorkflowStudio({
     mode,
@@ -260,6 +265,7 @@ export function WorkflowStudio({
   });
   const gate = useAuthorAgentGate();
   const { namespace, readOnlyMode } = useNamespace();
+  const templatesReturnHref = useListReturnHref('/workflow-templates');
   const chatSessionId = studio.workflowName
     ? `argo-make-${namespace}-${studio.workflowName}`
     : undefined;
@@ -350,8 +356,8 @@ export function WorkflowStudio({
 
   const persisted =
     studio.mode === 'edit' || studio.lastSavedYaml.trim() !== '';
-  const canRun =
-    persisted && !studio.isDirty && !studio.building && !readOnlyMode;
+  const runEnabled =
+    persisted && !studio.isDirty && !studio.building && !readOnlyMode && canRun;
   const runParameters = useMemo(
     () => parseWorkflowParameters(studio.draftYaml),
     [studio.draftYaml],
@@ -388,7 +394,7 @@ export function WorkflowStudio({
         <div className="flex items-center justify-between gap-4 px-6 pt-4">
           <div className="text-fg-secondary flex min-w-0 items-center gap-1 text-sm">
             <NamespacedLink
-              href="/workflow-templates"
+              href={templatesReturnHref}
               className="hover:text-fg-primary flex items-center gap-1">
               <ChevronLeft className="h-4 w-4" />
               Workflow Templates
@@ -415,7 +421,24 @@ export function WorkflowStudio({
               data-testid="studio-save">
               {persisted ? 'Save changes' : 'Create'}
             </Button>
-            {persisted && (
+            {persisted && !canRun && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-flex" tabIndex={0}>
+                      <Button type="button" disabled data-testid="studio-run">
+                        <PlayArrow className="mr-2 h-4 w-4" />
+                        Run workflow
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    You do not have permission to run workflows
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+            {persisted && canRun && (
               <RunWorkflowDialog
                 templateName={studio.workflowName}
                 parameters={runParameters}
@@ -423,7 +446,7 @@ export function WorkflowStudio({
                 trigger={
                   <Button
                     type="button"
-                    disabled={!canRun}
+                    disabled={!runEnabled}
                     data-testid="studio-run">
                     <PlayArrow className="mr-2 h-4 w-4" />
                     Run workflow
@@ -480,6 +503,7 @@ export function WorkflowStudio({
             <StudioHeaderActions
               workflowName={studio.workflowName}
               persisted={persisted}
+              canDelete={canDelete}
             />
           </div>
         </div>

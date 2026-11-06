@@ -43,8 +43,10 @@ export function SettingsSidebar({ activePage }: SettingsSidebarProps) {
     ),
   }));
 
-  // settingsEntryUrl is captured from the in-app location the user came from,
-  // so it may already carry a namespace query; push merges params and won't double it.
+  // settingsEntryUrl is the in-app URL the user came from, including that
+  // screen's own filters, sorting and paging. The namespace is stripped when it
+  // is captured, so push supplies the active one rather than restoring a stale
+  // namespace from the entry point.
   const handleClose = () => {
     push(settingsEntryUrl ?? '/');
   };

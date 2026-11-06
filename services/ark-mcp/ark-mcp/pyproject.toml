@@ -81,3 +81,8 @@ testpaths = [
 
 [tool.uv.sources]
 ark-sdk = { path = "ark_sdk-0.1.67-py3-none-any.whl" }
+
+[tool.uv]
+# Security floor: authlib <=1.7.2 is affected by CVE-2026-104056 (XRAY-1104189).
+# authlib is pulled transitively via fastmcp; pin the minimum to the patched release.
+constraint-dependencies = ["authlib>=1.8.0"]

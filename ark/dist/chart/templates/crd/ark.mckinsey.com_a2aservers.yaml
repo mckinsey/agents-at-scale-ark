@@ -37,6 +37,22 @@ spec:
       jsonPath: .status.lastResolvedEndpoint
       name: Endpoint
       type: string
+    - description: A2A protocol version negotiated during discovery
+      jsonPath: .status.negotiatedProtocol
+      name: Protocol
+      type: string
+    - description: Agent version declared in the agent card
+      jsonPath: .status.cardVersion
+      name: Version
+      type: string
+    - description: Whether the agent card declares streaming support
+      jsonPath: .status.streamingSupported
+      name: Streaming
+      type: boolean
+    - description: Number of skills declared in the agent card
+      jsonPath: .status.skillCount
+      name: Skills
+      type: integer
     - description: Age
       jsonPath: .metadata.creationTimestamp
       name: Age
@@ -265,6 +281,15 @@ spec:
             type: object
           status:
             properties:
+              cardUrl:
+                description: CardURL is the URL the agent card declares for A2A requests
+                maxLength: 2048
+                type: string
+              cardVersion:
+                description: CardVersion is the agent version declared in the agent
+                  card
+                maxLength: 256
+                type: string
               conditions:
                 description: Conditions represent the latest available observations
                   of the A2A server's state
@@ -333,11 +358,24 @@ spec:
                   LastResolvedAddress unless spec.endpointResolution selects the agent
                   card URL and that URL is accepted.
                 type: string
+              negotiatedProtocol:
+                description: NegotiatedProtocol is the A2A protocol version of the
+                  agent card endpoint that answered discovery (v0.3.x or v0.2.x)
+                type: string
               rejectedEndpoint:
                 description: |-
                   RejectedEndpoint records an agent card URL that was not accepted, so the
                   requests continue to go to LastResolvedAddress.
                 type: string
+              skillCount:
+                description: SkillCount is the number of skills declared in the agent
+                  card
+                format: int32
+                type: integer
+              streamingSupported:
+                description: StreamingSupported reports whether the agent card declares
+                  streaming support
+                type: boolean
             type: object
         type: object
     served: true

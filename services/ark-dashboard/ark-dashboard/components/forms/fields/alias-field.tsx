@@ -84,6 +84,7 @@ export function AliasField({
         items={options}
         value={value || null}
         onValueChange={(next: string | null) => onChange(next ?? '')}
+        onInputValueChange={(next: string) => onChange(next)}
         filter={(item: string, query: string) =>
           item.toLowerCase().includes(query.toLowerCase())
         }

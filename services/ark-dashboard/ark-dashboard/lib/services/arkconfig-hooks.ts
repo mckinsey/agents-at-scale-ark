@@ -5,13 +5,9 @@ import {
   type ArkConfigUpdateRequest,
   arkConfigService,
 } from './arkconfig';
+import { getErrorMessage } from './resource-error-message';
 
 const ARK_CONFIG_KEY = ['arkconfig'] as const;
-
-const getErrorMessage = (error: unknown): string => {
-  if (error instanceof Error) return error.message;
-  return 'An unexpected error occurred';
-};
 
 export const useArkConfig = () => {
   return useQuery({

@@ -3,7 +3,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { components } from '@/lib/api/generated/types';
-import { agentsService, teamsService, toolsService } from '@/lib/services';
+import {
+  agentsService,
+  executionEnginesService,
+  teamsService,
+  toolsService,
+} from '@/lib/services';
+import { useGetAgent } from '@/lib/services/agents-hooks';
 import { extractAgentRequiredParams } from '@/lib/utils/query-parameters';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
@@ -42,6 +48,9 @@ interface UseAgentQueryParametersResult {
   missingParameters: string[];
   toApiParameters: () => ApiQueryParameter[] | undefined;
   engineToolWarning: string | null;
+  executionEngineName: string | null;
+  executionEngineAnnotations: Record<string, string> | null;
+  agentAnnotations: Record<string, string> | null;
 }
 
 function stripPrefix(name: string): string {
@@ -118,6 +127,15 @@ export function useAgentQueryParameters(
   const [engineToolWarning, setEngineToolWarning] = useState<string | null>(
     null,
   );
+  const [executionEngineName, setExecutionEngineName] = useState<string | null>(
+    null,
+  );
+  const [executionEngineAnnotations, setExecutionEngineAnnotations] =
+    useState<Record<string, string> | null>(null);
+  const [agentAnnotations, setAgentAnnotations] = useState<Record<
+    string,
+    string
+  > | null>(null);
   const rowIdCounter = useRef(0);
 
   const createRowId = useCallback(() => {
@@ -125,75 +143,90 @@ export function useAgentQueryParameters(
     return `param-row-${rowIdCounter.current}`;
   }, []);
 
+  const isSupportedType =
+    !participantType ||
+    participantType === 'agent' ||
+    participantType === 'team';
+  const agentName =
+    participantName && isSupportedType && !isTeam
+      ? stripPrefix(participantName)
+      : undefined;
+  const { data: agentDetail, isError: isAgentError } = useGetAgent(agentName);
+
   useEffect(() => {
-    if (
-      !participantName ||
-      (participantType && participantType !== 'agent' && participantType !== 'team')
-    ) {
-      setAvailableParameters([]);
-      setTeamAgents([]);
-      setRows([]);
-      setEngineToolWarning(null);
+    setRows([]);
+    setTeamAgents([]);
+    setAvailableParameters([]);
+    setEngineToolWarning(null);
+    setExecutionEngineName(null);
+    setExecutionEngineAnnotations(null);
+    setAgentAnnotations(null);
+
+    if (!participantName || !isTeam) {
       return;
     }
 
     let cancelled = false;
-
-    if (participantType === 'team') {
-      const targetName = stripPrefix(participantName);
-      teamsService
-        .getByName(namespace, targetName)
-        .then(async team => {
-          // Nested team members are not expanded for now; only agent members.
-          const agentMembers = (team?.members || []).filter(
-            member => member.type === 'agent',
-          );
-          const resolved = await Promise.all(
-            agentMembers.map(member =>
-              resolveTeamMemberParameters(namespace, member),
-            ),
-          );
-          if (cancelled) return;
-          setTeamAgents(resolved.filter(entry => entry.parameters.length > 0));
-          setAvailableParameters([]);
-          setRows([]);
-          setEngineToolWarning(null);
-        })
-        .catch(() => {
-          if (cancelled) return;
-          setTeamAgents([]);
-          setAvailableParameters([]);
-          setRows([]);
-          setEngineToolWarning(null);
-        });
-      return () => {
-        cancelled = true;
-      };
-    }
-
     const targetName = stripPrefix(participantName);
-    agentsService
+    teamsService
       .getByName(namespace, targetName)
-      .then(async agent => {
+      .then(async team => {
+        // Nested team members are not expanded for now; only agent members.
+        const agentMembers = (team?.members || []).filter(
+          member => member.type === 'agent',
+        );
+        const resolved = await Promise.all(
+          agentMembers.map(member =>
+            resolveTeamMemberParameters(namespace, member),
+          ),
+        );
         if (cancelled) return;
-        setAvailableParameters(extractAgentRequiredParams(agent?.parameters));
-        setTeamAgents([]);
-        setRows([]);
-        const warning = await deriveEngineToolWarning(namespace, agent);
-        if (cancelled) return;
-        setEngineToolWarning(warning);
+        setTeamAgents(resolved.filter(entry => entry.parameters.length > 0));
       })
       .catch(() => {
         if (cancelled) return;
-        setAvailableParameters([]);
         setTeamAgents([]);
-        setRows([]);
-        setEngineToolWarning(null);
       });
     return () => {
       cancelled = true;
     };
-  }, [namespace, participantName, participantType]);
+  }, [namespace, participantName, isTeam]);
+
+  useEffect(() => {
+    if (!agentName || isAgentError || !agentDetail) {
+      setAvailableParameters([]);
+      setEngineToolWarning(null);
+      setExecutionEngineName(null);
+      setExecutionEngineAnnotations(null);
+      setAgentAnnotations(null);
+      return;
+    }
+
+    let cancelled = false;
+    setAvailableParameters(extractAgentRequiredParams(agentDetail.parameters));
+    const engineName = agentDetail.executionEngine?.name ?? null;
+    setExecutionEngineName(engineName);
+    setAgentAnnotations(agentDetail.annotations ?? null);
+    Promise.all([
+      deriveEngineToolWarning(namespace, agentDetail),
+      engineName && engineName !== BUILT_IN_A2A_ENGINE
+        ? executionEnginesService.getByName(namespace, engineName)
+        : null,
+    ])
+      .then(([warning, engine]) => {
+        if (cancelled) return;
+        setEngineToolWarning(warning);
+        setExecutionEngineAnnotations(engine?.annotations ?? null);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setEngineToolWarning(null);
+        setExecutionEngineAnnotations(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [namespace, agentName, agentDetail, isAgentError]);
 
   // Total variable slots a user can fill: one row per variable for agents, and
   // one row per (agent, variable) pair for teams.
@@ -282,5 +315,8 @@ export function useAgentQueryParameters(
     missingParameters,
     toApiParameters,
     engineToolWarning,
+    executionEngineName,
+    executionEngineAnnotations,
+    agentAnnotations,
   };
 }

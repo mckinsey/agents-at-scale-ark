@@ -5,6 +5,7 @@ from kubernetes_asyncio import client
 from ark_sdk.k8s import create_api_client
 
 from ark_api.models.system_info import SystemInfo
+from . import argo_server
 from .exceptions import handle_k8s_errors
 
 
@@ -25,5 +26,6 @@ async def get_system_info() -> SystemInfo:
         
         return SystemInfo(
             kubernetes_version=version_info.git_version,
-            system_version=f"v{ark_api_version}" # the k8s version has a leading v, add here for consistency
+            system_version=f"v{ark_api_version}", # the k8s version has a leading v, add here for consistency
+            argo_server_configured=bool(argo_server.get_argo_server_url()),
         )

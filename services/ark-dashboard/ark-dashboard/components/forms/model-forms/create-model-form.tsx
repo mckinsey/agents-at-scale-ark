@@ -5,10 +5,12 @@ import { useCallback, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 
 import { DetailBreadcrumb } from '@/components/common/detail-breadcrumb';
+import { useCustomHeaderRows } from '@/components/forms/shared/custom-header-rows';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { TrackedButton } from '@/components/ui/tracked-button';
+import { useListReturnHref } from '@/lib/hooks/use-list-return-href';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { useCreateModel } from '@/lib/services/models-hooks';
 import { useNamespace } from '@/providers/NamespaceProvider';
@@ -17,7 +19,7 @@ import { ModelConfiguratorForm } from './model-configuration-form';
 import { ModelConfigurationFormContext } from './model-configuration-form-context';
 import type { FormValues } from './schema';
 import { schema } from './schema';
-import { createConfig, getResetValues } from './utils';
+import { createConfig, getResetValues, providerSupportsHeaders } from './utils';
 
 const formId = 'create-model-form';
 
@@ -28,6 +30,7 @@ type CreateModelFormProps = {
 export function CreateModelForm({ defaultName }: CreateModelFormProps) {
   const { push } = useNamespacedNavigation();
   const { readOnlyMode, namespace } = useNamespace();
+  const modelsReturnHref = useListReturnHref('/models');
   const form = useForm<FormValues>({
     mode: 'onTouched',
     resolver: zodResolver(schema),
@@ -41,6 +44,7 @@ export function CreateModelForm({ defaultName }: CreateModelFormProps) {
   });
 
   const provider = form.watch('provider');
+  const headerRows = useCustomHeaderRows();
 
   const handleSuccess = useCallback(() => {
     push('/models');
@@ -57,7 +61,13 @@ export function CreateModelForm({ defaultName }: CreateModelFormProps) {
   }, [provider]);
 
   const onSubmit = (formValues: FormValues) => {
-    const config = createConfig(formValues);
+    const headers = providerSupportsHeaders(formValues.provider)
+      ? headerRows.validate()
+      : [];
+    if (!headers) {
+      return;
+    }
+    const config = createConfig(formValues, {}, headers);
     mutate({
       name: formValues.name,
       provider: formValues.provider,
@@ -74,6 +84,7 @@ export function CreateModelForm({ defaultName }: CreateModelFormProps) {
         provider,
         onSubmit,
         isSubmitPending: isPending,
+        headerRows,
       }}>
       <div className="content-shell flex min-h-0 w-full flex-1 flex-col gap-5 overflow-hidden">
         <header className="flex flex-none flex-col gap-4">
@@ -84,7 +95,7 @@ export function CreateModelForm({ defaultName }: CreateModelFormProps) {
               current="New model"
             />
             <div className="flex items-center gap-2">
-              <NamespacedLink href="/models">
+              <NamespacedLink href={modelsReturnHref}>
                 <Button variant="outline">Cancel</Button>
               </NamespacedLink>
               <TrackedButton

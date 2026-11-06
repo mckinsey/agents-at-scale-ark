@@ -1,0 +1,28 @@
+{{- $retention := "7776000" }}
+{{- $interval := "3600" }}
+{{- $readOnly := "false" }}
+{{- range .Values.app.env }}
+{{- if eq .name "API_KEY_RETENTION_SECONDS" }}{{ $retention = toString .value }}{{ end }}
+{{- if eq .name "API_KEY_REAPER_INTERVAL_SECONDS" }}{{ $interval = toString .value }}{{ end }}
+{{- if eq .name "READ_ONLY_MODE" }}{{ $readOnly = toString .value }}{{ end }}
+{{- end }}
+ark-api is installed in namespace {{ .Release.Namespace }}.
+{{- if eq $readOnly "true" }}
+
+READ_ONLY_MODE is on, so revoked and expired API keys are not deleted.
+{{- else if eq $retention "0" }}
+
+API key retention is off: revoked and expired API keys are kept indefinitely.
+{{- else }}
+{{- $seconds := atoi $retention }}
+
+WARNING: revoked and expired API keys are permanently deleted.
+
+ark-api deletes the Secret of every API key that was revoked or expired more
+than {{ if ge $seconds 86400 }}{{ div $seconds 86400 }} days{{ else }}{{ $seconds }} seconds{{ end }} ago. It checks at startup and then {{ if eq $interval "3600" }}every hour{{ else }}every {{ $interval }} seconds{{ end }}.
+The first start after upgrading deletes every key already past that age,
+together with its creator and last-use metadata. This cannot be undone.
+
+To keep them, set API_KEY_RETENTION_SECONDS to "0" in app.env and upgrade again.
+See https://mckinsey.github.io/agents-at-scale-ark/reference/upgrading
+{{- end }}

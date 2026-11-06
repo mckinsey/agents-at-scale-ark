@@ -59,7 +59,11 @@ def a2a_server_to_response(a2a_server: dict) -> A2AServerResponse:
         annotations=metadata.get("annotations"),
         ready=ready,
         discovering=discovering,
-        status_message=status_message
+        status_message=status_message,
+        negotiated_protocol=status.get("negotiatedProtocol"),
+        card_version=status.get("cardVersion"),
+        streaming_supported=status.get("streamingSupported"),
+        skill_count=status.get("skillCount"),
     )
 
 

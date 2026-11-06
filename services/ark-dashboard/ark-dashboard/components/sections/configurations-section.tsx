@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 
 import { ResourcePageHeader } from '@/components/common/resource-page-header';
 import { Tune } from '@/components/icons';
@@ -18,6 +18,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { DOCS_URLS } from '@/lib/constants/docs';
 import { useDelayedLoading } from '@/lib/hooks';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
+import { SEARCH_DEBOUNCE_MS, useUrlState } from '@/lib/hooks/use-url-state';
 import {
   useDeleteConfiguration,
   useGetAllConfigurations,
@@ -47,17 +48,21 @@ function ConfigurationsSkeleton() {
   );
 }
 
+const URL_STATE_SPEC = {
+  q: { default: '', debounceMs: SEARCH_DEBOUNCE_MS },
+};
+
 export function ConfigurationsSection() {
   const { readOnlyMode } = useNamespace();
   const { push } = useNamespacedNavigation();
-  const [searchQuery, setSearchQuery] = useState('');
+  const [filters, setFilters] = useUrlState(URL_STATE_SPEC);
 
   const { data: configurations = [], isLoading } = useGetAllConfigurations();
   const deleteConfiguration = useDeleteConfiguration();
   const showLoading = useDelayedLoading(isLoading);
 
   const filteredConfigurations = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
+    const query = filters.q.trim().toLowerCase();
     if (!query) {
       return configurations;
     }
@@ -69,7 +74,7 @@ export function ConfigurationsSection() {
         ...configuration.labels,
       ].some(field => field.toLowerCase().includes(query)),
     );
-  }, [configurations, searchQuery]);
+  }, [configurations, filters.q]);
 
   const isEmpty = !isLoading && configurations.length === 0;
 
@@ -112,7 +117,10 @@ export function ConfigurationsSection() {
       {!showLoading && !isEmpty && (
         <div className="mt-5 flex min-h-0 w-full flex-1 flex-col gap-2">
           <div className="flex flex-none items-end gap-3">
-            <ResourceSearchInput value={searchQuery} onChange={setSearchQuery} />
+            <ResourceSearchInput
+              value={filters.q}
+              onChange={q => setFilters({ q })}
+            />
           </div>
 
           {filteredConfigurations.length === 0 ? (

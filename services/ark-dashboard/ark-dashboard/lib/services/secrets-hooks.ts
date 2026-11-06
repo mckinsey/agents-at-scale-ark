@@ -4,7 +4,10 @@ import { toast } from '@/components/ui/sonner';
 import { APIError } from '@/lib/api/client';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
-import { createResourceErrorMessage } from './resource-error-message';
+import {
+  createResourceErrorMessage,
+  getErrorMessage,
+} from './resource-error-message';
 import { secretsService } from './secrets';
 import type {
   SecretCreateRequest,
@@ -17,13 +20,6 @@ export const GET_SECRET_QUERY_KEY = 'get-secret';
 export const CREATE_SECRET_MUTATION_KEY = 'create-secret';
 export const UPDATE_SECRET_MUTATION_KEY = 'update-secret';
 export const DELETE_SECRET_MUTATION_KEY = 'delete-secret';
-
-const getErrorMessage = (error: unknown): string => {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return 'An unexpected error occurred';
-};
 
 export const useGetAllSecrets = () => {
   const { namespace } = useNamespace();

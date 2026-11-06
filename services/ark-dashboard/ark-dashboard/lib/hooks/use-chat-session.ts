@@ -1,6 +1,6 @@
 'use client';
 
-import { useAtom, useAtomValue } from 'jotai';
+import { useAtom, useAtomValue, useStore } from 'jotai';
 import type { RefObject } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -23,30 +23,62 @@ import {
   type TeamAgentParameters,
   useAgentQueryParameters,
 } from '@/lib/hooks/use-agent-query-parameters';
+import { useBrokerFallbackNotice } from '@/lib/hooks/use-broker-fallback-notice';
+import {
+  type PendingApprovalQuery,
+  useResumePendingApproval,
+} from '@/lib/hooks/use-resume-pending-approval';
+import { useResumeRunningQuery } from '@/lib/hooks/use-resume-running-query';
 import { useStickyScroll } from '@/lib/hooks/use-sticky-scroll';
 import { chatService } from '@/lib/services';
-import { useNamespace } from '@/providers/NamespaceProvider';
-import type {
-  ChatResponse,
-  MemoryNotice,
-  MemoryNoticeLookup,
+import {
+  type BrokerUnavailableError,
+  type ChatResponse,
+  type MemoryNotice,
+  type MemoryNoticeLookup,
+  isBrokerUnavailableError,
 } from '@/lib/services/chat';
 import { useInvalidateQueriesList } from '@/lib/services/queries-hooks';
 import type {
   ArkExtendedChunk,
   ExtendedChatMessage,
 } from '@/lib/types/chat-message';
+import {
+  type StreamTurnEffects,
+  createStreamTurnState,
+  finishStreamTurn,
+  processStreamChunk,
+} from '@/lib/utils/chat-stream-turn';
+import {
+  buildPollResultMessages,
+  convertResultMessage,
+  loadApprovalRequestMessage,
+  stripEmptyAssistantPlaceholder,
+} from '@/lib/utils/chat-turn';
+import {
+  supportsOutputSchema as engineSupportsOutputSchema,
+  hasOutputSchemaAnnotation,
+  toOutputSchemaAnnotations,
+  validateOutputSchema,
+} from '@/lib/utils/output-schema';
+import { useNamespace } from '@/providers/NamespaceProvider';
 
-type ResultMessage = NonNullable<ChatResponse['messages']>[number];
-
-// How long to keep draining the chunk stream after the Query phase goes
-// terminal, so an in-flight [DONE]/finalize chunk still lands before we stop.
 const STREAM_TERMINAL_STOP_GRACE_MS = 300;
 
-// Yield from `source`; if a read rejects because we force-closed the stream
-// (terminal phase → abort), end cleanly so post-stream finalization runs — any
-// other rejection propagates. `onExit` runs on every exit (even a throw) so
-// polling/timers are always torn down.
+function isAbortError(err: unknown): boolean {
+  return err instanceof Error && err.name === 'AbortError';
+}
+
+function toSendErrorMessage(err: unknown): string {
+  if (!(err instanceof Error)) {
+    return 'Failed to send message';
+  }
+  if (err.message.includes('Failed to fetch')) {
+    return 'Unable to connect to the ARK API. Please ensure the backend service is running on port 8000.';
+  }
+  return err.message;
+}
+
 async function* streamUntilForceClose<T>(
   source: AsyncIterable<T>,
   wasForceClosed: () => boolean,
@@ -75,84 +107,6 @@ async function* streamUntilForceClose<T>(
   }
 }
 
-// Converts a query-result message (OpenAI-ish shape) into the dashboard's
-// ExtendedChatMessage. Extracted to keep pollAfterApproval's complexity low.
-function convertResultMessage(msg: ResultMessage): ExtendedChatMessage {
-  if (msg.role === 'tool') {
-    return {
-      role: 'tool',
-      content: msg.content || '',
-      tool_call_id: msg.tool_call_id || '',
-    } as ExtendedChatMessage;
-  }
-  if (msg.role === 'assistant') {
-    const baseMsg: {
-      role: 'assistant';
-      content: string;
-      name?: string;
-      tool_calls?: Array<{
-        id: string;
-        type: 'function';
-        function: { name: string; arguments: string };
-      }>;
-    } = {
-      role: 'assistant',
-      content: msg.content || '',
-    };
-    if (msg.name) {
-      baseMsg.name = msg.name;
-    }
-    if (msg.tool_calls && msg.tool_calls.length > 0) {
-      baseMsg.tool_calls = msg.tool_calls.map(tc => ({
-        id: tc.id,
-        type: 'function' as const,
-        function: tc.function,
-      }));
-    }
-    return baseMsg as ExtendedChatMessage;
-  }
-  return {
-    role: msg.role as 'user' | 'system',
-    content: msg.content || '',
-  } as ExtendedChatMessage;
-}
-
-// Builds the chat message that surfaces a cascading approval request from an
-// A2ATask, or null when the task carries no tool calls to approve.
-function buildCascadingApprovalMessage(
-  a2aTask: Awaited<ReturnType<typeof chatService.getA2ATask>>,
-  queryName: string,
-  queryNamespace: string,
-  taskId: string,
-): ExtendedChatMessage | null {
-  const meta = a2aTask?.status?.protocolMetadata;
-  if (!meta?.toolCalls) return null;
-
-  const taskStartTime = a2aTask?.status?.startTime;
-  const receivedAtMs = taskStartTime
-    ? new Date(taskStartTime).getTime()
-    : Date.now();
-
-  return {
-    role: 'assistant',
-    content: '',
-    approvalRequest: {
-      type: 'tool_approval_request',
-      taskId,
-      queryName,
-      queryNamespace,
-      toolCalls: JSON.parse(meta.toolCalls),
-      timeout: meta.timeout,
-      onTimeout: meta.onTimeout,
-      agentName: a2aTask?.agentRef?.name,
-      receivedAtMs,
-    },
-    metadata: {
-      queryName,
-    },
-  } as ExtendedChatMessage;
-}
-
 interface UseChatSessionParams {
   name: string;
   type: ChatType;
@@ -168,6 +122,8 @@ interface UseChatSessionReturn {
 
   error: string | null;
   memoryNotice: MemoryNotice | null;
+  brokerFallbackNoticeVisible: boolean;
+  dismissBrokerFallbackNotice: () => void;
   sendMessage: (message: string) => Promise<void>;
   clearChat: () => void;
   messagesEndRef: RefObject<HTMLDivElement | null>;
@@ -190,6 +146,11 @@ interface UseChatSessionReturn {
   canAddParameterRow: boolean;
   missingParameters: string[];
   engineToolWarning: string | null;
+  supportsOutputSchema: boolean;
+  hasOwnOutputSchema: boolean;
+  outputSchemaOverride: string;
+  setOutputSchemaOverride: (value: string) => void;
+  isOutputSchemaOverrideValid: boolean;
 }
 
 export function useChatSession({
@@ -199,6 +160,7 @@ export function useChatSession({
   const { namespace } = useNamespace();
   const invalidateQueriesList = useInvalidateQueriesList();
   const [chatHistory, setChatHistory] = useAtom(chatHistoryAtom);
+  const store = useStore();
   const [lastConversationId, setLastConversationId] = useAtom(
     lastConversationIdAtom,
   );
@@ -221,6 +183,8 @@ export function useChatSession({
   const sessionId = chatSession.sessionId;
   const conversationId = (chatSession as { conversationId?: string })
     .conversationId;
+  const activeQueryName = (chatSession as { activeQueryName?: string })
+    .activeQueryName;
 
   const conversationIdRef = useRef<string | undefined>(conversationId);
   useEffect(() => {
@@ -292,7 +256,51 @@ export function useChatSession({
     [chatKey, setChatHistory],
   );
 
+  const updateMessageTokenUsage = useCallback(
+    (messageIndex: number, usage: TokenUsage) => {
+      setChatHistory(prev => {
+        const currentSession = prev[chatKey];
+        if (!currentSession) return prev;
+        return {
+          ...prev,
+          [chatKey]: {
+            ...currentSession,
+            messageTokenUsage: {
+              ...currentSession.messageTokenUsage,
+              [messageIndex]: usage,
+            },
+          },
+        };
+      });
+    },
+    [chatKey, setChatHistory],
+  );
+
   const lastQueryName = useRef('');
+
+  const setActiveQueryName = useCallback(
+    (queryName: string | undefined) => {
+      setChatHistory(prev => {
+        const currentSession = prev[chatKey];
+        if (!currentSession) return prev;
+        return {
+          ...prev,
+          [chatKey]: { ...currentSession, activeQueryName: queryName },
+        };
+      });
+    },
+    [chatKey, setChatHistory],
+  );
+
+  const clearActiveQuery = useCallback(
+    () => setActiveQueryName(undefined),
+    [setActiveQueryName],
+  );
+
+  const getMessages = useCallback(
+    () => store.get(chatHistoryAtom)[chatKey]?.messages ?? [],
+    [chatKey, store],
+  );
 
   const updateConversationId = useCallback(
     (newConversationId: string) => {
@@ -327,6 +335,19 @@ export function useChatSession({
     }
   }, [namespace, updateConversationId]);
 
+  const syncConversationId = useCallback(
+    async (queryName: string) => {
+      const fullQuery = await chatService.getQuery(namespace, queryName);
+      const queryConversationId = (
+        fullQuery?.status as { conversationId?: string } | undefined
+      )?.conversationId;
+      if (queryConversationId) {
+        updateConversationId(queryConversationId);
+      }
+    },
+    [namespace, updateConversationId],
+  );
+
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingPhase, setProcessingPhase] = useState<string | undefined>();
   const [statusText, setStatusText] = useState<string | undefined>();
@@ -335,6 +356,8 @@ export function useChatSession({
 
   const [error, setError] = useState<string | null>(null);
   const [memoryNotice, setMemoryNotice] = useState<MemoryNotice | null>(null);
+  const brokerFallbackNotice = useBrokerFallbackNotice();
+  const notifyBrokerFallback = brokerFallbackNotice.notify;
   const isChatStreamingEnabled = useAtomValue(isChatStreamingEnabledAtom);
   const queryTimeout = useAtomValue(queryTimeoutSettingAtom);
   const stopPollingRef = useRef<(() => void) | null>(null);
@@ -346,6 +369,7 @@ export function useChatSession({
     resumeAutoScroll,
   } = useStickyScroll();
   const chatStreamAbortControllerRef = useRef(new AbortController());
+  const leavingRef = useRef(false);
 
   const {
     variant: parameterVariant,
@@ -362,13 +386,49 @@ export function useChatSession({
     missingParameters,
     toApiParameters,
     engineToolWarning,
+    executionEngineName,
+    executionEngineAnnotations,
+    agentAnnotations,
   } = useAgentQueryParameters(name, type);
 
+  const supportsOutputSchema =
+    type === 'agent' &&
+    engineSupportsOutputSchema(executionEngineName, executionEngineAnnotations);
+  const hasOwnOutputSchema =
+    supportsOutputSchema &&
+    hasOutputSchemaAnnotation(executionEngineAnnotations, agentAnnotations);
+  const canOverrideOutputSchema = supportsOutputSchema && !hasOwnOutputSchema;
+  const [outputSchemaOverride, setOutputSchemaOverride] = useState('');
+  const isOutputSchemaOverrideValid =
+    validateOutputSchema(outputSchemaOverride) === null;
+  const outputSchemaAnnotations = useMemo(
+    () =>
+      canOverrideOutputSchema
+        ? toOutputSchemaAnnotations(outputSchemaOverride)
+        : undefined,
+    [canOverrideOutputSchema, outputSchemaOverride],
+  );
+  const isSendBlocked =
+    missingParameters.length > 0 ||
+    (canOverrideOutputSchema && !isOutputSchemaOverrideValid);
+
   useEffect(() => {
-    return () => {
+    setOutputSchemaOverride('');
+  }, [name, type]);
+
+  useEffect(() => {
+    leavingRef.current = false;
+    const leave = () => {
+      leavingRef.current = true;
+      chatStreamAbortControllerRef.current.abort();
       if (stopPollingRef.current) {
         stopPollingRef.current();
       }
+    };
+    globalThis.addEventListener('pagehide', leave);
+    return () => {
+      globalThis.removeEventListener('pagehide', leave);
+      leave();
     };
   }, []);
 
@@ -441,95 +501,21 @@ export function useChatSession({
     return () => clearTimeout(id);
   }, [chatMessages, scrollToBottom]);
 
-  const buildChatMessages = useCallback(
-    (
-      messages: ExtendedChatMessage[],
-      currentMsg: string,
-    ): ExtendedChatMessage[] => {
-      return [
-        ...messages,
-        { role: 'user', content: currentMsg } as ExtendedChatMessage,
-      ];
-    },
-    [],
-  );
-
-  const pendingApprovalQueryRef = useRef<{
-    queryName: string;
-    messageIndex: number;
-  } | null>(null);
+  const pendingApprovalQueryRef = useRef<PendingApprovalQuery | null>(null);
 
   const handleStreamChatResponse = useCallback(
-    async (userMessage: string, apiParameters?: ApiQueryParameter[]) => {
+    async (
+      userMessage: string,
+      apiParameters?: ApiQueryParameter[],
+    ): Promise<boolean> => {
       chatStreamAbortControllerRef.current = new AbortController();
 
-      const messageArray = buildChatMessages(chatMessages, userMessage);
       const turnStartIndex = chatMessages.length + 1;
-      let currentMessageIndex = turnStartIndex;
 
       updateChatMessages(prev => [
         ...prev,
         { role: 'assistant', content: '' } as ExtendedChatMessage,
       ]);
-
-      let accumulatedContent = '';
-      let messageTokenUsage: TokenUsage | null = null;
-      const accumulatedToolCalls: Array<{
-        id: string;
-        type: 'function';
-        function: { name: string; arguments: string };
-      }> = [];
-      const pendingSystemMessages: Array<string> = [];
-
-      let hasError = false;
-      let errorMessage = '';
-      let queryName = '';
-      let currentAgent: string | undefined;
-      let turnComplete = false;
-      let completedQueryMessages: Array<{
-        role: string;
-        content?: string;
-        name?: string;
-      }> = [];
-      let hasPendingApproval = false;
-
-      const finalizeCurrentMessage = () => {
-        if (accumulatedContent || accumulatedToolCalls.length > 0) {
-          updateChatMessages(prev => {
-            const updated = [...prev];
-            const updatedMessage: ExtendedChatMessage = {
-              role: 'assistant',
-              content: accumulatedContent,
-              tool_calls:
-                accumulatedToolCalls.length > 0
-                  ? [...accumulatedToolCalls]
-                  : undefined,
-            } as ExtendedChatMessage;
-            if (currentAgent) {
-              (updatedMessage as { name?: string }).name = currentAgent;
-            }
-            updated[currentMessageIndex] = updatedMessage;
-            return updated;
-          });
-        }
-      };
-
-      const addSystemMessagesAndNewAssistant = () => {
-        const systemMsgCount = pendingSystemMessages.length;
-        updateChatMessages(prev => {
-          const systemMsgs = pendingSystemMessages.map(content => ({
-            role: 'system' as const,
-            content,
-          }));
-          return [
-            ...prev,
-            ...systemMsgs,
-            { role: 'assistant', content: '' } as ExtendedChatMessage,
-          ];
-        });
-        pendingSystemMessages.length = 0;
-        currentMessageIndex += systemMsgCount + 1;
-      };
 
       const { queryName: streamQueryName, chunks } =
         await chatService.startStreamChatResponse(
@@ -542,16 +528,28 @@ export function useChatSession({
           queryTimeout,
           chatStreamAbortControllerRef.current.signal,
           apiParameters,
+          outputSchemaAnnotations,
         );
 
-      queryName = streamQueryName;
-      lastQueryName.current = queryName;
+      lastQueryName.current = streamQueryName;
+      setActiveQueryName(streamQueryName);
       invalidateQueriesList();
 
-      // The Query CR phase is the authoritative done signal; the stream's [DONE]
-      // is best-effort and may never arrive (broker unreachable / executor
-      // killed, see #2862). On a real terminal phase, after a short grace so an
-      // in-flight [DONE] still wins, abort the transport to stop a hung stream.
+      const turn = createStreamTurnState(streamQueryName, turnStartIndex);
+      const effects: StreamTurnEffects = {
+        updateChatMessages,
+        setStatusText,
+        updateConversationId,
+        updateTokenUsage,
+        setMessageTokenUsage: updateMessageTokenUsage,
+        onApprovalRequest: (queryName, messageIndex) => {
+          pendingApprovalQueryRef.current = { queryName, messageIndex };
+        },
+        onQueryNameChange: queryName => {
+          lastQueryName.current = queryName;
+        },
+      };
+
       const streamAbortController = chatStreamAbortControllerRef.current;
       let forceClosePhase: string | undefined;
       let forceCloseTimer: ReturnType<typeof setTimeout> | undefined;
@@ -567,8 +565,6 @@ export function useChatSession({
         },
         undefined,
         phase => {
-          // Only real terminal phases force-close; leave `unknown` to the poll so
-          // an unrecognized phase can't truncate a live answer.
           if (phase !== 'done' && phase !== 'error' && phase !== 'canceled') {
             return;
           }
@@ -588,404 +584,73 @@ export function useChatSession({
         },
       )) {
         const typedChunk = chunk as unknown as ArkExtendedChunk;
-
-        console.log(
-          '[HITL Debug] Received chunk:',
-          JSON.stringify(chunk).slice(0, 200),
-        );
-
-        if (
-          'type' in typedChunk &&
-          typedChunk.type === 'tool_approval_request'
-        ) {
-          console.log(
-            '[HITL Debug] Detected tool_approval_request event!',
-            typedChunk,
-          );
-          const approvalRequest: import('@/lib/types/chat-message').ToolApprovalRequest =
-            {
-              ...(typedChunk as unknown as import('@/lib/types/chat-message').ToolApprovalRequest),
-              receivedAtMs: Date.now(),
-            };
-          hasPendingApproval = true;
-
-          pendingApprovalQueryRef.current = {
-            queryName,
-            messageIndex: currentMessageIndex,
-          };
-          console.log(
-            '[HITL Debug] Stored pending approval query info:',
-            pendingApprovalQueryRef.current,
-          );
-
-          updateChatMessages(prev => {
-            console.log(
-              '[HITL Debug] updateChatMessages called, prev messages:',
-              prev.length,
-            );
-            const updated = [...prev];
-            updated[currentMessageIndex] = {
-              role: 'assistant',
-              content: '',
-              approvalRequest,
-              metadata: {
-                queryName,
-              },
-            } as ExtendedChatMessage;
-            console.log(
-              '[HITL Debug] Message at index',
-              currentMessageIndex,
-              'updated with approval:',
-              updated[currentMessageIndex],
-            );
-            return updated;
-          });
-
-          console.log(
-            '[HITL Debug] Updated message with approval request at index:',
-            currentMessageIndex,
-          );
-          console.log('[HITL Debug] Continuing to next chunk...');
-          continue;
-        }
-
-        if ('type' in typedChunk && typedChunk.type === 'a2a_status') {
-          setStatusText(typedChunk.message || undefined);
-          continue;
-        }
-
-        console.log(
-          '[HITL Debug] Processing regular chunk (not approval request)',
-        );
-
-        if ('error' in typedChunk && typedChunk.error) {
-          hasError = true;
-          errorMessage = typedChunk.error.message || 'An error occurred';
-          queryName = typedChunk.ark?.query || '';
-          lastQueryName.current = queryName;
-          break;
-        }
-
-        if (
-          'id' in typedChunk &&
-          typedChunk.id === 'chatcmpl-final' &&
-          'ark' in typedChunk &&
-          typedChunk.ark
-        ) {
-          const arkData = typedChunk.ark;
-
-          const returnedConversationId =
-            arkData.completedQuery?.status?.conversationId;
-          if (returnedConversationId) {
-            updateConversationId(returnedConversationId);
-          }
-
-          if (arkData.completedQuery?.status?.phase === 'error') {
-            hasError = true;
-            errorMessage =
-              arkData.completedQuery.status.response?.content || 'Query failed';
-            queryName = arkData.completedQuery.metadata?.name || '';
-            break;
-          }
-          const rawMessages = arkData.completedQuery?.status?.response?.raw;
-          if (rawMessages) {
-            try {
-              completedQueryMessages = JSON.parse(rawMessages);
-            } catch (e) {
-              console.error('Failed to parse completed query messages:', e);
-            }
-          }
-
-          const arkTokenUsage = arkData.completedQuery?.status?.tokenUsage;
-          const usage: TokenUsage | null = arkTokenUsage
-            ? {
-                prompt_tokens: arkTokenUsage.promptTokens || 0,
-                completion_tokens: arkTokenUsage.completionTokens || 0,
-                total_tokens: arkTokenUsage.totalTokens || 0,
-                cached_tokens: arkTokenUsage.cachedTokens || 0,
-              }
-            : typedChunk?.usage
-              ? {
-                  prompt_tokens: typedChunk.usage.prompt_tokens ?? 0,
-                  completion_tokens: typedChunk.usage.completion_tokens ?? 0,
-                  total_tokens: typedChunk.usage.total_tokens ?? 0,
-                  cached_tokens: typedChunk.usage.prompt_tokens_details?.cached_tokens ?? 0,
-                }
-              : null;
-
-          if (usage) {
-            messageTokenUsage = usage;
-            updateTokenUsage(usage);
-          }
-        }
-
-        if ('ark' in typedChunk && typedChunk.ark) {
-          const arkData = typedChunk.ark;
-
-          if (arkData.systemMessage) {
-            pendingSystemMessages.push(arkData.systemMessage);
-          }
-
-          const chunkAgent = arkData.agent;
-
-          // Check if we need to start a new assistant message
-          const isNewAgent = chunkAgent && chunkAgent !== currentAgent;
-          const isNewTurn = chunkAgent === currentAgent && turnComplete;
-
-          if (isNewAgent || isNewTurn) {
-            // Finalize previous message if it exists
-            if (currentAgent) {
-              finalizeCurrentMessage();
-              accumulatedContent = '';
-              accumulatedToolCalls.length = 0;
-            }
-
-            // Add system messages + new assistant message
-            addSystemMessagesAndNewAssistant();
-
-            if (isNewAgent) {
-              currentAgent = chunkAgent;
-            }
-            turnComplete = false;
-          }
-        }
-
-        const delta =
-          'choices' in typedChunk ? typedChunk?.choices?.[0]?.delta : undefined;
-        if (delta?.content) {
-          accumulatedContent += delta.content;
-          setStatusText(undefined);
-        }
-
-        if (delta?.tool_calls) {
-          for (const toolCallDelta of delta.tool_calls) {
-            let existingIndex = -1;
-
-            if (toolCallDelta.id) {
-              existingIndex = accumulatedToolCalls.findIndex(
-                tc => tc.id === toolCallDelta.id,
-              );
-            }
-
-            if (existingIndex === -1 && toolCallDelta.function?.name) {
-              accumulatedToolCalls.push({
-                id: toolCallDelta.id || '',
-                type: 'function',
-                function: { name: toolCallDelta.function.name, arguments: '' },
-              });
-              existingIndex = accumulatedToolCalls.length - 1;
-            }
-
-            if (existingIndex !== -1) {
-              if (toolCallDelta.id) {
-                accumulatedToolCalls[existingIndex].id = toolCallDelta.id;
-              }
-
-              if (toolCallDelta.function?.arguments) {
-                accumulatedToolCalls[existingIndex].function.arguments +=
-                  toolCallDelta.function.arguments;
-              }
-            }
-          }
-        }
-
-        updateChatMessages(prev => {
-          const updated = [...prev];
-          const updatedMessage: ExtendedChatMessage = {
-            role: 'assistant',
-            content: accumulatedContent,
-            tool_calls:
-              accumulatedToolCalls.length > 0
-                ? accumulatedToolCalls
-                : undefined,
-          } as ExtendedChatMessage;
-          if (currentAgent) {
-            (updatedMessage as { name?: string }).name = currentAgent;
-          }
-          updated[currentMessageIndex] = updatedMessage;
-          return updated;
-        });
-
-        const finishReason =
-          'choices' in typedChunk
-            ? typedChunk?.choices?.[0]?.finish_reason
-            : undefined;
-        if (finishReason === 'stop') {
-          turnComplete = true;
-        }
+        if (processStreamChunk(turn, typedChunk, effects) === 'stop') break;
       }
 
-      // A terminal `error` phase force-closed the stream before any error chunk
-      // arrived — surface the failure instead of finalizing as success.
-      if (forceClosePhase === 'error' && !hasError) {
-        hasError = true;
-        errorMessage = errorMessage || 'Query failed';
+      if (turn.brokerUnavailableError) {
+        throw turn.brokerUnavailableError;
+      }
+
+      if (forceClosePhase === 'error' && !turn.hasError) {
+        turn.hasError = true;
+        turn.errorMessage = turn.errorMessage || 'Query failed';
       }
       if (forceClosePhase) {
-        // Stream never delivered [DONE]; tracked so dropped completions stay
-        // observable.
         trackEvent({
           name: 'chat_stream_force_closed',
           properties: {
             targetType: type,
             targetName: name,
-            queryName,
+            queryName: turn.queryName,
           },
         });
       }
 
-      if (!hasPendingApproval) {
-        console.log(
-          '[HITL Debug] Finalizing current message (no pending approval)',
-        );
-        finalizeCurrentMessage();
-      } else {
-        console.log(
-          '[HITL Debug] Skipping finalize because we have a pending approval',
-        );
-      }
-
-      if (messageTokenUsage) {
-        const assistantIndex = currentMessageIndex;
-        setChatHistory(prev => {
-          const safePrev = prev || {};
-          const currentSession = safePrev[chatKey];
-          if (!currentSession) return safePrev;
-          return {
-            ...safePrev,
-            [chatKey]: {
-              ...currentSession,
-              messageTokenUsage: {
-                ...(currentSession.messageTokenUsage || {}),
-                [assistantIndex]: messageTokenUsage,
-              },
-            },
-          };
-        });
-      }
-
-      if (pendingSystemMessages.length > 0) {
-        updateChatMessages(prev => {
-          const systemMsgs = pendingSystemMessages.map(content => ({
-            role: 'system' as const,
-            content,
-          }));
-          return [...prev, ...systemMsgs];
-        });
-        pendingSystemMessages.length = 0;
-      }
-
-      if (hasError) {
-        const hasTerminateToolCall = accumulatedToolCalls.some(
-          tc => tc.function.name === 'terminate',
-        );
-        if (!hasTerminateToolCall) {
-          updateChatMessages(prev => {
-            const updated = [...prev];
-            updated[currentMessageIndex] = {
-              role: 'assistant',
-              content: errorMessage,
-              metadata: {
-                status: 'failed',
-                queryName: queryName || undefined,
-              },
-            } as ExtendedChatMessage;
-            return updated;
-          });
-          return;
-        }
-      }
-
-      if (completedQueryMessages.length > 0) {
-        updateChatMessages(prev => {
-          // Preserve previous turns, replace only current turn with complete message chain
-          const beforeThisTurn = prev.slice(0, turnStartIndex);
-          const converted: ExtendedChatMessage[] = [];
-
-          completedQueryMessages.forEach(msg => {
-            if (msg.role === 'system') {
-              converted.push({
-                role: 'system',
-                content: msg.content || '',
-              } as ExtendedChatMessage);
-            } else if (msg.role === 'tool') {
-              converted.push({
-                role: 'tool',
-                content: msg.content || '',
-                tool_call_id:
-                  (msg as { tool_call_id?: string }).tool_call_id || '',
-              } as ExtendedChatMessage);
-            } else if (msg.role === 'assistant') {
-              const toolCalls = (
-                msg as {
-                  tool_calls?: Array<{
-                    id: string;
-                    type: string;
-                    function: { name: string; arguments: string };
-                  }>;
-                }
-              ).tool_calls;
-
-              converted.push({
-                role: 'assistant',
-                content: msg.content || '',
-                name: msg.name,
-                tool_calls: toolCalls
-                  ? toolCalls.map(tc => ({
-                      id: tc.id,
-                      type: 'function' as const,
-                      function: tc.function,
-                    }))
-                  : undefined,
-              } as ExtendedChatMessage);
-            }
-          });
-
-          const updated = [...beforeThisTurn, ...converted];
-          return updated;
-        });
-      }
-
-      console.log('[HITL Debug] Stream processing completed', {
-        hasPendingApproval,
-        queryName,
-      });
+      return finishStreamTurn(turn, effects);
     },
     [
-      buildChatMessages,
-      chatKey,
       chatMessages,
       conversationId,
       invalidateQueriesList,
       name,
       namespace,
       queryTimeout,
+      outputSchemaAnnotations,
       sessionId,
-      setChatHistory,
+      setActiveQueryName,
       type,
       updateChatMessages,
       updateConversationId,
+      updateMessageTokenUsage,
       updateTokenUsage,
     ],
   );
 
   const handlePollChatResponse = useCallback(
-    async (userMessage: string, apiParameters?: ApiQueryParameter[]) => {
-      const messageArray = buildChatMessages(chatMessages, userMessage);
+    async (
+      userMessage: string,
+      apiParameters?: ApiQueryParameter[],
+      existingQueryName?: string,
+    ): Promise<boolean> => {
+      let queryName = existingQueryName;
+      if (!queryName) {
+        const query = await chatService.submitChatQuery(
+          namespace,
+          userMessage,
+          type,
+          name,
+          sessionId,
+          conversationId,
+          queryTimeout,
+          apiParameters,
+          outputSchemaAnnotations,
+        );
+        queryName = query.name;
+        invalidateQueriesList();
+      }
 
-      const query = await chatService.submitChatQuery(
-        namespace,
-        userMessage,
-        type,
-        name,
-        sessionId,
-        conversationId,
-        queryTimeout,
-        apiParameters,
-      );
-
-      lastQueryName.current = query.name;
-      invalidateQueriesList();
+      lastQueryName.current = queryName;
+      setActiveQueryName(queryName);
 
       let pollingStopped = false;
       stopPollingRef.current = () => {
@@ -994,151 +659,104 @@ export function useChatSession({
 
       while (!pollingStopped) {
         try {
-          const result = await chatService.getQueryResult(
-            namespace,
-            query.name,
-          );
+          const result = await chatService.getQueryResult(namespace, queryName);
+          if (leavingRef.current) return false;
 
           setProcessingPhase(result.status);
 
           if (result.terminal) {
-            applyMemoryLookup(result.memoryLookup, query.name);
-            const fullQuery = await chatService.getQuery(
-              namespace,
-              query.name,
-            );
-            const queryConversationId = (
-              fullQuery?.status as { conversationId?: string } | undefined
-            )?.conversationId;
-            if (queryConversationId) {
-              updateConversationId(queryConversationId);
-            }
+            applyMemoryLookup(result.memoryLookup, queryName);
+            await syncConversationId(queryName);
 
-            if (result.status === 'done') {
-              if (result.messages && result.messages.length > 0) {
-                updateChatMessages(prev => [
-                  ...prev,
-                  ...result.messages!.map((msg): ExtendedChatMessage => {
-                    if (msg.role === 'tool') {
-                      return {
-                        role: 'tool',
-                        content: msg.content || '',
-                        tool_call_id: msg.tool_call_id || '',
-                      } as ExtendedChatMessage;
-                    } else if (msg.role === 'assistant') {
-                      const baseMsg: {
-                        role: 'assistant';
-                        content: string;
-                        name?: string;
-                        tool_calls?: Array<{
-                          id: string;
-                          type: 'function';
-                          function: { name: string; arguments: string };
-                        }>;
-                      } = {
-                        role: 'assistant' as const,
-                        content: msg.content || '',
-                      };
-                      if (msg.name) {
-                        baseMsg.name = msg.name;
-                      }
-                      if (msg.tool_calls && msg.tool_calls.length > 0) {
-                        baseMsg.tool_calls = msg.tool_calls.map(tc => ({
-                          id: tc.id,
-                          type: 'function' as const,
-                          function: tc.function,
-                        }));
-                      }
-                      return baseMsg as ExtendedChatMessage;
-                    } else if (msg.role === 'user') {
-                      const baseMsg = {
-                        role: 'user' as const,
-                        content: msg.content || '',
-                      };
-                      if (msg.name) {
-                        return {
-                          ...baseMsg,
-                          name: msg.name,
-                        } as ExtendedChatMessage;
-                      }
-                      return baseMsg as ExtendedChatMessage;
-                    } else {
-                      return {
-                        role: 'system',
-                        content: msg.content || '',
-                      } as ExtendedChatMessage;
-                    }
-                  }),
-                ]);
-              } else if (result.response) {
-                updateChatMessages(prev => [
-                  ...prev,
-                  {
-                    role: 'assistant',
-                    content: result.response!,
-                  } as ExtendedChatMessage,
-                ]);
-              }
-            } else if (result.status === 'error') {
-              updateChatMessages(prev => [
-                ...prev,
-                {
-                  role: 'assistant',
-                  content: result.response || 'Query failed',
-                  metadata: {
-                    status: 'failed',
-                    queryName: query.name,
-                  },
-                } as ExtendedChatMessage,
-              ]);
-            } else if (result.status === 'unknown') {
-              updateChatMessages(prev => [
-                ...prev,
-                {
-                  role: 'assistant',
-                  content: 'Query status unknown',
-                  metadata: {
-                    status: 'failed',
-                    queryName: query.name,
-                  },
-                } as ExtendedChatMessage,
-              ]);
+            const resultMessages = buildPollResultMessages(result, queryName);
+            if (resultMessages.length > 0) {
+              updateChatMessages(prev => [...prev, ...resultMessages]);
             }
-
-            pollingStopped = true;
-            break;
+            return !result.transportError;
           }
         } catch (err) {
           console.error('Error polling query status:', err);
-          updateChatMessages(prev => [
-            ...prev,
-            {
-              role: 'assistant',
-              content: 'Error while processing query',
-              metadata: {
-                status: 'failed',
-                queryName: query.name,
-              },
-            } as ExtendedChatMessage,
-          ]);
-          pollingStopped = true;
+          if (!leavingRef.current) {
+            updateChatMessages(prev => [
+              ...prev,
+              {
+                role: 'assistant',
+                content: 'Error while processing query',
+                metadata: {
+                  status: 'failed',
+                  queryName,
+                },
+              } as ExtendedChatMessage,
+            ]);
+          }
+          return false;
         }
 
-        if (!pollingStopped) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        }
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
+      return false;
     },
     [
       applyMemoryLookup,
-      buildChatMessages,
-      chatMessages,
+      conversationId,
       invalidateQueriesList,
       name,
       namespace,
+      outputSchemaAnnotations,
       queryTimeout,
       sessionId,
+      setActiveQueryName,
+      syncConversationId,
       type,
+      updateChatMessages,
+    ],
+  );
+
+  const appendFailedMessage = useCallback(
+    (content: string) => {
+      updateChatMessages(prev => [
+        ...prev,
+        {
+          role: 'assistant',
+          content,
+          metadata: {
+            status: 'failed',
+          },
+        } as ExtendedChatMessage,
+      ]);
+      setError(content);
+    },
+    [updateChatMessages],
+  );
+
+  const recoverViaPolling = useCallback(
+    async (
+      err: BrokerUnavailableError,
+      userMessage: string,
+      apiParameters: ApiQueryParameter[] | undefined,
+    ): Promise<boolean> => {
+      if (err.code === 'broker_unavailable') {
+        notifyBrokerFallback();
+      }
+      updateChatMessages(stripEmptyAssistantPlaceholder);
+      try {
+        return await handlePollChatResponse(
+          userMessage,
+          apiParameters,
+          err.queryName || lastQueryName.current || undefined,
+        );
+      } catch (error_) {
+        console.error('Error sending message:', error_);
+        appendFailedMessage(
+          error_ instanceof Error ? error_.message : 'Failed to send message',
+        );
+        return false;
+      }
+    },
+    [
+      appendFailedMessage,
+      handlePollChatResponse,
+      notifyBrokerFallback,
       updateChatMessages,
     ],
   );
@@ -1148,11 +766,12 @@ export function useChatSession({
       setError(null);
       resumeAutoScroll();
 
-      if (missingParameters.length > 0) {
+      if (isSendBlocked) {
         return;
       }
 
       const apiParameters = toApiParameters();
+      clearActiveQuery();
 
       trackEvent({
         name: 'chat_message_sent',
@@ -1173,46 +792,39 @@ export function useChatSession({
       beginMemoryNoticeTurn();
 
       let aborted = false;
+      let settled = false;
 
       try {
         if (isChatStreamingEnabled) {
-          await handleStreamChatResponse(userMessage, apiParameters);
+          settled = !(await handleStreamChatResponse(
+            userMessage,
+            apiParameters,
+          ));
           await ensureConversationId();
         } else {
-          await handlePollChatResponse(userMessage, apiParameters);
+          settled = await handlePollChatResponse(userMessage, apiParameters);
         }
       } catch (err) {
-        console.error('Error sending message:', err);
-        let errMsg = 'Failed to send message';
-
-        if (err instanceof Error) {
-          if (err.name === 'AbortError') {
-            aborted = true;
-            return;
-          }
-          if (err.message.includes('Failed to fetch')) {
-            errMsg =
-              'Unable to connect to the ARK API. Please ensure the backend service is running on port 8000.';
-          } else {
-            errMsg = err.message;
-          }
+        if (leavingRef.current || isAbortError(err)) {
+          aborted = true;
+          return;
         }
 
-        updateChatMessages(prev => [
-          ...prev,
-          {
-            role: 'assistant',
-            content: errMsg,
-            metadata: {
-              status: 'failed',
-            },
-          } as ExtendedChatMessage,
-        ]);
-        setError(errMsg);
+        console.error('Error sending message:', err);
+
+        if (isBrokerUnavailableError(err)) {
+          settled = await recoverViaPolling(err, userMessage, apiParameters);
+          return;
+        }
+
+        appendFailedMessage(toSendErrorMessage(err));
       } finally {
         setIsProcessing(false);
         setProcessingPhase(undefined);
         setStatusText(undefined);
+        if (!leavingRef.current && settled) {
+          clearActiveQuery();
+        }
 
         // In `finally`, not after the stream, because the failure path is the
         // one that matters most: ark-api resolves the chunk stream's broker
@@ -1237,13 +849,16 @@ export function useChatSession({
       }
     },
     [
+      appendFailedMessage,
       beginMemoryNoticeTurn,
+      clearActiveQuery,
       ensureConversationId,
       handlePollChatResponse,
       handleStreamChatResponse,
       isChatStreamingEnabled,
-      missingParameters,
+      isSendBlocked,
       name,
+      recoverViaPolling,
       refreshMemoryNotice,
       resumeAutoScroll,
       toApiParameters,
@@ -1294,34 +909,20 @@ export function useChatSession({
       },
     ]);
 
+    clearActiveQuery();
+
     await chatService
       .cancelQuery(namespace, lastQueryName.current)
       .catch(() => {});
-  }, [namespace, setIsProcessing, updateChatMessages]);
+  }, [clearActiveQuery, namespace, setIsProcessing, updateChatMessages]);
 
   const handleCascadingApproval = useCallback(
     async (queryName: string): Promise<boolean> => {
-      const query = await chatService.getQuery(namespace, queryName);
-      const status = query?.status as
-        | { response?: { a2a?: { taskId?: string } } }
-        | undefined;
-      const taskId = status?.response?.a2a?.taskId;
-      if (!taskId) return false;
-
       try {
-        const a2aTask = await chatService.getA2ATask(
-          namespace,
-          `a2a-task-${taskId}`,
-        );
-        const message = buildCascadingApprovalMessage(
-          a2aTask,
-          queryName,
-          query?.namespace || namespace,
-          taskId,
-        );
-        if (!message) return false;
+        const approval = await loadApprovalRequestMessage(namespace, queryName);
+        if (!approval) return false;
 
-        updateChatMessages(prev => [...prev, message]);
+        updateChatMessages(prev => [...prev, approval.message]);
         pendingApprovalQueryRef.current = { queryName, messageIndex: -1 };
         stopPollingRef.current = null;
         setIsProcessing(false);
@@ -1349,6 +950,9 @@ export function useChatSession({
             ...result.messages!.map(convertResultMessage),
           ]);
         }
+      } else if (result.notFound) {
+        const notFoundMessages = buildPollResultMessages(result, queryName);
+        updateChatMessages(prev => [...prev, ...notFoundMessages]);
       } else if (result.status === 'error') {
         updateChatMessages(prev => [
           ...prev,
@@ -1363,9 +967,10 @@ export function useChatSession({
         ]);
       }
 
+      clearActiveQuery();
       setIsProcessing(false);
     },
-    [updateChatMessages, setIsProcessing, applyMemoryLookup],
+    [updateChatMessages, setIsProcessing, applyMemoryLookup, clearActiveQuery],
   );
 
   const pollAfterApproval = useCallback(async () => {
@@ -1425,6 +1030,31 @@ export function useChatSession({
     applyTerminalResult,
   ]);
 
+  const restorePendingApproval = useResumePendingApproval({
+    namespace,
+    getMessages,
+    updateChatMessages,
+    pendingApprovalQueryRef,
+  });
+
+  const onResume = useCallback((queryName: string, stop: () => void) => {
+    lastQueryName.current = queryName;
+    stopPollingRef.current = stop;
+  }, []);
+
+  useResumeRunningQuery({
+    namespace,
+    chatKey,
+    activeQueryName,
+    isProcessing,
+    setIsProcessing,
+    setProcessingPhase,
+    updateChatMessages,
+    clearActiveQuery,
+    onResume,
+    restorePendingApproval,
+  });
+
   return {
     messages: chatMessages,
     sessionId,
@@ -1434,6 +1064,8 @@ export function useChatSession({
     statusText,
     error,
     memoryNotice,
+    brokerFallbackNoticeVisible: brokerFallbackNotice.visible,
+    dismissBrokerFallbackNotice: brokerFallbackNotice.dismiss,
     sendMessage,
     clearChat,
     messagesEndRef,
@@ -1456,5 +1088,10 @@ export function useChatSession({
     canAddParameterRow,
     missingParameters,
     engineToolWarning,
+    supportsOutputSchema,
+    hasOwnOutputSchema,
+    outputSchemaOverride,
+    setOutputSchemaOverride,
+    isOutputSchemaOverrideValid,
   };
 }

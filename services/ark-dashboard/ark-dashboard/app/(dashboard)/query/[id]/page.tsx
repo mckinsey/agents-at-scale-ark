@@ -24,7 +24,7 @@ import { JsonViewer } from '@/components/common/json-viewer';
 import { ContentCopy } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { QueryMemoryField } from '@/components/query-fields/query-memory-field';
-import { QueryTargetsField } from '@/components/query-fields/query-targets-field';
+import { QueryTargetField } from '@/components/query-fields/query-target-field';
 import { Button } from '@/components/ui/button';
 import { IconShell } from '@/components/ui/icon-shell';
 import { Input } from '@/components/ui/input';
@@ -33,6 +33,7 @@ import { QueryParameterEditor } from '@/components/ui/query-parameter-editor';
 import { Textarea } from '@/components/ui/textarea';
 import type { components } from '@/lib/api/generated/types';
 import { renderMarkdown } from '@/lib/hooks/render-markdown';
+import { useListReturnHref } from '@/lib/hooks/use-list-return-href';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import {
   agentsService,
@@ -138,10 +139,7 @@ interface QueryStatus {
   };
 }
 
-interface TypedQueryDetailResponse extends Omit<
-  QueryDetailResponse,
-  'status' | 'targets'
-> {
+interface TypedQueryDetailResponse extends Omit<QueryDetailResponse, 'status'> {
   status?: QueryStatus | null;
   metadata?: Record<string, string>;
   target?: { name: string; type: string };
@@ -379,6 +377,7 @@ function QueryDetailContent() {
   const searchParams = useSearchParams();
   const { push } = useNamespacedNavigation();
   const { namespace } = useNamespace();
+  const queriesReturnHref = useListReturnHref('/queries');
   const invalidateQueriesList = useInvalidateQueriesList();
   const queryId = params.id as string;
   const targetTool = searchParams.get('target_tool');
@@ -685,7 +684,7 @@ function QueryDetailContent() {
       <div className="flex h-screen items-center justify-center">
         <div className="text-center">
           <h1 className="mb-2 text-xl font-semibold">Query Not Found</h1>
-          <Button variant="outline" onClick={() => push('/queries')}>
+          <Button variant="outline" onClick={() => push(queriesReturnHref)}>
             ← Back to Queries
           </Button>
         </div>
@@ -757,12 +756,10 @@ function QueryDetailContent() {
             label="Target"
             valueClassName=""
             value={
-              <QueryTargetsField
-                value={query.target ? [query.target] : []}
-                onChange={targets =>
-                  setQuery(prev =>
-                    prev ? { ...prev, target: targets[0] } : null,
-                  )
+              <QueryTargetField
+                value={query.target ?? undefined}
+                onChange={target =>
+                  setQuery(prev => (prev ? { ...prev, target } : null))
                 }
                 availableTargets={availableTargets}
                 loading={targetsLoading}

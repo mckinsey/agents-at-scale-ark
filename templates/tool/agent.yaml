@@ -13,7 +13,7 @@ kind: Query
 metadata:
   name: sample-query
 spec:
-  targets:
-    - name: sample-agent
-      type: agent
+  target:
+    name: sample-agent
+    type: agent
   input: Calculate 3+2.

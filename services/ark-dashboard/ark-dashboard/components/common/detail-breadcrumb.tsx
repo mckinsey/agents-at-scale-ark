@@ -1,6 +1,9 @@
+'use client';
+
 import { ChevronLeft } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { IconShell } from '@/components/ui/icon-shell';
+import { useListReturnHref } from '@/lib/hooks/use-list-return-href';
 import { cn } from '@/lib/utils';
 
 interface DetailBreadcrumbProps {
@@ -23,6 +26,8 @@ export function DetailBreadcrumb({
   current,
   className,
 }: Readonly<DetailBreadcrumbProps>) {
+  const resolvedBackHref = useListReturnHref(backHref);
+
   return (
     <nav
       aria-label="Breadcrumb"
@@ -31,7 +36,7 @@ export function DetailBreadcrumb({
         className,
       )}>
       <NamespacedLink
-        href={backHref}
+        href={resolvedBackHref}
         className="text-fg-disabled hover:text-fg-secondary flex items-center gap-1 transition-colors">
         <IconShell size="sm" className="opacity-100">
           <ChevronLeft />

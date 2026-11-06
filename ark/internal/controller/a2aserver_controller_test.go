@@ -98,7 +98,8 @@ var _ = Describe("A2AServer endpoint resolution", func() {
 
 	reconcileWithCard := func(reconciler *A2AServerReconciler, server *arkv1prealpha1.A2AServer, cardURL string) error {
 		card := &arka2a.A2AAgentCard{Name: "weather", URL: cardURL}
-		return reconciler.reconcileEndpoint(ctx, server, reconciler.resolveEndpoint(server, address, card))
+		_, err := reconciler.reconcileEndpoint(ctx, server, reconciler.resolveEndpoint(server, address, card))
+		return err
 	}
 
 	It("records the address as the endpoint and sets no override condition in address mode", func() {
@@ -108,6 +109,15 @@ var _ = Describe("A2AServer endpoint resolution", func() {
 		Expect(server.Status.LastResolvedEndpoint).To(Equal(address))
 		Expect(server.Status.RejectedEndpoint).To(BeEmpty())
 		Expect(findCondition(server, A2AServerEndpointOverride)).To(BeNil())
+	})
+
+	It("keeps a trailing slash on the address in address mode", func() {
+		server := createServer("endpoint-address-mode-trailing-slash", arkv1prealpha1.A2AServerSpec{})
+		reconciler := newReconciler()
+
+		Expect(reconciler.reconcileEndpoint(ctx, server, reconciler.resolveEndpoint(server, address+"/", nil))).Error().NotTo(HaveOccurred())
+
+		Expect(server.Status.LastResolvedEndpoint).To(Equal(address + "/"))
 	})
 
 	It("clears an override condition left over from a previous mode", func() {
@@ -126,7 +136,7 @@ var _ = Describe("A2AServer endpoint resolution", func() {
 
 		resolved := reconciler.resolveEndpoint(server, address, grpcOnlyCard("grpc://a2a-server.default.svc.cluster.local:50051"))
 		Expect(resolved.Reason).To(BeEmpty())
-		Expect(reconciler.reconcileEndpoint(ctx, server, resolved)).To(Succeed())
+		Expect(reconciler.reconcileEndpoint(ctx, server, resolved)).Error().NotTo(HaveOccurred())
 
 		Expect(server.Status.LastResolvedEndpoint).To(Equal(address))
 		Expect(findCondition(server, A2AServerEndpointOverride)).To(BeNil())
@@ -210,7 +220,7 @@ var _ = Describe("A2AServer endpoint resolution", func() {
 
 		resolved := reconciler.resolveEndpoint(server, address, grpcOnlyCard("grpc://a2a-server.default.svc.cluster.local:50051"))
 		Expect(resolved.Reason).To(Equal(arka2a.ReasonUnsupportedTransport))
-		Expect(reconciler.reconcileEndpoint(ctx, server, resolved)).To(Succeed())
+		Expect(reconciler.reconcileEndpoint(ctx, server, resolved)).Error().NotTo(HaveOccurred())
 
 		Expect(server.Status.LastResolvedEndpoint).To(Equal(address))
 		Expect(server.Status.RejectedEndpoint).To(BeEmpty())
@@ -223,7 +233,7 @@ var _ = Describe("A2AServer endpoint resolution", func() {
 		Expect(findCondition(server, A2AServerReady).Reason).To(Equal("Initializing"))
 
 		By("staying stable when the transport is still unsupported")
-		Expect(reconciler.reconcileEndpoint(ctx, server, resolved)).To(Succeed())
+		Expect(reconciler.reconcileEndpoint(ctx, server, resolved)).Error().NotTo(HaveOccurred())
 		Expect(findCondition(server, A2AServerEndpointOverride).Reason).To(Equal(arka2a.ReasonUnsupportedTransport))
 	})
 
@@ -266,6 +276,44 @@ var _ = Describe("A2AServer endpoint resolution", func() {
 		Expect(agent.Annotations[annotations.A2AServerAddress]).To(Equal(address + "/rpc"))
 
 		By("not updating when nothing changed")
+		changed, err = reconciler.createOrUpdateAgent(ctx, reconciler.buildAgentWithSkills(server, card, agentName), agentName, server.Name)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(changed).To(BeFalse())
+	})
+
+	It("reverts manual edits to the agent spec", func() {
+		server := createServer("manual-edit-agent", arkv1prealpha1.A2AServerSpec{})
+		reconciler := newReconciler()
+		card := &arka2a.A2AAgentCard{Name: "forecast", Description: "forecast agent"}
+
+		server.Status.LastResolvedEndpoint = address
+		agentName := reconciler.sanitizeAgentName(card.Name)
+		created, err := reconciler.createOrUpdateAgent(ctx, reconciler.buildAgentWithSkills(server, card, agentName), agentName, server.Name)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(created).To(BeTrue())
+		DeferCleanup(func() {
+			agent := &arkv1alpha1.Agent{}
+			agent.Name = agentName
+			agent.Namespace = server.Namespace
+			Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, agent))).To(Succeed())
+		})
+
+		agent := &arkv1alpha1.Agent{}
+		key := types.NamespacedName{Name: agentName, Namespace: server.Namespace}
+		Expect(k8sClient.Get(ctx, key, agent)).To(Succeed())
+		agent.Spec.Description = "edited by hand"
+		agent.Spec.Prompt = "edited prompt"
+		Expect(k8sClient.Update(ctx, agent)).To(Succeed())
+
+		changed, err := reconciler.createOrUpdateAgent(ctx, reconciler.buildAgentWithSkills(server, card, agentName), agentName, server.Name)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(changed).To(BeTrue())
+
+		Expect(k8sClient.Get(ctx, key, agent)).To(Succeed())
+		Expect(agent.Spec.Description).To(Equal("forecast agent"))
+		Expect(agent.Spec.Prompt).To(Equal("You are forecast. forecast agent"))
+
+		By("not updating once the agent matches the A2AServer again")
 		changed, err = reconciler.createOrUpdateAgent(ctx, reconciler.buildAgentWithSkills(server, card, agentName), agentName, server.Name)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(changed).To(BeFalse())

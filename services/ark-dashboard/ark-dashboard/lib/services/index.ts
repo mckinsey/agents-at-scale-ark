@@ -22,6 +22,8 @@ export {
   type ToolApprovalConfig,
   type AgentCreateRequest,
   type AgentUpdateRequest,
+  type AgentHeader,
+  type AgentOverride,
 } from './agents';
 export {
   memoriesService,

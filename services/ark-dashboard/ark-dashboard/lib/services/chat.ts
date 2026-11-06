@@ -2,32 +2,17 @@ import { trackEvent } from '@/lib/analytics/singleton';
 import { hashPromptSync } from '@/lib/analytics/utils';
 import { apiClient } from '@/lib/api/client';
 import { apiUrl } from '@/lib/api/config';
+import { isNotFoundError } from '@/lib/api/errors';
 import type { components } from '@/lib/api/generated/types';
-import { generateUUID } from '@/lib/utils/uuid';
 import { a2aTasksService } from '@/lib/services/a2a-tasks';
-
-interface AxiosError extends Error {
-  response?: {
-    status: number;
-  };
-}
+import { generateUUID } from '@/lib/utils/uuid';
 
 export type QueryParameter = components['schemas']['QueryParameter'];
 export type QueryResponse = components['schemas']['QueryResponse'];
 export type QueryDetailResponse = components['schemas']['QueryDetailResponse'];
 export type QueryListResponse = components['schemas']['QueryListResponse'];
-export type QueryCreateRequest = Omit<
-  components['schemas']['QueryCreateRequest'],
-  'targets'
-> & {
-  target?: { name: string; type: string };
-};
-export type QueryUpdateRequest = Omit<
-  components['schemas']['QueryUpdateRequest'],
-  'targets'
-> & {
-  target?: { name: string; type: string };
-};
+export type QueryCreateRequest = components['schemas']['QueryCreateRequest'];
+export type QueryUpdateRequest = components['schemas']['QueryUpdateRequest'];
 
 // Define terminal status phases
 type TerminalQueryStatusPhase = 'done' | 'error' | 'canceled' | 'unknown';
@@ -194,6 +179,8 @@ function detectTerminalPhase(
 export type ChatResponse = {
   status: QueryStatusPhase;
   terminal: boolean;
+  transportError?: boolean;
+  notFound?: boolean;
   response?: string;
   memoryLookup?: MemoryNoticeLookup;
   messages?: Array<{
@@ -216,6 +203,29 @@ export type ChatMessage = {
   timestamp: Date;
   queryId?: string;
 };
+
+export class BrokerUnavailableError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+    public code?: string,
+    public fallback?: string,
+    public queryName?: string,
+  ) {
+    super(message);
+    this.name = 'BrokerUnavailableError';
+  }
+}
+
+export function isBrokerUnavailableError(
+  err: unknown,
+): err is BrokerUnavailableError {
+  return (
+    err instanceof BrokerUnavailableError &&
+    err.status === 503 &&
+    (err.code === undefined || err.code === 'broker_unavailable')
+  );
+}
 
 export type ChatSession = {
   id: string;
@@ -276,7 +286,7 @@ export const chatService = {
         { params: { namespace } },
       );
     } catch (error) {
-      if ((error as AxiosError).response?.status === 404) {
+      if (isNotFoundError(error)) {
         return null;
       }
       throw error;
@@ -308,7 +318,7 @@ export const chatService = {
       );
       return response;
     } catch (error) {
-      if ((error as AxiosError).response?.status === 404) {
+      if (isNotFoundError(error)) {
         return null;
       }
       throw error;
@@ -322,7 +332,7 @@ export const chatService = {
       });
       return true;
     } catch (error) {
-      if ((error as AxiosError).response?.status === 404) {
+      if (isNotFoundError(error)) {
         return false;
       }
       throw error;
@@ -338,6 +348,7 @@ export const chatService = {
     conversationId?: string,
     timeout?: string,
     parameters?: QueryParameter[],
+    annotations?: Record<string, string>,
   ): Promise<QueryDetailResponse> {
     const queryRequest: QueryCreateRequest = {
       name: `chat-query-${generateUUID()}`,
@@ -351,6 +362,9 @@ export const chatService = {
       conversationId,
       timeout,
       ...(parameters && parameters.length > 0 ? { parameters } : {}),
+      ...(annotations && Object.keys(annotations).length > 0
+        ? { metadata: { annotations } }
+        : {}),
     };
 
     return await this.createQuery(namespace, queryRequest);
@@ -392,7 +406,10 @@ export const chatService = {
     try {
       const query = await this.getQuery(namespace, queryName);
 
-      if (!query || !query.status) {
+      if (!query) {
+        return { status: 'unknown', terminal: true, notFound: true };
+      }
+      if (!query.status) {
         return { status: 'unknown', terminal: false };
       }
 
@@ -449,7 +466,7 @@ export const chatService = {
 
       return { status: 'unknown', terminal: true };
     } catch {
-      return { status: 'error', terminal: true };
+      return { status: 'error', terminal: true, transportError: true };
     }
   },
 
@@ -483,7 +500,7 @@ export const chatService = {
         continue;
       }
       if (hasMemoryCondition(status)) {
-        return {settled: true, notice: extractMemoryNotice(status)};
+        return { settled: true, notice: extractMemoryNotice(status) };
       }
     }
     return MEMORY_LOOKUP_UNSETTLED;
@@ -569,6 +586,7 @@ export const chatService = {
     timeout?: string,
     abortSignal?: AbortSignal,
     parameters?: QueryParameter[],
+    annotations?: Record<string, string>,
   ): Promise<{
     queryName: string;
     chunks: AsyncGenerator<Record<string, unknown>, void, unknown>;
@@ -582,6 +600,7 @@ export const chatService = {
       conversationId,
       timeout,
       parameters,
+      annotations,
     );
 
     const queryName = query.name;
@@ -600,7 +619,29 @@ export const chatService = {
       );
 
       if (!response.ok) {
-        throw new Error(`Failed to connect to stream: ${response.statusText}`);
+        let code: string | undefined;
+        let fallback: string | undefined;
+        try {
+          const body = await response.json();
+          if (body && typeof body === 'object') {
+            if (typeof body.code === 'string') code = body.code;
+            if (typeof body.fallback === 'string') fallback = body.fallback;
+          }
+        } catch {}
+        const message = `Failed to connect to stream: ${response.statusText}`;
+        if (
+          response.status === 503 &&
+          (code === undefined || code === 'broker_unavailable')
+        ) {
+          throw new BrokerUnavailableError(
+            message,
+            response.status,
+            code,
+            fallback,
+            queryName,
+          );
+        }
+        throw new Error(message);
       }
 
       const reader = response.body?.getReader();

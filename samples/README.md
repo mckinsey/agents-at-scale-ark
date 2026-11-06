@@ -268,21 +268,14 @@ Basic query targeting a single agent.
 - **Query**: Simple math calculation
 - **Use case**: Basic agent interaction
 
-#### `queries/query-multiple-targets.yaml` - Multi-Target Queries
-Querying multiple agents and teams.
-- **Targets**: Multiple agents and teams
-- **Query**: Single input to multiple processors
-- **Use case**: Parallel processing
-
 #### `queries/query-with-label-selectors.yaml` - Label Selector Queries
 Dynamic target selection using label selectors.
-- **Selector**: Label-based target discovery
-- **Mixed mode**: Explicit targets + label selector
-- **Query**: Selects agents and teams by labels
+- **Selector**: `matchLabels` and `matchExpressions` combined
+- **Query**: Selects the first matching agent, team, model or tool
 - **Use case**: Dynamic resource discovery
 
 #### `queries/query-selectors-only.yaml` - Selector-Only Query
-Query using only label selectors (no explicit targets).
+Query using only a label selector (no explicit target).
 - **Selector**: `matchLabels` for analyst role
 - **Query**: Market trend analysis
 - **Use case**: Pure label-based targeting
@@ -304,38 +297,24 @@ Enterprise customer onboarding with comprehensive parameters.
 
 ### 📋 Query Target Selection
 
-Queries support three ways to select targets:
+A query runs against exactly one target. Select it in one of two ways:
 
-#### 1. Explicit Targets
+#### 1. Explicit Target
 ```yaml
 spec:
-  targets:
-    - type: agent
-      name: specific-agent
-    - type: team
-      name: specific-team
+  target:
+    type: agent
+    name: specific-agent
 ```
 
-#### 2. Label Selectors
+#### 2. Label Selector
+Resolves to the first matching resource, checked in order Agent → Team → Model → Tool.
 ```yaml
 spec:
   selector:
     matchLabels:
       role: analyst
       tier: production
-```
-
-#### 3. Mixed Mode (Both)
-```yaml
-spec:
-  targets:
-    - type: agent
-      name: backup-agent
-  selector:
-    matchExpressions:
-      - key: category
-        operator: In
-        values: ["weather", "climate"]
 ```
 
 **Label Selector Features:**

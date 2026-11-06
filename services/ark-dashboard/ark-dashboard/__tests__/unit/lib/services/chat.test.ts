@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { apiClient } from '@/lib/api/client';
-import { chatService } from '@/lib/services/chat';
+import { APIError } from '@/lib/api/errors';
+import { BrokerUnavailableError, chatService } from '@/lib/services/chat';
 import type {
   QueryDetailResponse,
   QueryListResponse,
@@ -84,8 +85,7 @@ describe('chatService', () => {
     });
 
     it('should return null for 404 errors', async () => {
-      const error = new Error('Not found') as any;
-      error.response = { status: 404 };
+      const error = new APIError('Not found', 404);
       vi.mocked(apiClient.get).mockRejectedValueOnce(error);
 
       const result = await chatService.getQuery('default', 'non-existent');
@@ -151,6 +151,32 @@ describe('chatService', () => {
       expect(result).toEqual(mockResponse);
     });
 
+    it('should forward annotations as query metadata when provided', async () => {
+      vi.mocked(apiClient.post).mockResolvedValueOnce({
+        name: 'chat-query-mock-uuid',
+      });
+
+      await chatService.submitChatQuery(
+        'default',
+        'Hello',
+        'agent',
+        'test-agent',
+        'session-123',
+        undefined,
+        undefined,
+        undefined,
+        { 'example.com/key': 'value' },
+      );
+
+      expect(apiClient.post).toHaveBeenCalledWith(
+        `/api/v1/queries/`,
+        expect.objectContaining({
+          metadata: { annotations: { 'example.com/key': 'value' } },
+        }),
+        { params: { namespace: 'default' } },
+      );
+    });
+
     it('should forward parameters when provided', async () => {
       const mockResponse: QueryDetailResponse = {
         name: 'chat-query-mock-uuid',
@@ -200,6 +226,31 @@ describe('chatService', () => {
   });
 
   describe('getQueryResult', () => {
+    it('reports a query that no longer exists', async () => {
+      vi.mocked(apiClient.get).mockRejectedValueOnce(
+        new APIError('Not found', 404),
+      );
+
+      const result = await chatService.getQueryResult('default', 'gone');
+
+      expect(apiClient.get).toHaveBeenCalledWith('/api/v1/queries/gone', {
+        params: { namespace: 'default' },
+      });
+      expect(result).toEqual({
+        status: 'unknown',
+        terminal: true,
+        notFound: true,
+      });
+    });
+
+    it('keeps waiting on a query that has no status yet', async () => {
+      vi.mocked(apiClient.get).mockResolvedValueOnce({ name: 'new-query' });
+
+      const result = await chatService.getQueryResult('default', 'new-query');
+
+      expect(result).toEqual({ status: 'unknown', terminal: false });
+    });
+
     it('should return terminal status for completed query', async () => {
       const mockQuery: QueryDetailResponse = {
         name: 'test-query',
@@ -291,6 +342,7 @@ describe('chatService', () => {
       expect(result).toEqual({
         status: 'error',
         terminal: true,
+        transportError: true,
       });
     });
   });
@@ -461,8 +513,7 @@ describe('chatService', () => {
     });
 
     it('should return null for 404 errors', async () => {
-      const error = new Error('Not found') as any;
-      error.response = { status: 404 };
+      const error = new APIError('Not found', 404);
       vi.mocked(apiClient.put).mockRejectedValueOnce(error);
 
       const result = await chatService.updateQuery('default', 'non-existent', {});
@@ -483,8 +534,7 @@ describe('chatService', () => {
     });
 
     it('should return false for 404 errors', async () => {
-      const error = new Error('Not found') as any;
-      error.response = { status: 404 };
+      const error = new APIError('Not found', 404);
       vi.mocked(apiClient.delete).mockRejectedValueOnce(error);
 
       const result = await chatService.deleteQuery('default', 'non-existent');
@@ -620,6 +670,132 @@ describe('chatService', () => {
       );
 
       await expect(generator.next()).rejects.toThrow(
+        'Failed to connect to stream: Internal Server Error',
+      );
+    });
+
+    it('should throw a BrokerUnavailableError with parsed code and fallback on a 503', async () => {
+      const messages = [{ role: 'user' as const, content: 'Hello' }];
+      const mockQueryResponse: QueryDetailResponse = {
+        name: 'chat-query-mock-uuid',
+        input: messages,
+        target: { type: 'agent', name: 'test-agent' },
+        status: { phase: 'pending' },
+      };
+
+      vi.mocked(apiClient.post).mockResolvedValueOnce(mockQueryResponse);
+
+      global.fetch = vi.fn().mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+        statusText: 'Service Unavailable',
+        json: async () => ({ code: 'broker_unavailable', fallback: 'poll' }),
+      });
+
+      const generator = chatService.streamChatResponse(
+        'default',
+        messages,
+        'agent',
+        'test-agent',
+        'session-123',
+      );
+
+      let caught: unknown;
+      try {
+        await generator.next();
+      } catch (err) {
+        caught = err;
+      }
+
+      expect(caught).toBeInstanceOf(BrokerUnavailableError);
+      const error = caught as BrokerUnavailableError;
+      expect(error.status).toBe(503);
+      expect(error.code).toBe('broker_unavailable');
+      expect(error.fallback).toBe('poll');
+      expect(error.queryName).toBe('chat-query-mock-uuid');
+    });
+
+    it('should throw a usable BrokerUnavailableError when the 503 body is not JSON', async () => {
+      const messages = [{ role: 'user' as const, content: 'Hello' }];
+      const mockQueryResponse: QueryDetailResponse = {
+        name: 'chat-query-mock-uuid',
+        input: messages,
+        target: { type: 'agent', name: 'test-agent' },
+        status: { phase: 'pending' },
+      };
+
+      vi.mocked(apiClient.post).mockResolvedValueOnce(mockQueryResponse);
+
+      global.fetch = vi.fn().mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+        statusText: 'Service Unavailable',
+        json: async () => {
+          throw new Error('not json');
+        },
+      });
+
+      const generator = chatService.streamChatResponse(
+        'default',
+        messages,
+        'agent',
+        'test-agent',
+        'session-123',
+      );
+
+      let caught: unknown;
+      try {
+        await generator.next();
+      } catch (err) {
+        caught = err;
+      }
+
+      expect(caught).toBeInstanceOf(BrokerUnavailableError);
+      const error = caught as BrokerUnavailableError;
+      expect(error.status).toBe(503);
+      expect(error.code).toBeUndefined();
+      expect(error.fallback).toBeUndefined();
+      expect(error.message).toBe(
+        'Failed to connect to stream: Service Unavailable',
+      );
+    });
+
+    it('should throw a generic Error on a non-503 stream failure', async () => {
+      const messages = [{ role: 'user' as const, content: 'Hello' }];
+      const mockQueryResponse: QueryDetailResponse = {
+        name: 'chat-query-mock-uuid',
+        input: messages,
+        target: { type: 'agent', name: 'test-agent' },
+        status: { phase: 'pending' },
+      };
+
+      vi.mocked(apiClient.post).mockResolvedValueOnce(mockQueryResponse);
+
+      global.fetch = vi.fn().mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+        json: async () => ({ error: { message: 'boom' } }),
+      });
+
+      const generator = chatService.streamChatResponse(
+        'default',
+        messages,
+        'agent',
+        'test-agent',
+        'session-123',
+      );
+
+      let caught: unknown;
+      try {
+        await generator.next();
+      } catch (err) {
+        caught = err;
+      }
+
+      expect(caught).toBeInstanceOf(Error);
+      expect(caught).not.toBeInstanceOf(BrokerUnavailableError);
+      expect((caught as Error).message).toBe(
         'Failed to connect to stream: Internal Server Error',
       );
     });

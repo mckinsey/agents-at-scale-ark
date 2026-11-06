@@ -18,6 +18,7 @@ export interface ChatSession {
   tokenUsage?: TokenUsage;
   messageTokenUsage?: Record<number, TokenUsage>;
   conversationId?: string;
+  activeQueryName?: string;
 }
 
 type ChatHistoryMap = Record<string, ChatSession>;

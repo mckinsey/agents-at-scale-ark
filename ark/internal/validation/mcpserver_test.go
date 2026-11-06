@@ -3,6 +3,7 @@ package validation
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -67,6 +68,40 @@ func TestValidateMCPServer(t *testing.T) {
 		_, err := v.ValidateMCPServer(ctx, mcp)
 		if err == nil {
 			t.Fatal("expected error for negative poll interval")
+		}
+	})
+
+	t.Run("warns on deprecated sse transport", func(t *testing.T) {
+		mcp := &arkv1alpha1.MCPServer{
+			ObjectMeta: metav1.ObjectMeta{Name: "m", Namespace: "default"},
+			Spec: arkv1alpha1.MCPServerSpec{
+				Address:   arkv1alpha1.ValueSource{Value: "http://localhost"},
+				Transport: "sse",
+			},
+		}
+		warnings, err := v.ValidateMCPServer(ctx, mcp)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(warnings) != 1 || !strings.Contains(warnings[0], "deprecated") {
+			t.Fatalf("expected one deprecation warning, got %v", warnings)
+		}
+	})
+
+	t.Run("no warning on http transport", func(t *testing.T) {
+		mcp := &arkv1alpha1.MCPServer{
+			ObjectMeta: metav1.ObjectMeta{Name: "m", Namespace: "default"},
+			Spec: arkv1alpha1.MCPServerSpec{
+				Address:   arkv1alpha1.ValueSource{Value: "http://localhost"},
+				Transport: "http",
+			},
+		}
+		warnings, err := v.ValidateMCPServer(ctx, mcp)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(warnings) != 0 {
+			t.Fatalf("expected no warnings, got %v", warnings)
 		}
 	})
 }

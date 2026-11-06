@@ -6,8 +6,10 @@ import { NavigationTracker } from '@/components/navigation-tracker';
 import { SettingsKeyboardShortcut } from '@/components/settings/settings-keyboard-shortcut';
 import { Toaster } from '@/components/ui/sonner';
 import { AnalyticsProvider } from '@/lib/analytics/provider';
+import { normalizeArgoUrl } from '@/lib/utils/argo-url';
 import { ContextProvider } from '@/providers/ContextProvider';
 import { NamespaceProvider } from '@/providers/NamespaceProvider';
+import { ArgoUrlProvider } from '@/providers/argo-url-provider';
 
 import { OpenModeProvider, SSOModeProvider } from './AuthProviders';
 import { QueryClientProvider } from './QueryClientProvider';
@@ -30,14 +32,19 @@ export function GlobalProviders({ children }: PropsWithChildren) {
               }>
               <ContextProvider enabled={isSSOEnabled}>
                 <NamespaceProvider>
-                  <AnalyticsProvider>{children}</AnalyticsProvider>
+                  <ArgoUrlProvider
+                    argoUrl={normalizeArgoUrl(process.env.ARGO_URL)}>
+                    <AnalyticsProvider>{children}</AnalyticsProvider>
+                  </ArgoUrlProvider>
                 </NamespaceProvider>
               </ContextProvider>
             </Suspense>
           </QueryClientProvider>
         </AuthProvider>
         <SettingsKeyboardShortcut />
-        <NavigationTracker />
+        <Suspense fallback={null}>
+          <NavigationTracker />
+        </Suspense>
         <Toaster visibleToasts={5} position="top-right" />
       </ThemeProvider>
     </JotaiProvider>

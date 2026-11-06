@@ -69,7 +69,11 @@ def _iter_config_values(config: object):
     for provider_config in config.values():
         if not isinstance(provider_config, dict):
             continue
-        yield from provider_config.values()
+        for key, value_obj in provider_config.items():
+            if key == "headers" and isinstance(value_obj, list):
+                yield from (header.get("value") for header in value_obj if isinstance(header, dict))
+            else:
+                yield value_obj
 
 
 def extract_secret_refs(spec: dict) -> List[str]:

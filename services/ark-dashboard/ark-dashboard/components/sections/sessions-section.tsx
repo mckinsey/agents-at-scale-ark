@@ -1,6 +1,5 @@
 'use client';
 
-import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { ErrorBoundary } from '@/components/common/error-boundary';
@@ -12,6 +11,7 @@ import {
   Bolt,
   Build,
   Cancel,
+  CancelRegular,
   ChatBubble,
   CheckCircle,
   ChevronDown as ChevronDownIcon,
@@ -23,9 +23,14 @@ import {
   InsertDriveFile,
   Memory as MemoryIcon,
   OpenInNew,
+  Pause,
+  PlayArrow,
+  PromptSuggestion,
   Schedule,
   Search as SearchIcon,
   SmartToy,
+  StopRegular,
+  Sync,
   Terminal,
   Terminal2,
 } from '@/components/icons';
@@ -38,8 +43,10 @@ import {
 } from '@/components/sections/resource-list-states';
 import { WorkflowNodeLogs } from '@/components/sections/workflow-node-logs';
 import { Button } from '@/components/ui/button';
+import { IconActionButton } from '@/components/ui/icon-action-button';
 import { IconShell } from '@/components/ui/icon-shell';
 import { Input } from '@/components/ui/input';
+import { Pagination } from '@/components/ui/pagination';
 import {
   Select,
   SelectContent,
@@ -51,15 +58,26 @@ import {
 import { toast } from '@/components/ui/sonner';
 import { Spinner } from '@/components/ui/spinner';
 import { ARGO_WORKFLOWS_DOCS_URL } from '@/lib/constants/workflows';
-import { useDebounce } from '@/lib/hooks/use-debounce';
+import { SEARCH_DEBOUNCE_MS, useUrlState } from '@/lib/hooks/use-url-state';
 import {
   mapArgoWorkflowToSession,
   mapArgoWorkflowsToSessions,
 } from '@/lib/services/workflow-mapper';
 import { useGetAllWorkflowTemplates } from '@/lib/services/workflow-templates-hooks';
-import { useWorkflow, useWorkflows } from '@/lib/services/workflows-hooks';
+import type { WorkflowLifecycleAction } from '@/lib/services/workflows';
+import {
+  useWorkflow,
+  useWorkflowLifecycleActions,
+  useWorkflows,
+} from '@/lib/services/workflows-hooks';
 import { cn } from '@/lib/utils';
+import {
+  DEFAULT_PAGE_SIZE,
+  parsePage,
+  parsePageSize,
+} from '@/lib/utils/pagination';
 import { useNamespace } from '@/providers/NamespaceProvider';
+import { useArgoLinks } from '@/providers/argo-url-provider';
 
 type SessionSourceFilter = 'all' | 'workflows' | 'teams' | 'agents';
 type StepStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'skipped';
@@ -67,6 +85,7 @@ type WorkflowStepType =
   | 'dag'
   | 'steps'
   | 'retry'
+  | 'taskgroup'
   | 'container'
   | 'script'
   | 'suspend';
@@ -83,6 +102,17 @@ const statusFilterItems = [
   { label: 'Succeeded', value: 'Succeeded' },
   { label: 'Failed', value: 'Failed' },
 ];
+
+const PAGE_SIZE_OPTIONS = [10, 15, 25, 50, 100];
+
+const URL_STATE_SPEC = {
+  workflowName: { default: '', debounceMs: SEARCH_DEBOUNCE_MS },
+  workflowTemplateName: { default: '' },
+  status: { default: 'all', parse: normalizeStatus },
+  run: { default: '' },
+  page: { default: 1, parse: parsePage },
+  pageSize: { default: DEFAULT_PAGE_SIZE, parse: parsePageSize },
+};
 
 interface WorkflowStepDetail {
   image?: string;
@@ -157,6 +187,9 @@ interface BaseSession {
 interface WorkflowSession extends BaseSession {
   type: 'workflow';
   steps: WorkflowStep[];
+  suspended?: boolean;
+  pauseState?: PauseState;
+  shutdownRequested?: boolean;
 }
 
 interface TeamSession extends BaseSession {
@@ -166,13 +199,26 @@ interface TeamSession extends BaseSession {
 
 type Session = WorkflowSession | TeamSession;
 
-const STATUS_LABELS: Record<StepStatus, string> = {
+type PauseState = 'pausing' | 'paused';
+
+type DisplayStatus = StepStatus | PauseState;
+
+const STATUS_LABELS: Record<DisplayStatus, string> = {
   pending: 'Pending',
   running: 'Running',
+  pausing: 'Pausing',
+  paused: 'Paused',
   succeeded: 'Succeeded',
   failed: 'Failed',
   skipped: 'Skipped',
 };
+
+function getSessionDisplayStatus(session: Session): DisplayStatus {
+  if (session.type === 'workflow' && session.pauseState) {
+    return session.pauseState;
+  }
+  return session.status;
+}
 
 function getStatusBorderClass(status: StepStatus): string {
   switch (status) {
@@ -187,7 +233,7 @@ function getStatusBorderClass(status: StepStatus): string {
   }
 }
 
-function getStatusIcon(status: StepStatus) {
+function getStatusIcon(status: DisplayStatus) {
   switch (status) {
     case 'succeeded':
       return (
@@ -202,9 +248,16 @@ function getStatusIcon(status: StepStatus) {
         </IconShell>
       );
     case 'running':
+    case 'pausing':
       return (
         <IconShell size="sm" className="text-fg-secondary" asChild>
           <Spinner size="sm" />
+        </IconShell>
+      );
+    case 'paused':
+      return (
+        <IconShell size="sm" variant="secondary">
+          <Pause />
         </IconShell>
       );
     case 'skipped':
@@ -235,7 +288,7 @@ function DurationLabel({ duration }: { readonly duration: string }) {
   );
 }
 
-function StatusLabel({ status }: { readonly status: StepStatus }) {
+function StatusLabel({ status }: { readonly status: DisplayStatus }) {
   return (
     <div className="flex shrink-0 items-center gap-1">
       {getStatusIcon(status)}
@@ -389,6 +442,7 @@ function WorkflowStepDetail({
   message?: string;
   status: StepStatus;
 }>) {
+  const argoLinks = useArgoLinks();
   const shouldFetchLogs = Boolean(
     detail.workflowName && detail.nodeId && detail.namespace,
   );
@@ -432,17 +486,21 @@ function WorkflowStepDetail({
 
       {detail.inputs && Object.keys(detail.inputs).length > 0 && (
         <LogEntryBlock icon={<InsertDriveFile />} label="Inputs">
-          {Object.entries(detail.inputs).map(([key, value]) => (
-            <LogEntryRow key={key} label={`${key}:`} value={value} />
-          ))}
+          <div className="border-stroke-divider flex w-full min-w-0 flex-col gap-1 border p-2">
+            {Object.entries(detail.inputs).map(([key, value]) => (
+              <LogEntryRow key={key} label={`${key}:`} value={value} />
+            ))}
+          </div>
         </LogEntryBlock>
       )}
 
       {detail.outputs && Object.keys(detail.outputs).length > 0 && (
         <LogEntryBlock icon={<InsertDriveFile />} label="Outputs">
-          {Object.entries(detail.outputs).map(([key, value]) => (
-            <LogEntryRow key={key} label={`${key}:`} value={value} />
-          ))}
+          <div className="border-stroke-divider flex w-full min-w-0 flex-col gap-1 border p-2">
+            {Object.entries(detail.outputs).map(([key, value]) => (
+              <LogEntryRow key={key} label={`${key}:`} value={value} />
+            ))}
+          </div>
         </LogEntryBlock>
       )}
 
@@ -461,7 +519,11 @@ function WorkflowStepDetail({
           <WorkflowNodeLogs
             target={logTarget}
             isRunning={status === 'running' || status === 'pending'}
-            argoUrl={`${process.env.NEXT_PUBLIC_ARGO_URL || 'http://localhost:2746'}/workflows/${detail.namespace}/${detail.workflowName}?tab=workflow&nodeId=${detail.nodeId}`}
+            argoUrl={argoLinks?.workflow(
+              logTarget.namespace,
+              logTarget.workflowName,
+              { tab: 'workflow', nodeId: logTarget.nodeId },
+            )}
           />
         </LogEntryBlock>
       )}
@@ -602,7 +664,7 @@ function WorkflowStepNode({
   depth?: number;
   isLast?: boolean;
 }) {
-  const [showDetail, setShowDetail] = useState(false);
+  const [showDetail, setShowDetail] = useState(step.type === 'taskgroup');
   const hasChildren = step.children && step.children.length > 0;
   const hasDetail = step.detail && Object.keys(step.detail).length > 0;
 
@@ -621,8 +683,8 @@ function WorkflowStepNode({
           <WorkflowStepNode
             key={child.id}
             step={child}
-            depth={depth}
-            isLast={isLast && index === step.children!.length - 1}
+            depth={depth + 1}
+            isLast={index === step.children!.length - 1}
           />
         ))}
       </>
@@ -721,6 +783,7 @@ function SessionDetailView({
   session: Session;
   isLoading?: boolean;
 }) {
+  const argoLinks = useArgoLinks();
   return (
     <div className="border-fill-onsurface-ui-1 flex h-full min-h-0 min-w-0 flex-1 flex-col border">
       <div className="bg-surface-secondary flex h-10 shrink-0 items-center justify-between gap-3 px-3">
@@ -738,20 +801,25 @@ function SessionDetailView({
               </span>
             </div>
           )}
-          <StatusLabel status={session.status} />
-          {session.type === 'workflow' && session.namespace && session.uid && (
-            <Button variant="outline" size="xs" asChild>
-              <a
-                href={`${process.env.NEXT_PUBLIC_ARGO_URL || 'http://localhost:2746'}/workflows/${session.namespace}/${session.name}?uid=${session.uid}`}
-                target="_blank"
-                rel="noopener noreferrer">
-                View in Argo
-                <IconShell size="sm">
-                  <OpenInNew />
-                </IconShell>
-              </a>
-            </Button>
-          )}
+          <StatusLabel status={getSessionDisplayStatus(session)} />
+          {argoLinks &&
+            session.type === 'workflow' &&
+            session.namespace &&
+            session.uid && (
+              <Button variant="outline" size="xs" asChild>
+                <a
+                  href={argoLinks.workflow(session.namespace, session.name, {
+                    uid: session.uid,
+                  })}
+                  target="_blank"
+                  rel="noopener noreferrer">
+                  View in Argo
+                  <IconShell size="sm">
+                    <OpenInNew />
+                  </IconShell>
+                </a>
+              </Button>
+            )}
         </div>
       </div>
       <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-5 py-4">
@@ -767,54 +835,205 @@ function SessionDetailView({
   );
 }
 
+const RUN_ACTION_ERROR_TITLES: Record<WorkflowLifecycleAction, string> = {
+  suspend: 'Failed to pause workflow',
+  resume: 'Failed to resume workflow',
+  stop: 'Failed to stop workflow',
+  terminate: 'Failed to cancel workflow',
+  retry: 'Failed to retry workflow',
+  resubmit: 'Failed to resubmit workflow',
+};
+
+const RUN_CONTROL_STATUSES = new Set<StepStatus>([
+  'running',
+  'succeeded',
+  'failed',
+]);
+
+interface WorkflowRunControlsProps {
+  readonly status: StepStatus;
+  readonly suspended: boolean;
+  readonly disabled: boolean;
+  readonly onAction: (action: WorkflowLifecycleAction) => void;
+  readonly className?: string;
+}
+
+interface RunControl {
+  readonly action: WorkflowLifecycleAction;
+  readonly label: string;
+  readonly tooltip?: string;
+  readonly Icon: React.ComponentType;
+}
+
+const RESUME_CONTROL: RunControl = {
+  action: 'resume',
+  label: 'Resume',
+  Icon: PlayArrow,
+};
+const PAUSE_CONTROL: RunControl = {
+  action: 'suspend',
+  label: 'Pause',
+  tooltip: 'Pause: running steps finish, no new steps start until resumed',
+  Icon: Pause,
+};
+const STOP_CONTROL: RunControl = {
+  action: 'stop',
+  label: 'Stop',
+  Icon: StopRegular,
+};
+const CANCEL_CONTROL: RunControl = {
+  action: 'terminate',
+  label: 'Cancel',
+  Icon: CancelRegular,
+};
+const RETRY_CONTROL: RunControl = {
+  action: 'retry',
+  label: 'Retry',
+  Icon: Sync,
+};
+const RESUBMIT_CONTROL: RunControl = {
+  action: 'resubmit',
+  label: 'Resubmit',
+  Icon: PromptSuggestion,
+};
+
+function getRunControls(status: StepStatus, suspended: boolean): RunControl[] {
+  if (status === 'failed') {
+    return [RETRY_CONTROL, RESUBMIT_CONTROL];
+  }
+  return [
+    suspended ? RESUME_CONTROL : PAUSE_CONTROL,
+    STOP_CONTROL,
+    CANCEL_CONTROL,
+  ];
+}
+
+function WorkflowRunControls({
+  status,
+  suspended,
+  disabled,
+  onAction,
+  className,
+}: WorkflowRunControlsProps) {
+  const wrapperClassName = cn(
+    'flex items-center gap-2 transition-opacity',
+    disabled && 'opacity-40',
+    className,
+  );
+
+  if (status === 'succeeded') {
+    return (
+      <div aria-busy={disabled} className={wrapperClassName}>
+        <Button
+          variant="outline"
+          size="xxs"
+          className="h-5"
+          disabled={disabled}
+          onClick={() => onAction('resubmit')}>
+          Resubmit
+          <IconShell size="sm" variant="secondary">
+            <PromptSuggestion />
+          </IconShell>
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div aria-busy={disabled} className={wrapperClassName}>
+      {getRunControls(status, suspended).map(
+        ({ action, label, tooltip, Icon }) => (
+          <IconActionButton
+            key={action}
+            label={label}
+            tooltip={tooltip}
+            variant="outline"
+            size="icon-xs"
+            disabled={disabled}
+            onClick={() => onAction(action)}>
+            <Icon />
+          </IconActionButton>
+        ),
+      )}
+    </div>
+  );
+}
+
 function SessionListItem({
   session,
   isSelected,
   onClick,
+  onRunAction,
+  isRunActionPending,
 }: {
-  session: Session;
-  isSelected: boolean;
-  onClick: () => void;
+  readonly session: Session;
+  readonly isSelected: boolean;
+  readonly onClick: () => void;
+  readonly onRunAction?: (action: WorkflowLifecycleAction) => void;
+  readonly isRunActionPending: boolean;
 }) {
+  const showRunControls =
+    onRunAction !== undefined &&
+    session.type === 'workflow' &&
+    RUN_CONTROL_STATUSES.has(session.status);
+  const shutdownInProgress =
+    session.type === 'workflow' &&
+    session.status === 'running' &&
+    Boolean(session.shutdownRequested);
+
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={session.name}
-      aria-current={isSelected ? 'true' : undefined}
-      className={cn(
-        'flex w-full min-w-0 cursor-pointer items-center px-3 py-2 text-left transition-colors',
-        isSelected
-          ? 'bg-fill-onsurface-ui-1'
-          : 'hover:bg-stateslayer-overlay-hover',
-      )}>
-      <div className="flex min-w-0 flex-1 flex-col gap-3">
-        <div className="flex min-w-0 flex-col gap-1">
-          <div className="flex items-center gap-1">
-            <span data-testid="session-status" data-status={session.status}>
-              {getStatusIcon(session.status)}
-              <span className="sr-only">{STATUS_LABELS[session.status]}</span>
-            </span>
-            <span className="paragraph-small-primary text-fg-secondary">
-              {new Date(session.startedAt).toLocaleString()}
+    <div className="relative">
+      <button
+        type="button"
+        onClick={onClick}
+        title={session.name}
+        aria-current={isSelected ? 'true' : undefined}
+        className={cn(
+          'flex w-full min-w-0 cursor-pointer items-center px-3 py-2 text-left transition-colors',
+          isSelected
+            ? 'bg-fill-onsurface-ui-1'
+            : 'hover:bg-stateslayer-overlay-hover',
+        )}>
+        <div className="flex min-w-0 flex-1 flex-col gap-3">
+          <div className="flex min-w-0 flex-col gap-1">
+            <div className="flex items-center gap-1">
+              <span data-testid="session-status" data-status={session.status}>
+                {getStatusIcon(getSessionDisplayStatus(session))}
+                <span className="sr-only">
+                  {STATUS_LABELS[getSessionDisplayStatus(session)]}
+                </span>
+              </span>
+              <span className="paragraph-small-primary text-fg-secondary">
+                {new Date(session.startedAt).toLocaleString()}
+              </span>
+            </div>
+            <span className="paragraph-regular-primary text-fg-primary w-full truncate">
+              {session.name}
             </span>
           </div>
-          <span className="paragraph-regular-primary text-fg-primary w-full truncate">
-            {session.name}
-          </span>
+          <div
+            className={cn(
+              'flex min-w-0 items-center justify-between gap-1',
+              showRunControls && 'min-h-5',
+            )}>
+            <DurationLabel duration={session.duration} />
+          </div>
         </div>
-        <div className="flex min-w-0 items-center justify-between gap-1">
-          <DurationLabel duration={session.duration} />
-          <span className="label-small-primary text-fg-secondary py-1 capitalize">
-            {session.type}
-          </span>
-        </div>
-      </div>
-    </button>
+      </button>
+      {showRunControls && onRunAction && (
+        <WorkflowRunControls
+          status={session.status}
+          suspended={Boolean(session.suspended)}
+          disabled={isRunActionPending || shutdownInProgress}
+          onAction={onRunAction}
+          className="absolute right-3 bottom-2"
+        />
+      )}
+    </div>
   );
 }
 
-const normalizeStatus = (status: string): string => {
+function normalizeStatus(status: string): string {
   if (!status || status === 'all') return 'all';
 
   const statusMap: Record<string, string> = {
@@ -826,7 +1045,7 @@ const normalizeStatus = (status: string): string => {
   };
 
   return statusMap[status.toLowerCase()] || status;
-};
+}
 
 function TemplateOptions({
   templateNames,
@@ -883,6 +1102,8 @@ function SessionsBody({
   hasActiveFilters,
   hasNext,
   onClearFilters,
+  onRunAction,
+  isRunActionPending,
 }: {
   readonly error: Error | null;
   readonly isLoading: boolean;
@@ -894,6 +1115,11 @@ function SessionsBody({
   readonly hasActiveFilters: boolean;
   readonly hasNext: boolean;
   readonly onClearFilters: () => void;
+  readonly onRunAction?: (
+    sessionId: string,
+    action: WorkflowLifecycleAction,
+  ) => void;
+  readonly isRunActionPending: (sessionId: string) => boolean;
 }) {
   if (error) {
     return (
@@ -957,6 +1183,12 @@ function SessionsBody({
             session={session}
             isSelected={session.id === selectedSessionId}
             onClick={() => onSelectSession(session.id)}
+            onRunAction={
+              onRunAction
+                ? action => onRunAction(session.id, action)
+                : undefined
+            }
+            isRunActionPending={isRunActionPending(session.id)}
           />
         ))}
       </div>
@@ -982,96 +1214,124 @@ function SessionsBody({
 export function SessionsSection({
   onCountChange,
 }: {
-  readonly onCountChange?: (count: number) => void;
+  readonly onCountChange?: (count: number | null) => void;
 }) {
-  const { namespace, isNamespaceResolved } = useNamespace();
-  const router = useRouter();
-  const searchParams = useSearchParams();
+  const { namespace, isNamespaceResolved, readOnlyMode } = useNamespace();
+  const [urlState, setUrlState, committedState] = useUrlState(URL_STATE_SPEC);
 
   // Note: sourceFilter is currently unused but reserved for future support of Team sessions
   // Currently only workflow sessions are implemented
   const [sourceFilter] = useState<SessionSourceFilter>('all');
   // A one-shot deep link (e.g. from the "View run" toast) to an exact,
   // known workflow - shown directly regardless of filters/pagination.
-  const initialRunRef = useRef(searchParams.get('run'));
+  const initialRunRef = useRef(urlState.run || null);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
     () => initialRunRef.current,
   );
   const [useRealData] = useState(true);
 
-  const [workflowNameInput, setWorkflowNameInput] = useState(
-    searchParams.get('workflowName') || '',
-  );
-  const initialWorkflowTemplateName = searchParams.get('workflowTemplateName') || '';
+  useEffect(() => {
+    if (!urlState.run) {
+      return;
+    }
+    initialRunRef.current = urlState.run;
+    setSelectedSessionId(urlState.run);
+    setUrlState({ run: '' });
+  }, [urlState.run, setUrlState]);
+
+  const statusFilter = urlState.status;
+  const workflowNameInput = urlState.workflowName;
+
   // workflowTemplateNameInput is the raw text shown in the input and used to
   // filter dropdown suggestions. selectedTemplateName is the committed filter
   // actually sent to the API - it is only set by picking a dropdown option, since
   // the backend applies this as an exact-match label selector (see PR #3679 review).
-  const [workflowTemplateNameInput, setWorkflowTemplateNameInput] = useState(
-    initialWorkflowTemplateName,
+  const selectedTemplateName = urlState.workflowTemplateName;
+  const [templateTextDraft, setTemplateTextDraft] = useState<string | null>(
+    null,
   );
-  const [selectedTemplateName, setSelectedTemplateName] = useState(
-    initialWorkflowTemplateName,
-  );
-  const [statusFilter, setStatusFilter] = useState(
-    normalizeStatus(searchParams.get('status') || 'all'),
-  );
+  const workflowTemplateNameInput = templateTextDraft ?? selectedTemplateName;
   const [templateDropdownOpen, setTemplateDropdownOpen] = useState(false);
   const templateInputRef = useRef<HTMLDivElement>(null);
 
-  const debouncedWorkflowName = useDebounce(workflowNameInput, 500);
-
   const filters = useMemo(
     () => ({
-      workflowName: debouncedWorkflowName || undefined,
+      workflowName: committedState.workflowName || undefined,
       workflowTemplateName: selectedTemplateName || undefined,
       status: statusFilter && statusFilter !== 'all' ? statusFilter : undefined,
     }),
-    [debouncedWorkflowName, selectedTemplateName, statusFilter],
+    [committedState.workflowName, selectedTemplateName, statusFilter],
   );
-
-  // Update URL when filters change
-  useEffect(() => {
-    const params = new URLSearchParams();
-
-    // Preserve namespace parameter
-    const namespaceParam = searchParams.get('namespace');
-    if (namespaceParam) {
-      params.set('namespace', namespaceParam);
-    }
-
-    if (debouncedWorkflowName) {
-      params.set('workflowName', debouncedWorkflowName);
-    }
-    if (selectedTemplateName) {
-      params.set('workflowTemplateName', selectedTemplateName);
-    }
-    if (statusFilter && statusFilter !== 'all') {
-      params.set('status', statusFilter.toLowerCase());
-    }
-
-    const queryString = params.toString();
-    if (queryString === searchParams.toString()) {
-      return;
-    }
-    const newUrl = queryString ? `?${queryString}` : window.location.pathname;
-    router.replace(newUrl, { scroll: false });
-  }, [searchParams, debouncedWorkflowName, selectedTemplateName, statusFilter, router]);
 
   const handleWorkflowsPageError = useCallback((err: Error) => {
     toast.error('Failed to load page', { description: err.message });
   }, []);
+
+  const page = urlState.page;
+  const pageSize = urlState.pageSize;
+
+  const handleWorkflowsPageReset = useCallback(() => {
+    setUrlState({ page: 1 });
+  }, [setUrlState]);
 
   const {
     workflows,
     loading,
     error,
     hasNext,
-    hasPrevious,
-    goToNextPage,
-    goToPreviousPage,
+    totalCount,
     updateWorkflowItem,
-  } = useWorkflows(namespace, filters, undefined, handleWorkflowsPageError);
+    showCreatedWorkflow,
+    watchWorkflow,
+  } = useWorkflows(namespace, filters, {
+    page: page - 1,
+    pageSize,
+    onPageError: handleWorkflowsPageError,
+    onPageReset: handleWorkflowsPageReset,
+  });
+
+  const totalPages =
+    totalCount === null ? null : Math.max(1, Math.ceil(totalCount / pageSize));
+
+  useEffect(() => {
+    if (totalPages !== null && page > totalPages) {
+      setUrlState({ page: totalPages });
+    }
+  }, [page, totalPages, setUrlState]);
+
+  const { runAction, isPending: isRunActionPending } =
+    useWorkflowLifecycleActions(namespace, updateWorkflowItem);
+
+  const [detailRefreshKey, setDetailRefreshKey] = useState(0);
+
+  const handleRunAction = useCallback(
+    (workflowName: string, action: WorkflowLifecycleAction) => {
+      runAction(workflowName, action)
+        .then(updated => {
+          if (!updated) {
+            return;
+          }
+          if (action === 'resubmit') {
+            if (showCreatedWorkflow(updated)) {
+              setSelectedSessionId(updated.metadata.name);
+              watchWorkflow(updated.metadata.name);
+            }
+            return;
+          }
+          watchWorkflow(updated.metadata.name);
+          setDetailRefreshKey(key => key + 1);
+        })
+        .catch((err: unknown) => {
+          toast.error(RUN_ACTION_ERROR_TITLES[action], {
+            description:
+              err instanceof Error
+                ? err.message
+                : 'An unexpected error occurred',
+          });
+        });
+    },
+    [runAction, showCreatedWorkflow, watchWorkflow],
+  );
 
   const allSessions = mapArgoWorkflowsToSessions(workflows);
 
@@ -1117,11 +1377,9 @@ export function SessionsSection({
     }
   }, [filteredSessions, selectedSessionId]);
 
-  const sessionCount = filteredSessions.length;
-
   useEffect(() => {
-    onCountChange?.(sessionCount);
-  }, [onCountChange, sessionCount]);
+    onCountChange?.(totalCount);
+  }, [onCountChange, totalCount]);
 
   const selectedSessionFromList = filteredSessions.find(
     s => s.id === selectedSessionId,
@@ -1131,6 +1389,8 @@ export function SessionsSection({
     useWorkflow(
       namespace,
       useRealData && selectedSessionId ? selectedSessionId : '',
+      undefined,
+      detailRefreshKey,
     );
 
   const selectedSession =
@@ -1138,26 +1398,9 @@ export function SessionsSection({
       ? mapArgoWorkflowToSession(selectedWorkflowDetail)
       : selectedSessionFromList;
 
-  const previousStatusRef = useRef<string | undefined>(undefined);
-
   useEffect(() => {
     if (selectedWorkflowDetail && useRealData) {
-      const currentStatus = selectedWorkflowDetail.status?.phase;
-      const previousStatus = previousStatusRef.current;
-
-      const isTerminalState =
-        currentStatus === 'Succeeded' ||
-        currentStatus === 'Failed' ||
-        currentStatus === 'Error';
-
-      const wasRunning =
-        previousStatus === 'Running' || previousStatus === 'Pending';
-
-      if (isTerminalState && wasRunning) {
-        updateWorkflowItem(selectedWorkflowDetail);
-      }
-
-      previousStatusRef.current = currentStatus;
+      updateWorkflowItem(selectedWorkflowDetail);
     }
   }, [selectedWorkflowDetail, useRealData, updateWorkflowItem]);
 
@@ -1188,10 +1431,16 @@ export function SessionsSection({
   const isLoading = loading || !isNamespaceResolved;
 
   const clearFilters = () => {
-    setWorkflowNameInput('');
-    setWorkflowTemplateNameInput('');
-    setSelectedTemplateName('');
-    setStatusFilter('all');
+    setTemplateTextDraft(null);
+    setUrlState(
+      {
+        workflowName: '',
+        workflowTemplateName: '',
+        status: 'all',
+        page: 1,
+      },
+      { flush: true },
+    );
   };
 
   return (
@@ -1200,7 +1449,7 @@ export function SessionsSection({
         <div className="flex w-full flex-col gap-3 pb-1 lg:flex-row lg:items-end">
           <ResourceSearchInput
             value={workflowNameInput}
-            onChange={setWorkflowNameInput}
+            onChange={workflowName => setUrlState({ workflowName })}
             placeholder="Search"
             testId="workflow-runs-search"
             className="w-full lg:max-w-[493px] lg:flex-1"
@@ -1222,11 +1471,9 @@ export function SessionsSection({
                 value={workflowTemplateNameInput}
                 onChange={e => {
                   const value = e.target.value;
-                  setWorkflowTemplateNameInput(value);
-                  // Only an exact dropdown pick becomes the committed filter -
-                  // free text here never reaches the API (see PR #3679 review).
+                  setTemplateTextDraft(value);
                   if (value !== selectedTemplateName) {
-                    setSelectedTemplateName('');
+                    setUrlState({ workflowTemplateName: '', page: 1 });
                   }
                   if (!templateDropdownOpen) {
                     setTemplateDropdownOpen(true);
@@ -1243,8 +1490,11 @@ export function SessionsSection({
                     filteredTemplateNames={filteredTemplateNames}
                     query={workflowTemplateNameInput}
                     onSelect={templateName => {
-                      setWorkflowTemplateNameInput(templateName);
-                      setSelectedTemplateName(templateName);
+                      setTemplateTextDraft(null);
+                      setUrlState(
+                        { workflowTemplateName: templateName, page: 1 },
+                        { flush: true },
+                      );
                       setTemplateDropdownOpen(false);
                     }}
                   />
@@ -1262,7 +1512,9 @@ export function SessionsSection({
             <Select
               items={statusFilterItems}
               value={statusFilter || 'all'}
-              onValueChange={value => setStatusFilter(value as string)}>
+              onValueChange={value =>
+                setUrlState({ status: String(value).toLowerCase(), page: 1 })
+              }>
               <SelectTrigger
                 aria-labelledby="workflow-status-label"
                 className="w-full">
@@ -1296,38 +1548,55 @@ export function SessionsSection({
           selectedSession={selectedSession}
           isDetailLoading={loadingDetail && useRealData}
           hasActiveFilters={Boolean(hasActiveFilters)}
-          hasNext={hasNext}
+          hasNext={hasNext && totalPages === null}
           onClearFilters={clearFilters}
+          onRunAction={readOnlyMode ? undefined : handleRunAction}
+          isRunActionPending={isRunActionPending}
         />
 
-        <nav
-          aria-label="Workflow runs pagination"
-          className="flex shrink-0 items-center justify-center gap-2 pt-1">
-          <button
-            type="button"
-            onClick={goToPreviousPage}
-            disabled={!hasPrevious || isLoading}
-            aria-label="Go to previous page"
-            className="flex cursor-pointer items-center gap-2 rounded-none px-3 py-2 text-fg-primary transition-opacity hover:bg-stateslayer-overlay-hover disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent">
-            <IconShell size="sm">
-              <ArrowBack />
-            </IconShell>
-            <span className="text-sm leading-5 tracking-[-0.028px]">
-              Previous
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={goToNextPage}
-            disabled={!hasNext || isLoading}
-            aria-label="Go to next page"
-            className="flex cursor-pointer items-center gap-2 rounded-none px-3 py-2 text-fg-primary transition-opacity hover:bg-stateslayer-overlay-hover disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent">
-            <span className="text-sm leading-5 tracking-[-0.028px]">Next</span>
-            <IconShell size="sm">
-              <ArrowForward />
-            </IconShell>
-          </button>
-        </nav>
+        {totalPages === null ? (
+          <nav
+            aria-label="Workflow runs pagination"
+            className="flex shrink-0 items-center justify-center gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() => setUrlState({ page: page - 1 })}
+              disabled={page <= 1 || isLoading}
+              aria-label="Go to previous page"
+              className="text-fg-primary hover:bg-stateslayer-overlay-hover flex cursor-pointer items-center gap-2 rounded-none px-3 py-2 transition-opacity disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent">
+              <IconShell size="sm">
+                <ArrowBack />
+              </IconShell>
+              <span className="text-sm leading-5 tracking-[-0.028px]">
+                Previous
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setUrlState({ page: page + 1 })}
+              disabled={!hasNext || isLoading}
+              aria-label="Go to next page"
+              className="text-fg-primary hover:bg-stateslayer-overlay-hover flex cursor-pointer items-center gap-2 rounded-none px-3 py-2 transition-opacity disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent">
+              <span className="text-sm leading-5 tracking-[-0.028px]">
+                Next
+              </span>
+              <IconShell size="sm">
+                <ArrowForward />
+              </IconShell>
+            </button>
+          </nav>
+        ) : (
+          <Pagination
+            currentPage={page}
+            totalPages={totalPages}
+            itemsPerPage={pageSize}
+            onPageChange={next => setUrlState({ page: next })}
+            onItemsPerPageChange={next =>
+              setUrlState({ pageSize: next, page: 1 })
+            }
+            itemsPerPageOptions={PAGE_SIZE_OPTIONS}
+          />
+        )}
       </div>
     </ErrorBoundary>
   );

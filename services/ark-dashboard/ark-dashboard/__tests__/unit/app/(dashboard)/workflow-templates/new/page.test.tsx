@@ -28,6 +28,8 @@ describe('NewWorkflowTemplatePage', () => {
     vi.mocked(useWorkflowTemplateAccess).mockReturnValue({
       canCreate: true,
       canUpdate: true,
+      canDelete: true,
+      canRun: true,
       loading: false,
     });
   });
@@ -72,10 +74,33 @@ describe('NewWorkflowTemplatePage', () => {
     );
   });
 
+  it('passes run and delete access into the studio', () => {
+    vi.mocked(useWorkflowTemplateAccess).mockReturnValue({
+      canCreate: true,
+      canUpdate: true,
+      canDelete: false,
+      canRun: true,
+      loading: false,
+    });
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams({
+        name: 'my-workflow',
+      }) as unknown as ReturnType<typeof useSearchParams>,
+    );
+
+    render(<NewWorkflowTemplatePage />);
+
+    expect(studioProps).toHaveBeenCalledWith(
+      expect.objectContaining({ canRun: true, canDelete: false }),
+    );
+  });
+
   it('shows the permission message when the user cannot create', () => {
     vi.mocked(useWorkflowTemplateAccess).mockReturnValue({
       canCreate: false,
       canUpdate: false,
+      canDelete: false,
+      canRun: false,
       loading: false,
     });
     vi.mocked(useSearchParams).mockReturnValue(

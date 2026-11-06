@@ -17,6 +17,15 @@ vars:
   SSO_DASHBOARD_URL:
     source: env
     default: "http://dashboard.default.127.0.0.1.nip.io:8080"
+  # Must match ENABLE_ARGO in the root devspace.yaml, which deploys Argo.
+  ENABLE_ARGO:
+    source: env
+    default: false
+  # Argo UI URL the dashboard links to when ENABLE_ARGO is true. Dashboard-only;
+  # the default is the Argo server exposed through the localhost gateway.
+  ARGO_URL:
+    source: env
+    default: "http://argo.default.127.0.0.1.nip.io:8080"
 
 images:
   ark-dashboard:
@@ -92,6 +101,15 @@ deployments:
         - dev/marketplace-source-editor-binding.yaml
 
 profiles:
+  - name: argo
+    activation:
+      - vars:
+          ENABLE_ARGO: true
+    patches:
+      - op: add
+        path: deployments.ark-dashboard.helm.values.app.config
+        value:
+          argoUrl: "${ARGO_URL}"
   - name: sso
     activation:
       - vars:

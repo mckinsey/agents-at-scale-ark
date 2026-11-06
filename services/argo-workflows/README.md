@@ -11,7 +11,7 @@ helm upgrade --install argo-workflows ./chart -n argo-workflows --create-namespa
 
 ### Non-root Executor Image
 
-Workflow pods use Argo's non-root executor image (`argoexec:<version>-nonroot`, UID 8737). The tag is pinned in `chart/values.yaml` under `argo-workflows.executor.image.tag` and must be bumped whenever the Argo subchart version changes in `chart/Chart.yaml`.
+Workflow pods use Argo's non-root executor image (`argoexec:<version>-nonroot`, UID 8737). It is enabled in `chart/values.yaml` with `argo-workflows.executor.image.nonroot: true`, so the tag follows the Argo subchart version in `chart/Chart.yaml`.
 
 ### With Minio Artifact Storage
 

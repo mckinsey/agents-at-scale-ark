@@ -21,7 +21,9 @@ const ON_TIMEOUT_ITEMS = [
 
 interface ToolApprovalsSectionProps {
   readonly selectedTools: AgentTool[];
-  readonly getToolApproval: (toolName: string) => ToolApprovalConfig | undefined;
+  readonly getToolApproval: (
+    toolName: string,
+  ) => ToolApprovalConfig | undefined;
   readonly onApprovalChange: (
     toolName: string,
     approval: ToolApprovalConfig | undefined,
@@ -35,8 +37,8 @@ export function ToolApprovalsSection({
   onApprovalChange,
   disabled = false,
 }: ToolApprovalsSectionProps) {
-  const tools = selectedTools.filter((tool): tool is AgentTool & { name: string } =>
-    Boolean(tool.name),
+  const tools = selectedTools.filter(
+    (tool): tool is AgentTool & { name: string } => Boolean(tool.name),
   );
 
   if (tools.length === 0) return null;

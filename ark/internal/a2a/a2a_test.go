@@ -596,3 +596,55 @@ func TestExtractResponseFromMessageResult(t *testing.T) {
 		assert.Contains(t, err.Error(), "task has no status state")
 	})
 }
+
+func TestDiscoverA2AAgentsWithRecorderSurfacesBothEndpointErrors(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case AgentCardPathVersion3:
+			w.WriteHeader(http.StatusInternalServerError)
+		case AgentCardPathVersion2:
+			w.WriteHeader(http.StatusForbidden)
+		default:
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	_, err := DiscoverA2AAgentsWithRecorder(t.Context(), nil, server.URL, nil, "default", nil, nil)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "status 500", "the v0.3.x endpoint's error must not be discarded")
+	assert.Contains(t, err.Error(), "status 403", "the v0.2.x endpoint's error must still be surfaced")
+	assert.Contains(t, err.Error(), AgentCardPathVersion3)
+	assert.Contains(t, err.Error(), AgentCardPathVersion2)
+}
+
+func TestDiscoverA2AAgentCardReportsProtocolOfAnsweringEndpoint(t *testing.T) {
+	tests := []struct {
+		name         string
+		answeringURL string
+		wantProtocol string
+	}{
+		{"v0.3.x endpoint answers", AgentCardPathVersion3, ProtocolVersion3},
+		{"only v0.2.x endpoint answers", AgentCardPathVersion2, ProtocolVersion2},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != tt.answeringURL {
+					w.WriteHeader(http.StatusNotFound)
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"name":"simple-agent","version":"1.0.0","url":"http://localhost:8000","capabilities":{"streaming":false},"skills":[]}`))
+			}))
+			t.Cleanup(server.Close)
+
+			card, protocol, err := DiscoverA2AAgentCard(t.Context(), nil, server.URL, nil, "default")
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantProtocol, protocol)
+			assert.Equal(t, "1.0.0", card.Version)
+		})
+	}
+}

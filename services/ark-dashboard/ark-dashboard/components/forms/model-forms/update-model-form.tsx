@@ -5,10 +5,12 @@ import { useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 
 import { DetailBreadcrumb } from '@/components/common/detail-breadcrumb';
+import { useCustomHeaderRows } from '@/components/forms/shared/custom-header-rows';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { TrackedButton } from '@/components/ui/tracked-button';
+import { useListReturnHref } from '@/lib/hooks/use-list-return-href';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import type { Model } from '@/lib/services';
 import { useUpdateModelById } from '@/lib/services/models-hooks';
@@ -24,6 +26,8 @@ import {
   createModelUpdateConfig,
   getBaseUrlState,
   getDefaultValuesForUpdate,
+  getHeadersForUpdate,
+  providerSupportsHeaders,
 } from './utils';
 
 const formId = 'model-update-form';
@@ -40,6 +44,7 @@ type UpdateModelFormProps = {
 export function UpdateModelForm({ model }: UpdateModelFormProps) {
   const { push } = useNamespacedNavigation();
   const { readOnlyMode, namespace } = useNamespace();
+  const modelsReturnHref = useListReturnHref('/models');
 
   const defaultValues = getDefaultValuesForUpdate(model);
   const baseUrlState = getBaseUrlState(model, model.provider);
@@ -49,6 +54,7 @@ export function UpdateModelForm({ model }: UpdateModelFormProps) {
     resolver: zodResolver(createSchema(baseUrlState.kind === 'literal')),
     defaultValues,
   });
+  const headerRows = useCustomHeaderRows(getHeadersForUpdate(model));
 
   const handleSuccess = useCallback(() => {
     push('/models');
@@ -57,7 +63,13 @@ export function UpdateModelForm({ model }: UpdateModelFormProps) {
   const { mutateAsync, isPending } = useUpdateModelById();
 
   const onSubmit = (formValues: FormValues) => {
-    const config = createModelUpdateConfig(formValues, baseUrlMode);
+    const headers = providerSupportsHeaders(formValues.provider)
+      ? headerRows.validate()
+      : [];
+    if (!headers) {
+      return;
+    }
+    const config = createModelUpdateConfig(formValues, baseUrlMode, headers);
     mutateAsync({
       id: model.id,
       model: formValues.model,
@@ -83,6 +95,7 @@ export function UpdateModelForm({ model }: UpdateModelFormProps) {
             ? defaultValues.bedrockAuthMethod
             : undefined,
         baseUrlState,
+        headerRows,
       }}>
       <div className="content-shell flex min-h-0 w-full flex-1 flex-col gap-5 overflow-hidden">
         <header className="flex flex-none flex-col gap-4">
@@ -93,7 +106,7 @@ export function UpdateModelForm({ model }: UpdateModelFormProps) {
               current={model.id}
             />
             <div className="flex items-center gap-2">
-              <NamespacedLink href="/models">
+              <NamespacedLink href={modelsReturnHref}>
                 <Button variant="outline">Cancel</Button>
               </NamespacedLink>
               <TrackedButton

@@ -67,6 +67,11 @@ app:
     # Default: 1048576 (1 MB), matching the dashboard's client-side limit
     - name: PROXY_MAX_UPLOAD_BYTES
       value: "1048576"
+    # In-cluster Argo Server URL used to list workflows sorted by start time
+    # Requires Argo Server with --auth-mode=server; empty uses the Kubernetes API
+    # Resolves in the ark-api namespace; use argo-workflows-server.<namespace> otherwise
+    - name: ARGO_SERVER_URL
+      value: "http://argo-workflows-server:2746"
     # A2A Gateway environment variables
     # These configure the external URLs advertised in agent cards (.well-known/agent.json)
     # Must match your external routing configuration (HTTPRoute/Ingress)
@@ -82,6 +87,10 @@ app:
     # Read-only mode - set to "true" to disable write operations
     - name: READ_ONLY_MODE
       value: "false"
+    - name: API_KEY_RETENTION_SECONDS
+      value: "7776000"
+    - name: API_KEY_REAPER_INTERVAL_SECONDS
+      value: "3600"
     # MCP authorization endpoints. Leave ARK_API_PUBLIC_CALLBACK_URL unset to
     # disable the four /api/v1/mcp-servers/{name}/auth/* endpoints (they will
     # return 503). When set, the URL MUST be https unless the host is a

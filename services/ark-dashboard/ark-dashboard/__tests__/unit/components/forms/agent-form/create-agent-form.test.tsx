@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { CreateAgentForm } from '@/components/forms/agent-form/create-agent-form';
 import type { Tool } from '@/lib/services';
 
 const useAgentFormMock = vi.fn();
@@ -25,23 +26,12 @@ vi.mock('@/components/namespaced-link', () => ({
   }) => <a href={href}>{children}</a>,
 }));
 
-vi.mock('@/components/common/page-header', () => ({
-  PageHeader: ({
-    actions,
-    customBreadcrumb,
-  }: {
-    actions?: React.ReactNode;
-    customBreadcrumb?: React.ReactNode;
-  }) => (
-    <div data-testid="page-header">
-      {customBreadcrumb}
-      {actions}
-    </div>
-  ),
-}));
-
 vi.mock('@/components/ui/parameter-editor', () => ({
   ParameterEditor: () => <div data-testid="parameter-editor" />,
+}));
+
+vi.mock('@/components/forms/shared/custom-headers-field', () => ({
+  CustomHeadersField: () => <div data-testid="custom-headers-field" />,
 }));
 
 vi.mock('@/components/ui/form', () => ({
@@ -58,11 +48,11 @@ vi.mock('@/components/ui/form', () => ({
   ),
   FormItem: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   FormControl: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  FormLabel: ({ children }: { children: React.ReactNode }) => <label>{children}</label>,
+  FormLabel: ({ children }: { children: React.ReactNode }) => (
+    <label>{children}</label>
+  ),
   FormMessage: () => null,
 }));
-
-import { CreateAgentForm } from '@/components/forms/agent-form/create-agent-form';
 
 function buildHook(overrides: Record<string, unknown> = {}) {
   return {
@@ -93,6 +83,7 @@ function buildHook(overrides: Record<string, unknown> = {}) {
       handleDeleteTool: vi.fn(),
       isToolSelected: vi.fn(() => false),
       onSubmit: vi.fn(),
+      onInvalid: vi.fn(),
     },
   };
 }
@@ -153,6 +144,9 @@ describe('CreateAgentForm', () => {
     useAgentFormMock.mockReturnValue(hook);
     render(<CreateAgentForm mode="create" />);
     await userEvent.click(screen.getByRole('button', { name: /^create$/i }));
-    expect(hook.form.handleSubmit).toHaveBeenCalledWith(hook.actions.onSubmit);
+    expect(hook.form.handleSubmit).toHaveBeenCalledWith(
+      hook.actions.onSubmit,
+      hook.actions.onInvalid,
+    );
   });
 });

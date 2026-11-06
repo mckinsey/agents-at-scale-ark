@@ -89,6 +89,6 @@ spec:
         name: {{ include "{{ .Values.projectName }}.fullname" . }}-example-tool
         port: 8000
         path: /mcp
-  transport: sse
+  transport: http
   timeout: 30s
   description: "Example tool for demonstration purposes"

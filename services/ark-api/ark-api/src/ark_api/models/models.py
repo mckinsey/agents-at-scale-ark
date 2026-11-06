@@ -1,10 +1,10 @@
 """Model CRD response models."""
 from typing import List, Dict, Optional, Literal, Union, Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from .common import AvailabilityStatus, PaginatedListResponse
-from .agents import AgentHeader
+from .agents import AgentHeader, ensure_unique_header_names
 
 # Provider constants
 PROVIDER_OPENAI = "openai"
@@ -36,6 +36,11 @@ class OpenAIConfig(BaseModel):
     base_url: Union[str, ModelValueSource] = Field(..., alias="baseUrl")
     headers: Optional[List[AgentHeader]] = None
 
+    @field_validator("headers")
+    @classmethod
+    def validate_headers(cls, headers: Optional[List[AgentHeader]]) -> Optional[List[AgentHeader]]:
+        return ensure_unique_header_names(headers)
+
 
 class AzureManagedIdentityConfig(BaseModel):
     """Azure Managed Identity auth."""
@@ -63,6 +68,11 @@ class AzureConfig(BaseModel):
     auth: Optional[AzureAuthConfig] = None
     headers: Optional[List[AgentHeader]] = None
 
+    @field_validator("headers")
+    @classmethod
+    def validate_headers(cls, headers: Optional[List[AgentHeader]]) -> Optional[List[AgentHeader]]:
+        return ensure_unique_header_names(headers)
+
 
 class BedrockConfig(BaseModel):
     """Bedrock model configuration."""
@@ -83,6 +93,11 @@ class AnthropicConfig(BaseModel):
     api_key: Union[str, ModelValueSource] = Field(..., alias="apiKey")
     version: Optional[Union[str, ModelValueSource]] = None
     headers: Optional[List[AgentHeader]] = None
+
+    @field_validator("headers")
+    @classmethod
+    def validate_headers(cls, headers: Optional[List[AgentHeader]]) -> Optional[List[AgentHeader]]:
+        return ensure_unique_header_names(headers)
 
 
 class ModelConfig(BaseModel):

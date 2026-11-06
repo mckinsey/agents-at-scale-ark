@@ -1,6 +1,12 @@
-import { useCallback, useMemo, useState } from 'react';
+'use client';
+
+import { useCallback, useMemo } from 'react';
+
+import { useUrlState } from '@/lib/hooks/use-url-state';
 
 export type SortDirection = 'asc' | 'desc';
+
+const DEFAULT_SORT_PARAM = 'sort';
 
 export function timestampValue(timestamp: string | null | undefined): number {
   if (!timestamp) return 0;
@@ -13,13 +19,20 @@ export function useValueSort<T>(
   items: readonly T[],
   getValue: (item: T) => number,
   initialDirection: SortDirection = 'desc',
+  paramKey: string = DEFAULT_SORT_PARAM,
 ) {
-  const [sortDirection, setSortDirection] =
-    useState<SortDirection>(initialDirection);
+  const [values, setValues] = useUrlState({
+    [paramKey]: {
+      default: initialDirection,
+      parse: (raw: string): SortDirection =>
+        raw === 'asc' || raw === 'desc' ? raw : initialDirection,
+    },
+  });
+  const sortDirection = values[paramKey];
 
   const toggleSortDirection = useCallback(
-    () => setSortDirection(prev => (prev === 'desc' ? 'asc' : 'desc')),
-    [],
+    () => setValues({ [paramKey]: sortDirection === 'desc' ? 'asc' : 'desc' }),
+    [paramKey, setValues, sortDirection],
   );
 
   const sortedItems = useMemo(() => {

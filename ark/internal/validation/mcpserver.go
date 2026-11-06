@@ -31,6 +31,10 @@ func (v *Validator) ValidateMCPServer(ctx context.Context, mcpserver *arkv1alpha
 		return nil, err
 	}
 
+	if mcpserver.Spec.Transport == "sse" {
+		return []string{"transport 'sse' is deprecated by the MCP specification - use 'http' (Streamable HTTP) instead"}, nil
+	}
+
 	return nil, nil
 }
 
