@@ -27,7 +27,7 @@ import type {
   HelmRelease,
   HelmReleaseError,
 } from '@/lib/services/ark-services';
-import { useGetAllArkServices } from '@/lib/services/ark-services-hooks';
+import { useHelmReleases } from '@/lib/services/ark-services-hooks';
 import { cn } from '@/lib/utils';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
@@ -199,7 +199,7 @@ function ReleaseErrorsAlert({
 
 function TenantServicesSection() {
   const { namespace } = useNamespace();
-  const { data, error, isPending, isError, refetch } = useGetAllArkServices();
+  const { data, error, isPending, isError, refetch } = useHelmReleases();
 
   let content;
   if (isError) {
@@ -241,7 +241,7 @@ function TenantServicesSection() {
 }
 
 export function DeploymentDetailsActions() {
-  const { dataUpdatedAt, isFetching, refetch } = useGetAllArkServices();
+  const { dataUpdatedAt, isFetching, refetch } = useHelmReleases();
 
   return (
     <div className="flex items-center gap-4">

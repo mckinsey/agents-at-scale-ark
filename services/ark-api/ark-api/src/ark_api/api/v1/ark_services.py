@@ -142,9 +142,9 @@ async def get_httproutes_for_ark_service(namespace: str, release_name: str, impe
 async def _list_helm_releases(namespace: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, str]]]:
     try:
         return await get_helm_releases(namespace)
-    except HelmError as e:
-        logger.error(f"Failed to list Helm releases: {str(e).strip()}")
-        if "forbidden" in str(e).lower():
+    except Exception as e:
+        logger.error(f"Failed to list Helm releases: {e!r}")
+        if isinstance(e, HelmError) and "forbidden" in str(e).lower():
             raise HTTPException(
                 status_code=403,
                 detail=f"Ark doesn't have permission to read Helm releases in namespace '{namespace}'."
