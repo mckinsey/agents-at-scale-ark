@@ -107,6 +107,12 @@ export function mapApprovalError(
         exitCode: ExitCodes.OperationError,
       };
     }
+    if (error.status === 401 || error.status === 403) {
+      return {
+        message: `not authorized to respond to approval '${name}' (HTTP ${error.status})`,
+        exitCode: ExitCodes.OperationError,
+      };
+    }
     return {message: error.message, exitCode: ExitCodes.OperationError};
   }
   return {

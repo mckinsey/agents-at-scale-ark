@@ -136,6 +136,16 @@ describe('mapApprovalError', () => {
     expect(exitCode).toBe(ExitCodes.OperationError);
   });
 
+  it.each([401, 403])('maps %i to an authorization message', (status) => {
+    const {message, exitCode} = mapApprovalError(
+      new ArkApiHttpError('denied', status),
+      't1'
+    );
+    expect(message).toContain('not authorized');
+    expect(message).toContain(String(status));
+    expect(exitCode).toBe(ExitCodes.OperationError);
+  });
+
   it('maps a generic error to a CLI error exit code', () => {
     const {message, exitCode} = mapApprovalError(new Error('boom'), 't1');
     expect(message).toBe('boom');

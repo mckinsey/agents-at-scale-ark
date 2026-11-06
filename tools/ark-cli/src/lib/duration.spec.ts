@@ -12,4 +12,13 @@ describe('parseDuration', () => {
     expect(() => parseDuration('invalid')).toThrow('Invalid duration format');
     expect(() => parseDuration('10')).toThrow('Invalid duration format');
   });
+
+  it('should throw on empty, whitespace, and malformed inputs', () => {
+    expect(() => parseDuration('')).toThrow('Invalid duration format');
+    expect(() => parseDuration('  ')).toThrow('Invalid duration format');
+    expect(() => parseDuration('5m ')).toThrow('Invalid duration format');
+    expect(() => parseDuration('10x')).toThrow('Invalid duration format');
+    expect(() => parseDuration('ms')).toThrow('Invalid duration format');
+    expect(() => parseDuration('5mins')).toThrow('Invalid duration format');
+  });
 });
