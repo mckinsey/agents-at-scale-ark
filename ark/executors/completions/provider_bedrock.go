@@ -28,7 +28,6 @@ type BedrockModel struct {
 	Properties      map[string]string
 	client          *bedrockruntime.Client
 	outputSchema    *runtime.RawExtension
-	schemaName      string
 }
 
 func NewBedrockModel(model, region, baseURL, accessKeyID, secretAccessKey, sessionToken, apiKey, modelArn string, properties map[string]string) *BedrockModel {
@@ -79,9 +78,8 @@ func (bm *BedrockModel) initClient(ctx context.Context) error {
 	return nil
 }
 
-func (bm *BedrockModel) SetOutputSchema(schema *runtime.RawExtension, schemaName string) {
+func (bm *BedrockModel) SetOutputSchema(schema *runtime.RawExtension, _ string) {
 	bm.outputSchema = schema
-	bm.schemaName = schemaName
 }
 
 func (bm *BedrockModel) ChatCompletion(ctx context.Context, messages []Message, n int64, tools []openai.ChatCompletionToolParam, toolChoice ToolChoice) (*openai.ChatCompletion, error) {
