@@ -654,7 +654,7 @@ describe('chatService', () => {
 
       const chunks: Record<string, unknown>[] = [];
       for await (const chunk of chatService.streamChatResponse(
-        'default',
+        'team-a',
         'test input',
         'agent',
         'TestAgent',
@@ -664,7 +664,7 @@ describe('chatService', () => {
 
       expect(chunks).toEqual([{ content: 'Hello' }, { content: 'World' }]);
       expect(mockFetch).toHaveBeenCalledWith(
-        '/tenant-a/api/v1/broker/chunks?watch=true&query-id=test-query-1',
+        '/tenant-a/api/v1/broker/chunks?watch=true&query-id=test-query-1&namespace=team-a',
         expect.objectContaining({ signal: undefined }),
       );
     });
@@ -855,7 +855,7 @@ describe('chatService', () => {
       }
 
       expect(mockFetch).toHaveBeenCalledWith(
-        '/tenant-a/api/v1/broker/chunks?watch=true&query-id=test-query-abort',
+        '/tenant-a/api/v1/broker/chunks?watch=true&query-id=test-query-abort&namespace=default',
         expect.objectContaining({ signal: controller.signal }),
       );
     });
