@@ -228,6 +228,10 @@ spec:
         maximum: 1
 ```
 
+The schema is sent to the model's provider unchanged.
+For `anthropic` and `bedrock` Models it becomes Claude's `output_config.format`, which accepts a [subset of JSON Schema](https://platform.claude.com/docs/en/build-with-claude/structured-outputs): every object needs `additionalProperties: false`, and keywords such as `minimum` and `maximum` are rejected.
+To use the example above with Claude, drop `minimum`/`maximum` and add `additionalProperties: false`.
+
 ### Templated prompt from ConfigMap
 
 ```yaml
