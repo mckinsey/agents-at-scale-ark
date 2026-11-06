@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Provider as JotaiProvider } from 'jotai';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -82,14 +82,14 @@ vi.mock('@/components/user', () => ({
   UserDetails: vi.fn(() => <div data-testid="user-details" />),
 }));
 
-const renderSidebar = () => {
+const renderSidebar = (defaultOpen = true) => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   return render(
     <QueryClientProvider client={queryClient}>
       <JotaiProvider>
-        <SidebarProvider>
+        <SidebarProvider defaultOpen={defaultOpen}>
           <AppSidebar />
         </SidebarProvider>
       </JotaiProvider>
@@ -348,5 +348,95 @@ describe('AppSidebar - Nested item highlighting', () => {
       name: 'Query Logs',
     });
     expect(queriesButton).toHaveAttribute('data-active', 'true');
+  });
+});
+
+describe('AppSidebar - Collapsible sections', () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    const { usePathname } = await import('next/navigation');
+    vi.mocked(usePathname).mockReturnValue('/');
+  });
+
+  it('expands the sidebar and opens the section when clicked while collapsed', async () => {
+    const user = userEvent.setup();
+    renderSidebar(false);
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Agent builder' }),
+    );
+
+    expect(
+      await screen.findByRole('button', { name: 'Teams' }),
+    ).toBeInTheDocument();
+  });
+
+  it('toggles a section open and closed when the sidebar is expanded', async () => {
+    const user = userEvent.setup();
+    renderSidebar();
+
+    const monitoring = await screen.findByRole('button', {
+      name: 'Monitoring',
+    });
+    await user.click(monitoring);
+    expect(
+      await screen.findByRole('button', { name: 'Sessions' }),
+    ).toBeInTheDocument();
+
+    await user.click(monitoring);
+    expect(
+      screen.queryByRole('button', { name: 'Sessions' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('navigates to a nested section item', async () => {
+    const mockPush = vi.fn();
+    const { useRouter } = await import('next/navigation');
+    vi.mocked(useRouter).mockReturnValue({ push: mockPush } as ReturnType<
+      typeof useRouter
+    >);
+    const user = userEvent.setup();
+    renderSidebar();
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Agent builder' }),
+    );
+    const agents = await screen.findByRole('button', { name: 'Agents' });
+    await waitFor(() => expect(agents).toBeEnabled());
+    await user.click(agents);
+
+    expect(mockPush).toHaveBeenCalledWith('/agents');
+  });
+
+  it('closes open sections when the sidebar is collapsed', async () => {
+    const user = userEvent.setup();
+    renderSidebar();
+
+    await user.click(await screen.findByRole('button', { name: 'Monitoring' }));
+    expect(
+      await screen.findByRole('button', { name: 'Sessions' }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Collapse sidebar' }));
+
+    expect(
+      screen.queryByRole('button', { name: 'Sessions' }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Expand sidebar' }),
+    ).toBeInTheDocument();
+  });
+});
+
+describe('AppSidebar - Theme toggle', () => {
+  it('switches between light and dark mode', async () => {
+    const user = userEvent.setup();
+    renderSidebar();
+
+    await user.click(await screen.findByRole('button', { name: 'Light mode' }));
+
+    expect(
+      await screen.findByRole('button', { name: 'Dark mode' }),
+    ).toBeInTheDocument();
   });
 });
