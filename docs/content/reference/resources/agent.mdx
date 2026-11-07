@@ -224,8 +224,8 @@ spec:
         enum: [positive, negative, neutral]
       confidence:
         type: number
-        minimum: 0
-        maximum: 1
+        description: Confidence between 0 and 1
+    additionalProperties: false
 ```
 
 Ark does not rewrite the schema; the provider validates it, and an unsupported schema fails the Query.
