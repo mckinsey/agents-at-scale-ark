@@ -1,0 +1,10 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: chunk-stream-hitl-query
+  namespace: ($namespace)
+spec:
+  input: Complete a safe staging rollout of v2.1.0.
+  target:
+    type: agent
+    name: chunk-stream-hitl-agent

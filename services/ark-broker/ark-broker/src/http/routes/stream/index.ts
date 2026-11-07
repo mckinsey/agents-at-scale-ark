@@ -146,6 +146,33 @@ export function createStreamRouter(
     }
   );
 
+  router.post<{query_id: string}>('/:query_id/start', async (req, res) => {
+    const {query_id} = req.params;
+    const runId = req.get('X-Ark-Stream-Run-ID')?.trim();
+
+    if (!query_id || !runId) {
+      res.status(400).json({
+        error: {
+          code: 'BAD_REQUEST',
+          message: 'Query ID and stream run ID are required',
+          requestId: req.id === undefined ? undefined : String(req.id),
+        },
+      });
+      return;
+    }
+
+    try {
+      await chunks.startRun(query_id, runId);
+      res.json({status: 'started', query: query_id});
+    } catch (error) {
+      req.log.error(
+        {err: error, queryId: query_id},
+        'failed to start stream run'
+      );
+      sendInternalError(res, req.id);
+    }
+  });
+
   /**
    * @swagger
    * /stream/{query_id}:
@@ -204,6 +231,8 @@ export function createStreamRouter(
 
       req.log.info({queryId: query_id}, 'receiving chunks from ARK controller');
 
+      const runId = req.get('X-Ark-Stream-Run-ID')?.trim();
+
       res.setHeader('Content-Type', 'application/json');
       res.setHeader('Connection', 'keep-alive');
 
@@ -217,11 +246,13 @@ export function createStreamRouter(
           finish_reason: 0,
           other: 0,
         },
-        appendChain: Promise.resolve(),
+        appendChain: runId
+          ? chunks.startRun(query_id, runId)
+          : Promise.resolve(),
       };
 
       req.on('data', (chunk: Buffer) =>
-        processNDJSONData(chunk, state, query_id, chunks, req.log)
+        processNDJSONData(chunk, state, query_id, chunks, req.log, runId)
       );
 
       req.on('end', () => {
@@ -315,12 +346,15 @@ export function createStreamRouter(
 
       req.log.info({queryId: query_id}, 'marking query as complete');
 
+      const runId = req.get('X-Ark-Stream-Run-ID')?.trim();
+      if (runId) await chunks.startRun(query_id, runId);
+
       // Complete even when no chunks ever landed (e.g. every chunk write failed
       // mid-query). completeQuery appends the terminal [DONE], creating the
       // stream if needed, so a consumer that connected before any chunk is still
       // terminated and isComplete latches — otherwise the reader hangs and a
       // later from-beginning reconnect replays and hangs too.
-      if (await chunks.isComplete(query_id)) {
+      if (await chunks.isComplete(query_id, runId)) {
         res.json({
           status: 'already_completed',
           query: query_id,
@@ -328,7 +362,7 @@ export function createStreamRouter(
         return;
       }
 
-      await chunks.completeQuery(query_id);
+      await chunks.completeQuery(query_id, runId);
 
       res.json({
         status: 'completed',

@@ -1028,6 +1028,11 @@ func (h *Handler) handleResumption(ctx context.Context, state *executionState, a
 
 	// Resume agent execution with tool results (may include approval successes or rejection errors)
 	log.Info("Resuming agent execution with tool results", "results", len(approvedResults), "decision", map[bool]string{true: "approved", false: "rejected"}[isApproved])
+	if starter, ok := state.eventStream.(interface{ StartRun(context.Context) error }); ok {
+		if err := starter.StartRun(ctx); err != nil {
+			log.Error(err, "failed to start stream run for approval resumption")
+		}
+	}
 	result, err := agent.ResumeFromApproval(ctx, toolCalls, approvedResults, state.memory, state.eventStream, state.inputMessages)
 	if err != nil {
 		// Check if this is another approval required error (cascading approval)

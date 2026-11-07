@@ -22,6 +22,7 @@ interface StreamCounters {
 
 interface QueryStreamState {
   caughtUp: boolean;
+  runId: string | undefined;
   timeoutHandle: ReturnType<typeof setTimeout> | undefined;
   rearmIdleTimeout: () => void;
   buffer: BrokerItem<CompletionChunkData>[];
@@ -120,57 +121,26 @@ function handleIncomingItem(
   writeLiveChunk(res, req, item, queryName, state.counters, cleanup);
 }
 
-function flushBuffer(
-  res: Response,
-  req: Request,
+async function getSequencedItems(
+  chunks: CompletionChunkBroker,
   queryName: string,
-  buffer: BrokerItem<CompletionChunkData>[],
-  maxReplayedSeq: number,
-  counters: StreamCounters,
-  cleanup: () => void,
-  onComplete: () => void,
-  rearmIdleTimeout: () => void
-): boolean {
-  for (const bufferedItem of buffer) {
-    if (bufferedItem.sequenceNumber <= maxReplayedSeq) continue;
-    if (bufferedItem.data.complete) {
-      onComplete();
-      return false;
-    }
-    const chunk = bufferedItem.data.chunk as ChunkPayload | string;
-    if (typeof chunk === 'string') continue;
-
-    if (chunk.error) {
-      const streamError = chunk.error;
-      if (
-        typeof streamError.message !== 'string' ||
-        typeof streamError.type !== 'string'
-      ) {
-        req.log.error({queryName, chunk}, 'invalid error chunk structure');
-        sendInternalError(res, req.id);
-        cleanup();
-        return false;
-      }
-      writeSSEEvent(res, chunk, req.log);
-      res.write('data: [DONE]\n\n');
-      res.end();
-      cleanup();
-      return false;
-    }
-
-    if (!writeSSEEvent(res, chunk, req.log)) {
-      req.log.warn({queryName}, 'error writing buffered chunk');
-      cleanup();
-      return false;
-    }
-
-    // Re-arm per chunk so the idle bound holds across the flush, not just from
-    // stream open (matters for a large backlog to a slow client).
-    rearmIdleTimeout();
-    counters.outboundChunkCount++;
-    classifyChunk(chunk, counters.chunkTypeCounts);
+  bufferedItems: BrokerItem<CompletionChunkData>[]
+): Promise<BrokerItem<CompletionChunkData>[]> {
+  const existingItems = await chunks.getByQuery(queryName);
+  const itemsBySequence = new Map<number, BrokerItem<CompletionChunkData>>();
+  for (const item of [...existingItems, ...bufferedItems]) {
+    itemsBySequence.set(item.sequenceNumber, item);
   }
-  return true;
+  return [...itemsBySequence.values()].sort(
+    (left, right) => left.sequenceNumber - right.sequenceNumber
+  );
+}
+
+function findLatestRunId(
+  items: BrokerItem<CompletionChunkData>[]
+): string | undefined {
+  return [...items].reverse().find((item) => item.data.runStart === true)?.data
+    .runId;
 }
 
 async function replayChunks(
@@ -179,17 +149,24 @@ async function replayChunks(
   chunks: CompletionChunkBroker,
   queryName: string,
   state: QueryStreamState,
-  cleanup: () => void,
-  onComplete: () => void
+  cleanup: () => void
 ): Promise<boolean> {
-  const existingItems = await chunks.getByQuery(queryName);
+  const allItems = await getSequencedItems(chunks, queryName, state.buffer);
+  // The newest start marker wins even if a superseded run writes late chunks.
+  const latestRunId = findLatestRunId(allItems);
+  const itemsToReplay =
+    latestRunId === undefined
+      ? allItems
+      : allItems.filter((item) => item.data.runId === latestRunId);
+  state.runId = latestRunId;
+
   req.log.info(
-    {queryName, count: existingItems.length},
+    {queryName, count: itemsToReplay.length},
     'sending existing chunks for replay'
   );
 
-  let maxReplayedSeq = -1;
-  for (const item of existingItems) {
+  for (const item of itemsToReplay) {
+    if (item.data.runStart) continue;
     if (item.data.complete) {
       req.log.info({queryName}, 'found complete during replay, closing stream');
       res.write('data: [DONE]\n\n');
@@ -207,22 +184,13 @@ async function replayChunks(
     // Re-arm per replayed chunk: the idle bound is inter-chunk silence, so a
     // large backlog must not run the whole clock from stream open.
     state.rearmIdleTimeout();
-    if (item.sequenceNumber > maxReplayedSeq) {
-      maxReplayedSeq = item.sequenceNumber;
-    }
+    state.counters.outboundChunkCount++;
+    classifyChunk(chunk, state.counters.chunkTypeCounts);
   }
 
-  return flushBuffer(
-    res,
-    req,
-    queryName,
-    state.buffer,
-    maxReplayedSeq,
-    state.counters,
-    cleanup,
-    onComplete,
-    state.rearmIdleTimeout
-  );
+  state.buffer = [];
+  state.caughtUp = true;
+  return true;
 }
 
 function onIdleTimeout(
@@ -303,6 +271,7 @@ export async function handleQueryStream(
 
   const state: QueryStreamState = {
     caughtUp: false,
+    runId: undefined,
     timeoutHandle: undefined,
     rearmIdleTimeout: (): void => {},
     buffer: [],
@@ -342,7 +311,54 @@ export async function handleQueryStream(
     cleanup();
   };
 
+  const catchUpLiveStream = async (): Promise<boolean> => {
+    const allItems = await getSequencedItems(chunks, queryName, state.buffer);
+    const bufferedItems = [...state.buffer].sort(
+      (left, right) => left.sequenceNumber - right.sequenceNumber
+    );
+    state.runId = findLatestRunId(allItems);
+    state.buffer = [];
+    state.caughtUp = true;
+
+    for (const item of bufferedItems) {
+      if (item.data.runStart) continue;
+      if (item.data.runId !== undefined) {
+        if (state.runId === undefined) state.runId = item.data.runId;
+        if (state.runId !== item.data.runId) continue;
+      } else if (state.runId !== undefined) {
+        continue;
+      }
+
+      if (item.data.complete) {
+        completeHandler();
+        return false;
+      }
+      handleIncomingItem(item, state, res, req, queryName, cleanup);
+      if (res.writableEnded) return false;
+    }
+    return true;
+  };
+
   unsubHandles.chunks = chunks.subscribeToQuery(queryName, (item) => {
+    if (!state.caughtUp) {
+      state.rearmIdleTimeout();
+      state.buffer.push(item);
+      return;
+    }
+
+    if (item.data.runStart) {
+      state.runId = item.data.runId;
+      state.rearmIdleTimeout();
+      return;
+    }
+
+    if (item.data.runId !== undefined) {
+      if (state.runId === undefined) state.runId = item.data.runId;
+      if (state.runId !== item.data.runId) return;
+    } else if (state.runId !== undefined) {
+      return;
+    }
+
     if (item.data.complete) {
       completeHandler();
       return;
@@ -355,15 +371,10 @@ export async function handleQueryStream(
   armIdleTimeout(idleTimeoutMs);
 
   if (fromBeginning) {
-    const ok = await replayChunks(
-      res,
-      req,
-      chunks,
-      queryName,
-      state,
-      cleanup,
-      completeHandler
-    );
+    const ok = await replayChunks(res, req, chunks, queryName, state, cleanup);
+    if (!ok) return;
+  } else {
+    const ok = await catchUpLiveStream();
     if (!ok) return;
   }
   state.caughtUp = true;
@@ -385,7 +396,8 @@ export function processNDJSONData(
   },
   queryId: string,
   chunks: CompletionChunkBroker,
-  log: Request['log']
+  log: Request['log'],
+  runId?: string
 ): void {
   state.buffer += rawChunk.toString('utf-8');
 
@@ -414,7 +426,7 @@ export function processNDJSONData(
         }
 
         state.appendChain = state.appendChain
-          .then(() => chunks.addChunk(queryId, streamChunk))
+          .then(() => chunks.addChunk(queryId, streamChunk, runId))
           .then(() => undefined);
       } catch (parseError) {
         log.error({err: parseError, queryId}, 'failed to parse chunk');

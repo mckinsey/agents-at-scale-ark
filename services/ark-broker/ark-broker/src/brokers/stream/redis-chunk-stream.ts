@@ -53,17 +53,47 @@ export class RedisChunkStream implements ChunkStream {
     this.logger = logger.child({module: 'redis-chunk-stream'});
   }
 
+  async startRun(queryId: string, runId: string): Promise<void> {
+    const existing = await this.getByQuery(queryId);
+    if (
+      existing.some(
+        (item) => item.data.runId === runId && item.data.runStart === true
+      )
+    ) {
+      return;
+    }
+
+    await this.appendItem(queryId, {
+      queryId,
+      chunk: null,
+      runId,
+      runStart: true,
+    });
+  }
+
   async appendChunk(
     queryId: string,
-    chunk: unknown
+    chunk: unknown,
+    runId?: string
   ): Promise<BrokerItem<CompletionChunkData>> {
-    return this.appendItem(queryId, {queryId, chunk});
+    return this.appendItem(queryId, {
+      queryId,
+      chunk,
+      ...(runId ? {runId} : {}),
+    });
   }
 
   async completeQuery(
-    queryId: string
+    queryId: string,
+    runId?: string
   ): Promise<BrokerItem<CompletionChunkData>> {
-    return this.appendItem(queryId, {queryId, chunk: '[DONE]', complete: true});
+    if (runId) await this.startRun(queryId, runId);
+    return this.appendItem(queryId, {
+      queryId,
+      chunk: '[DONE]',
+      complete: true,
+      ...(runId ? {runId} : {}),
+    });
   }
 
   private async appendItem(
@@ -108,13 +138,23 @@ export class RedisChunkStream implements ChunkStream {
     return entries.map(([id, fields], i) => entryToItem(id, fields, i + 1));
   }
 
-  async isComplete(queryId: string): Promise<boolean> {
-    const qKey = makeQKey(this.prefix, queryId);
-    const entries = await this.redis.xrevrange(qKey, '+', '-', 'COUNT', '1');
-    if (entries.length === 0) return false;
-    const [, fields] = entries[0];
-    const data = parseFields(fields);
-    return data.complete === true;
+  async isComplete(queryId: string, runId?: string): Promise<boolean> {
+    const items = await this.getByQuery(queryId);
+    if (runId !== undefined) {
+      return (
+        items.filter((item) => item.data.runId === runId).at(-1)?.data
+          .complete === true
+      );
+    }
+
+    const latestRunId = [...items]
+      .reverse()
+      .find((item) => item.data.runStart === true)?.data.runId;
+    const latestRun =
+      latestRunId === undefined
+        ? items
+        : items.filter((item) => item.data.runId === latestRunId);
+    return latestRun.at(-1)?.data.complete === true;
   }
 
   subscribeToQuery(

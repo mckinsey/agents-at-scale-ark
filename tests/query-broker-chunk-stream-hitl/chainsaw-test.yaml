@@ -1,0 +1,167 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: query-broker-chunk-stream-hitl
+spec:
+  description: HITL approval starts a new chunk run for replay and live subscribers
+  timeouts:
+    apply: 30s
+    assert: 120s
+  steps:
+    - name: setup-mock-llm
+      try:
+        - script:
+            timeout: 180s
+            content: |
+              bash ../shared/install-mock-llm.sh
+            env:
+              - name: NAMESPACE
+                value: ($namespace)
+
+    - name: create-hitl-query
+      try:
+        - apply:
+            file: manifests/resources.yaml
+        - wait:
+            apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Model
+            name: chunk-stream-hitl-model
+            timeout: 90s
+            for:
+              condition:
+                name: ModelAvailable
+                value: "True"
+        - apply:
+            file: manifests/query.yaml
+        - wait:
+            apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Query
+            name: chunk-stream-hitl-query
+            timeout: 90s
+            for:
+              jsonPath:
+                path: "{.status.phase}"
+                value: input-required
+      catch:
+        - events: {}
+        - describe:
+            apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Query
+            name: chunk-stream-hitl-query
+
+    - name: approve-and-watch-resumed-run
+      try:
+        - script:
+            timeout: 150s
+            content: |
+              QUERY=chunk-stream-hitl-query
+              SUBSCRIBER=chunk-stream-hitl-live-watch
+              TASK=$(kubectl get a2atasks -n "$NAMESPACE" -o jsonpath="{range .items[?(@.spec.queryRef.name=='$QUERY')]}{.metadata.name}{end}")
+              [ -n "$TASK" ] || { echo "no approval task found for $QUERY"; exit 1; }
+
+              kubectl run "$SUBSCRIBER" -n "$NAMESPACE" \
+                --image=curlimages/curl:8.7.1 --restart=Never --attach=false \
+                --labels="app=$SUBSCRIBER" --command -- \
+                curl --no-buffer --fail --silent --show-error --max-time 180 \
+                "http://ark-broker.$NAMESPACE.svc.cluster.local/stream/$QUERY"
+
+              CONNECTED=false
+              for attempt in $(seq 1 90); do
+                PHASE=$(kubectl get pod "$SUBSCRIBER" -n "$NAMESPACE" \
+                  -o jsonpath='{.status.phase}' 2>/dev/null || true)
+                LOGS=$(kubectl logs -n "$NAMESPACE" \
+                  -l app.kubernetes.io/name=ark-broker --all-containers=true \
+                  --since=3m 2>/dev/null || true)
+                if [ "$PHASE" = Running ] && printf '%s' "$LOGS" | grep -Fq "$QUERY"; then
+                  CONNECTED=true
+                  break
+                fi
+                sleep 1
+              done
+              [ "$CONNECTED" = true ] || {
+                echo "broker subscriber did not connect before approval"
+                kubectl get pods -n "$NAMESPACE" -o wide
+                exit 1
+              }
+
+              kubectl run chunk-stream-hitl-approve -n "$NAMESPACE" \
+                --image=curlimages/curl:8.7.1 --restart=Never --rm -i -- \
+                curl --fail --silent --show-error -X POST \
+                -H 'Content-Type: application/json' \
+                -d '{"decision":"approved"}' \
+                "http://ark-api.$NAMESPACE.svc.cluster.local/v1/a2a-tasks/$TASK/approval?namespace=$NAMESPACE"
+            env:
+              - name: NAMESPACE
+                value: ($namespace)
+      catch:
+        - events: {}
+        - describe:
+            apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Query
+            name: chunk-stream-hitl-query
+
+    - name: verify-replay-and-live-completion
+      try:
+        - wait:
+            apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Query
+            name: chunk-stream-hitl-query
+            timeout: 120s
+            for:
+              jsonPath:
+                path: "{.status.phase}"
+                value: done
+        - script:
+            timeout: 90s
+            content: |
+              QUERY=chunk-stream-hitl-query
+              REPLAY=$(kubectl run chunk-stream-hitl-replay -n "$NAMESPACE" \
+                --image=curlimages/curl:8.7.1 --restart=Never --rm -i -- \
+                curl --no-buffer --fail --silent --show-error --max-time 60 \
+                "http://ark-api.$NAMESPACE.svc.cluster.local/v1/broker/chunks?watch=true&query-id=$QUERY&memory=default")
+              printf '%s\n' "$REPLAY"
+              printf '%s' "$REPLAY" | grep -qF 'Safe rollout of v2.1.0 completed.' || {
+                echo "ark-api replay did not contain the resumed answer"
+                exit 1
+              }
+              printf '%s' "$REPLAY" | grep -qF '[DONE]' || {
+                echo "ark-api replay did not terminate with [DONE]"
+                exit 1
+              }
+              if printf '%s' "$REPLAY" | grep -qF 'safe-deployment-action'; then
+                echo "ark-api replay leaked the earlier approval run"
+                exit 1
+              fi
+
+              kubectl wait -n "$NAMESPACE" \
+                --for=jsonpath='{.status.phase}'=Succeeded \
+                pod/chunk-stream-hitl-live-watch --timeout=60s
+              LIVE=$(kubectl logs -n "$NAMESPACE" chunk-stream-hitl-live-watch)
+              printf '%s\n' "$LIVE"
+              printf '%s' "$LIVE" | grep -qF 'Safe rollout of v2.1.0 completed.' || {
+                echo "live broker subscriber did not receive the resumed answer"
+                exit 1
+              }
+              printf '%s' "$LIVE" | grep -qF '[DONE]' || {
+                echo "live broker subscriber did not receive [DONE]"
+                exit 1
+              }
+            env:
+              - name: NAMESPACE
+                value: ($namespace)
+      catch:
+        - events: {}
+        - describe:
+            apiVersion: ark.mckinsey.com/v1alpha1
+            kind: Query
+            name: chunk-stream-hitl-query
+
+      cleanup:
+        - script:
+            content: |
+              kubectl delete pod chunk-stream-hitl-live-watch \
+                --namespace "$NAMESPACE" --ignore-not-found --wait=false
+              helm uninstall mock-llm --namespace "$NAMESPACE" --wait --timeout=180s || true
+            env:
+              - name: NAMESPACE
+                value: ($namespace)

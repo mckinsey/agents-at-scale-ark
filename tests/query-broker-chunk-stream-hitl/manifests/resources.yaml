@@ -1,0 +1,59 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Model
+metadata:
+  name: chunk-stream-hitl-model
+  namespace: ($namespace)
+spec:
+  type: completions
+  provider: openai
+  model:
+    value: gpt-4.1-mini
+  pollInterval: 3s
+  config:
+    openai:
+      baseUrl:
+        value: http://mock-llm.($namespace).svc.cluster.local:6556/v1
+      apiKey:
+        value: mock-api-key
+---
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: safe-deployment-action
+  namespace: ($namespace)
+spec:
+  type: http
+  description: Records a harmless mock deployment action
+  inputSchema:
+    type: object
+    properties:
+      target:
+        type: string
+      version:
+        type: string
+    required: [target, version]
+  http:
+    method: GET
+    timeout: 10s
+    url: http://mock-llm.($namespace).svc.cluster.local:6556/safe-deployment-action?target={target}&version={version}
+---
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: chunk-stream-hitl-agent
+  namespace: ($namespace)
+spec:
+  description: Safe mock agent for chunk stream HITL coverage
+  prompt: |
+    For every request to complete a safe staging rollout, call
+    safe-deployment-action exactly once with the requested version. After the
+    tool result, reply with one short completion sentence.
+  modelRef:
+    name: chunk-stream-hitl-model
+  tools:
+    - type: http
+      name: safe-deployment-action
+      approval:
+        required: true
+        timeout: 5m
+        onTimeout: reject
