@@ -1,0 +1,9 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: schema-query
+spec:
+  input: "I love this product."
+  target:
+    type: agent
+    name: schema-agent
