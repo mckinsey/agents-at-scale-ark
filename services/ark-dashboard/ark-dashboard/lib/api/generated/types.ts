@@ -3069,6 +3069,16 @@ export interface components {
             taskId: string;
         };
         /**
+         * ArgumentMatch
+         * @description Narrows approval to tool calls whose arguments match a pattern.
+         */
+        ArgumentMatch: {
+            /** Argument */
+            argument: string;
+            /** Pattern */
+            pattern: string;
+        };
+        /**
          * ArkConfigMemoryRef
          * @description Name of the Memory used as the cluster-wide default for queries.
          *
@@ -5152,6 +5162,8 @@ export interface components {
          * @description Approval configuration for human-in-the-loop tool execution.
          */
         ToolApprovalConfig: {
+            /** Argumentmatches */
+            argumentMatches?: components["schemas"]["ArgumentMatch"][] | null;
             /** Ontimeout */
             onTimeout?: string | null;
             /** Required */
