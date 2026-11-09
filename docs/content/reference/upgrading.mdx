@@ -196,6 +196,26 @@ Every MCPServer carries the label `ark.mckinsey.com/name` set to its own name. A
 - `GET /v1/mcp-servers` returns each server's `labels`, like the detail route already did.
 - Agent and team chats in the dashboard show an **MCP credentials** block when the namespace has MCPServers. Each row names an MCP server, a header (default `Authorization`), a Secret and a key (default `token`), and every query the chat sends carries them as an `mcpserver` override that selects the server by `ark.mckinsey.com/name`. Only servers whose label matches their own name can be picked, and not when a server left over from before the upgrade carries the same label value. The chat does not send while a row points at a server that cannot be picked or no longer exists, is incomplete, repeats a header for the same server, or while the server list cannot be loaded. Rows are kept in the browser's local storage per user and namespace, as names only. A value that does not look like a Secret name, header or key is never saved there. When the Secret is in the list, the key is `token` and cannot be changed; while the list is still loading, a row with another key waits. The header, the key and a Secret name typed by hand are saved when you leave the field; a Secret picked from the list is saved at once. A header or key that looks like a token, such as one starting with `ghp_` or `sk-` or a long run of letters and digits, and a Secret name that looks like a UUID or a long run of letters and digits, block sending and are never saved, and older rows that hold one are cleaned on load. With single sign-on the Secret list also shows your personal Secrets, marked **Personal**.
 
+### Reserved Configuration Names
+
+The configurations API no longer creates or updates a configuration named `marketplace-sources` or `ark-export-metadata`. Those ConfigMaps belong to the marketplace and export features, and a create or update that names them returns HTTP 422. Manage marketplace sources through the marketplace endpoints or the dashboard. A configuration created under one of these names before the upgrade stays visible in the configurations list and can still be deleted through the API or the dashboard; the delete only removes a ConfigMap that carries the configuration annotation, never the marketplace or export ConfigMap itself.
+
+### Marketplace Source Credentials
+
+A marketplace source only uses the credential Secret named `marketplace-source-<source>-auth`. If its `auth.secretRef` names any other Secret, Ark ignores the reference: the source reports `auth_error`, and updating or deleting the source leaves that Secret untouched. A source with an `auth.scheme` but no `secretRef` also reports `auth_error` instead of being fetched without credentials.
+
+**Migration:** find sources whose credential does not follow the pattern:
+
+```bash
+kubectl get configmap -A --field-selector metadata.name=marketplace-sources -o json | jq -r '
+  .items[] as $cm | ($cm.data // {}) | to_entries[] |
+  (.value | fromjson) as $v |
+  select($v.auth and ($v.auth.secretRef // "") != "marketplace-source-\(.key)-auth") |
+  "\($cm.metadata.namespace) \(.key) \($v.auth.secretRef // "-")"'
+```
+
+Re-create each one through the dashboard, or with `PATCH /api/v1/namespaces/{namespace}/marketplace-sources/{name}` carrying the full source (`url`, `displayName`, and `auth` with the credential), which stores the credential under the expected name. Ark does not delete the old Secret; remove it yourself if nothing else uses it. For a source seeded through `marketplaceSources` in the dashboard chart, rename the Secret to `marketplace-source-<name>-auth` and set `secretRef` to match.
+
 ### Cross-namespace Model and Memory references need an opt-in on the target
 
 `Agent.spec.modelRef.namespace` and `Query.spec.memory.namespace` may name another namespace only when the target `Model` or `Memory` lists the referencing namespace in the `ark.mckinsey.com/allowed-namespaces` annotation (a comma-separated list, or `*` for every namespace). Without it, the admission webhook rejects new `Agent` and `Query` objects and updates that change the reference, and the completions executor fails queries that use an existing reference with:
