@@ -115,6 +115,30 @@ kubectl get configmap -A --field-selector metadata.name=marketplace-sources -o j
 
 Re-create each one through the dashboard, or with `PATCH /api/v1/namespaces/{namespace}/marketplace-sources/{name}` carrying the full source (`url`, `displayName`, and `auth` with the credential), which stores the credential under the expected name. Ark does not delete the old Secret; remove it yourself if nothing else uses it. For a source seeded through `marketplaceSources` in the dashboard chart, rename the Secret to `marketplace-source-<name>-auth` and set `secretRef` to match.
 
+### Cross-namespace Model and Memory references need an opt-in on the target
+
+`Agent.spec.modelRef.namespace` and `Query.spec.memory.namespace` may name another namespace only when the target `Model` or `Memory` lists the referencing namespace in the `ark.mckinsey.com/allowed-namespaces` annotation (a comma-separated list, or `*` for every namespace). Without it, the admission webhook rejects new `Agent` and `Query` objects and updates that change the reference, and the completions executor fails queries that use an existing reference with:
+
+```text
+cross-namespace reference to Model <namespace>/<name> is not allowed: the Model must list namespace <from> in annotation ark.mckinsey.com/allowed-namespaces
+```
+
+If you use either field today, annotate each target before upgrading:
+
+```bash
+kubectl annotate model <name> -n <ns> ark.mckinsey.com/allowed-namespaces=<comma list or *>
+kubectl annotate memory <name> -n <ns> ark.mckinsey.com/allowed-namespaces=<comma list or *>
+```
+
+To find the references in use:
+
+```bash
+kubectl get agents -A -o jsonpath='{range .items[?(@.spec.modelRef.namespace)]}{.metadata.namespace}/{.metadata.name} -> {.spec.modelRef.namespace}/{.spec.modelRef.name}{"\n"}{end}'
+kubectl get queries -A -o jsonpath='{range .items[?(@.spec.memory.namespace)]}{.metadata.namespace}/{.metadata.name} -> {.spec.memory.namespace}/{.spec.memory.name}{"\n"}{end}'
+```
+
+References within the same namespace, including an explicit `namespace` equal to the object's own, are unchanged.
+
 ## v0.1.73
 
 ### Revoked and Expired API Keys Are Deleted After 90 Days
