@@ -215,4 +215,51 @@ describe('createModel', () => {
     );
     expect(mockOutput.success).toHaveBeenCalledWith('model test-model created');
   });
+
+  it('refuses a model name with the personal secret prefix', async () => {
+    const result = await createModel('u-0123456789abcdef-sst-cli');
+
+    expect(result).toBe(false);
+    expect(mockExeca).not.toHaveBeenCalled();
+    expect(mockOutput.error).toHaveBeenCalledWith(
+      'model name u-0123456789abcdef-sst-cli starts with u-<16 hex>-, a prefix Ark reserves for personal secrets'
+    );
+  });
+
+  it('rejects a prompted model name with the personal secret prefix', async () => {
+    mockInquirer.prompt.mockRejectedValueOnce(new Error('stop'));
+
+    await expect(createModel()).rejects.toThrow('stop');
+
+    const [[questions]] = mockInquirer.prompt.mock.calls;
+    expect(questions[0].validate('u-0123456789abcdef-x')).toBe(
+      'u-0123456789abcdef-x starts with u-<16 hex>-, a prefix Ark reserves for personal secrets'
+    );
+    expect(questions[0].validate('team-model')).toBe(true);
+  });
+
+  it('stops without creating the model when the secret is personal', async () => {
+    mockExeca.mockRejectedValueOnce(new Error('not found'));
+    mockInquirer.prompt
+      .mockResolvedValueOnce({modelType: 'openai'})
+      .mockResolvedValueOnce({model: 'gpt-4'})
+      .mockResolvedValueOnce({baseUrl: 'https://api.openai.com'})
+      .mockResolvedValueOnce({apiKey: 'secret'});
+    mockExeca.mockResolvedValueOnce({
+      stdout: JSON.stringify({
+        metadata: {
+          name: 'test-model-model-secret',
+          labels: {'ark.mckinsey.com/scope': 'user-0123456789abcdef'},
+        },
+      }),
+    });
+
+    const result = await createModel('test-model');
+
+    expect(result).toBe(false);
+    expect(mockExeca).toHaveBeenCalledTimes(2);
+    expect(mockOutput.error).toHaveBeenCalledWith(
+      'secret test-model-model-secret is a personal secret and is left as it is; choose another model name'
+    );
+  });
 });

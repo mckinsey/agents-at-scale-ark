@@ -106,7 +106,7 @@ ark.mckinsey.com/scope: shared
 
 The samples, the `ark-tenant` chart's AI gateway Secret and the setup scripts create their Secrets with the same labels. `POST /v1/secrets` also rejects names that start with `u-`, sixteen lowercase hexadecimal digits and a hyphen, with a `422`, and `SecretClient.create_secret` raises `ValueError` for them.
 
-`ark models create` used to update an existing `<model>-model-secret` with `kubectl apply` and now uses `kubectl replace`. It reads the Secret first and keeps its labels, annotations and the keys it does not manage.
+`ark models create` used to update an existing `<model>-model-secret` with `kubectl apply` and now uses `kubectl replace`. It reads the Secret first and keeps its labels, annotations and the keys it does not manage. It refuses model names that start with the reserved `u-` prefix and stops without changes when the Secret is personal.
 
 `/v1/secrets` and the dashboard **Secrets** page serve only Secrets with both labels, as described in [`/v1/secrets` Serves Only Ark-Labelled Secrets](#v1secrets-serves-only-ark-labelled-secrets). References from models, MCP servers, queries and other resources resolve with or without the labels.
 

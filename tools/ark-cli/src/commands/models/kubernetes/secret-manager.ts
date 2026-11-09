@@ -2,10 +2,28 @@ import {execa} from 'execa';
 import output from '../../../lib/output.js';
 import {ProviderConfig} from '../providers/index.js';
 
+const SCOPE_LABEL = 'ark.mckinsey.com/scope';
+const SHARED_SCOPE = 'shared';
+const RESERVED_USER_PREFIX = /^u-[0-9a-f]{16}-/;
+
 const SECRET_LABELS = {
   'ark.mckinsey.com/resource-type': 'secret',
-  'ark.mckinsey.com/scope': 'shared',
+  [SCOPE_LABEL]: SHARED_SCOPE,
 };
+
+export class SecretScopeError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SecretScopeError';
+  }
+}
+
+export function reservedNameError(name: string): string | undefined {
+  if (RESERVED_USER_PREFIX.test(name)) {
+    return `${name} starts with u-<16 hex>-, a prefix Ark reserves for personal secrets`;
+  }
+  return undefined;
+}
 
 const MANAGED_KEYS = [
   'api-key',
@@ -74,7 +92,17 @@ export function mergeIntoExisting(
 // Kubernetes secret manager implementation
 export class KubernetesSecretManager implements SecretManager {
   async createSecret(config: ProviderConfig): Promise<void> {
+    const reserved = reservedNameError(config.secretName);
+    if (reserved) {
+      throw new SecretScopeError(reserved);
+    }
     const existing = await this.readSecret(config.secretName);
+    const scope = existing?.metadata.labels?.[SCOPE_LABEL];
+    if (scope && scope !== SHARED_SCOPE) {
+      throw new SecretScopeError(
+        `secret ${config.secretName} is a personal secret and is left as it is; choose another model name`
+      );
+    }
     const manifest = existing
       ? mergeIntoExisting(existing, config)
       : buildSecretManifest(config);
