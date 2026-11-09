@@ -5,7 +5,11 @@ import {
   BaseCollectorOptions,
   ProviderConfigCollectorFactory,
 } from './providers/index.js';
-import {KubernetesSecretManager} from './kubernetes/secret-manager.js';
+import {
+  KubernetesSecretManager,
+  SecretScopeError,
+  reservedNameError,
+} from './kubernetes/secret-manager.js';
 import {KubernetesModelManifestBuilder} from './kubernetes/manifest-builder.js';
 
 /**
@@ -33,11 +37,17 @@ export async function createModel(
           if (!/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(input)) {
             return 'model name must be a valid Kubernetes resource name';
           }
-          return true;
+          return reservedNameError(input) ?? true;
         },
       },
     ]);
     modelName = nameAnswer.modelName;
+  }
+
+  const reserved = reservedNameError(modelName!);
+  if (reserved) {
+    output.error(`model name ${reserved}`);
+    return false;
   }
 
   // Check if model already exists
@@ -108,6 +118,10 @@ export async function createModel(
     const secretManager = new KubernetesSecretManager();
     await secretManager.createSecret(config);
   } catch (error) {
+    if (error instanceof SecretScopeError) {
+      output.error(error.message);
+      return false;
+    }
     output.error('failed to create secret');
     console.error(error);
     return false;
