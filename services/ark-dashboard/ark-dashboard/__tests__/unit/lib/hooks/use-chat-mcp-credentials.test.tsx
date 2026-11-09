@@ -314,6 +314,62 @@ describe('evaluateMcpCredentials with the listed secrets', () => {
   });
 });
 
+describe('evaluateMcpCredentials with a personal secret', () => {
+  const PERSONAL = 'u-0123456789abcdef-github';
+
+  function personalIssue(
+    listed: string[],
+    secretsPending = false,
+    secretsUnavailable = false,
+  ) {
+    const [row] = evaluateMcpCredentials(
+      [credential({ secret: PERSONAL })],
+      LOADED,
+      {},
+      new Set(listed),
+      secretsPending,
+      secretsUnavailable,
+    );
+    return row.issue;
+  }
+
+  it('accepts a personal secret that is still listed', () => {
+    expect(personalIssue([PERSONAL])).toBeNull();
+  });
+
+  it('flags a personal secret that is no longer listed', () => {
+    expect(personalIssue([])).toBe('secret-missing');
+  });
+
+  it('waits for the secret list before deciding', () => {
+    expect(personalIssue([], true)).toBe('secrets-pending');
+  });
+
+  it('leaves the check to ark-api when the secret list failed to load', () => {
+    expect(personalIssue([], false, true)).toBeNull();
+  });
+
+  it('keeps the neutral handling for names outside the personal prefix', () => {
+    const [row] = evaluateMcpCredentials(
+      [credential({ secret: 'external-token' })],
+      LOADED,
+      {},
+      new Set(),
+    );
+    expect(row.issue).toBeNull();
+  });
+
+  it('never sends a row whose personal secret is missing', () => {
+    const rows = evaluateMcpCredentials(
+      [credential({ secret: PERSONAL })],
+      LOADED,
+      {},
+      new Set(),
+    );
+    expect(readyMcpCredentials(rows)).toEqual([]);
+  });
+});
+
 describe('readyMcpCredentials', () => {
   it('returns trimmed names of the rows without issues', () => {
     const rows = evaluateMcpCredentials(
@@ -482,6 +538,7 @@ describe('useChatMcpCredentials', () => {
   });
 
   it('exposes a complete row as a ready credential', () => {
+    mockListedSecrets(['u-0123456789abcdef-github']);
     const { result } = render();
 
     addGithubCredential(result);
@@ -513,6 +570,7 @@ describe('useChatMcpCredentials', () => {
   });
 
   it('blocks sending for a repeated header', () => {
+    mockListedSecrets(['u-0123456789abcdef-github']);
     const { result } = render();
     addGithubCredential(result);
     addGithubCredential(result, 'other');
@@ -750,6 +808,18 @@ describe('useChatMcpCredentials', () => {
       key: 'password',
       keyLocked: false,
     });
+  });
+
+  it('blocks sending a stored row whose personal secret was deleted', () => {
+    storeRows({
+      'team-a': [credential({ secret: 'u-0123456789abcdef-github' })],
+    });
+    mockListedSecrets(['github-token']);
+    const { result } = render();
+
+    expect(result.current.rows[0].issue).toBe('secret-missing');
+    expect(result.current.blocked).toBe(true);
+    expect(result.current.credentials).toEqual([]);
   });
 
   it('sends token for a listed secret that arrives after mount', () => {
