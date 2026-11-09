@@ -10,10 +10,10 @@ class ChartMetadata(BaseModel):
 
 
 class HelmRelease(BaseModel):
-    """Helm release information for marketplace item detection.
+    """Helm release information.
 
-    Represents a Helm release with chart metadata including annotations
-    used for marketplace item identification.
+    Represents a Helm release with chart metadata including annotations,
+    which the marketplace uses for installed item detection.
     """
     name: str
     namespace: str
@@ -26,10 +26,17 @@ class HelmRelease(BaseModel):
     chart_metadata: Optional[ChartMetadata] = None
 
 
+class HelmReleaseError(BaseModel):
+    """A Helm release whose details could not be read."""
+    name: str
+    message: str
+
+
 class HelmReleaseListResponse(BaseModel):
     """Response model for listing Helm releases."""
     items: List[HelmRelease]
     count: int
+    errors: List[HelmReleaseError] = []
 
 
 class HTTPRouteInfo(BaseModel):
