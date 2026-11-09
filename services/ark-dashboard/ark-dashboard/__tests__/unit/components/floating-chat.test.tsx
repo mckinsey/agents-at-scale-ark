@@ -73,6 +73,9 @@ vi.mock('jotai', async importOriginal => {
   };
 });
 
+const MESSAGE_PLACEHOLDER = 'Write here to chat with your agent...';
+const PROCESSING_PLACEHOLDER = 'Processing...';
+
 // Shaped like the DOM AbortError the real fetch throws, so the hook's
 // `err.name === 'AbortError'` swallow path is exercised.
 function makeAbortError(): Error {
@@ -84,7 +87,6 @@ function renderFloatingChat(
     id: string;
     name: string;
     type: 'agent' | 'model' | 'team';
-    position: number;
     onClose: () => void;
   },
   store?: ReturnType<typeof createStore>,
@@ -106,7 +108,6 @@ describe('FloatingChat', () => {
     id: 'test-chat',
     name: 'Test Agent',
     type: 'agent' as const,
-    position: 0,
     onClose: vi.fn(),
   };
 
@@ -158,7 +159,7 @@ describe('FloatingChat', () => {
 
       renderFloatingChat(defaultProps);
 
-      const input = screen.getByPlaceholderText('Type your message...');
+      const input = screen.getByPlaceholderText(MESSAGE_PLACEHOLDER);
       await user.type(input, 'Hi there');
 
       const sendButton = screen.getByRole('button', { name: /send/i });
@@ -201,7 +202,7 @@ describe('FloatingChat', () => {
 
       renderFloatingChat(defaultProps);
 
-      const input = screen.getByPlaceholderText('Type your message...');
+      const input = screen.getByPlaceholderText(MESSAGE_PLACEHOLDER);
       await user.type(input, 'Test');
 
       const sendButton = screen.getByRole('button', { name: /send/i });
@@ -228,7 +229,7 @@ describe('FloatingChat', () => {
 
       renderFloatingChat(defaultProps);
 
-      const input = screen.getByPlaceholderText('Type your message...');
+      const input = screen.getByPlaceholderText(MESSAGE_PLACEHOLDER);
       await user.type(input, 'Test');
 
       const sendButton = screen.getByRole('button', { name: /send/i });
@@ -262,7 +263,7 @@ describe('FloatingChat', () => {
 
       renderFloatingChat(defaultProps);
 
-      const input = screen.getByPlaceholderText('Type your message...');
+      const input = screen.getByPlaceholderText(MESSAGE_PLACEHOLDER);
       await user.type(input, 'Test');
 
       const sendButton = screen.getByRole('button', { name: /send/i });
@@ -298,7 +299,7 @@ describe('FloatingChat', () => {
 
       renderFloatingChat(defaultProps);
 
-      const input = screen.getByPlaceholderText('Type your message...');
+      const input = screen.getByPlaceholderText(MESSAGE_PLACEHOLDER);
       await user.type(input, 'Test');
 
       const sendButton = screen.getByRole('button', { name: /send/i });
@@ -307,7 +308,7 @@ describe('FloatingChat', () => {
       // Should show "Processing..." placeholder
       await waitFor(() => {
         expect(
-          screen.getByPlaceholderText('Processing...'),
+          screen.getByPlaceholderText(PROCESSING_PLACEHOLDER),
         ).toBeInTheDocument();
       });
 
@@ -316,7 +317,7 @@ describe('FloatingChat', () => {
       // Should return to normal placeholder
       await waitFor(() => {
         expect(
-          screen.getByPlaceholderText('Type your message...'),
+          screen.getByPlaceholderText(MESSAGE_PLACEHOLDER),
         ).toBeInTheDocument();
       });
     });
@@ -334,7 +335,7 @@ describe('FloatingChat', () => {
 
       renderFloatingChat(defaultProps);
 
-      const input = screen.getByPlaceholderText('Type your message...');
+      const input = screen.getByPlaceholderText(MESSAGE_PLACEHOLDER);
 
       // Send first message
       await user.type(input, 'First message');
@@ -406,7 +407,7 @@ describe('FloatingChat', () => {
 
       renderFloatingChat(defaultProps);
 
-      const input = screen.getByPlaceholderText('Type your message...');
+      const input = screen.getByPlaceholderText(MESSAGE_PLACEHOLDER);
       await user.type(input, 'Hi');
       await user.click(screen.getByRole('button', { name: /send/i }));
 
@@ -481,7 +482,7 @@ describe('FloatingChat', () => {
 
       renderFloatingChat(defaultProps);
 
-      const input = screen.getByPlaceholderText('Type your message...');
+      const input = screen.getByPlaceholderText(MESSAGE_PLACEHOLDER);
       await user.type(input, 'Hi');
       await user.click(screen.getByRole('button', { name: /send/i }));
 
@@ -538,7 +539,7 @@ describe('FloatingChat', () => {
       );
 
       renderFloatingChat(defaultProps);
-      const input = screen.getByPlaceholderText('Type your message...');
+      const input = screen.getByPlaceholderText(MESSAGE_PLACEHOLDER);
       await user.type(input, 'Hi');
       await user.click(screen.getByRole('button', { name: /send/i }));
 
@@ -590,7 +591,7 @@ describe('FloatingChat', () => {
       );
 
       renderFloatingChat(defaultProps);
-      const input = screen.getByPlaceholderText('Type your message...');
+      const input = screen.getByPlaceholderText(MESSAGE_PLACEHOLDER);
       await user.type(input, 'Hi');
       await user.click(screen.getByRole('button', { name: /send/i }));
 
@@ -650,7 +651,7 @@ describe('FloatingChat', () => {
       );
 
       renderFloatingChat(defaultProps);
-      const input = screen.getByPlaceholderText('Type your message...');
+      const input = screen.getByPlaceholderText(MESSAGE_PLACEHOLDER);
       await user.type(input, 'Hi');
       await user.click(screen.getByRole('button', { name: /send/i }));
 
@@ -674,7 +675,7 @@ describe('FloatingChat', () => {
         renderFloatingChat(defaultProps);
 
         expect(
-          screen.getByPlaceholderText('Type your message...'),
+          screen.getByPlaceholderText(MESSAGE_PLACEHOLDER),
         ).toBeInTheDocument();
         expect(
           screen.getByText(/start a conversation with the agent/i),
@@ -711,7 +712,7 @@ describe('FloatingChat', () => {
         await user.click(minimizeButton);
 
         expect(
-          screen.queryByPlaceholderText('Type your message...'),
+          screen.queryByPlaceholderText(MESSAGE_PLACEHOLDER),
         ).not.toBeInTheDocument();
         expect(
           screen.queryByText(/start a conversation with the agent/i),
@@ -758,7 +759,7 @@ describe('FloatingChat', () => {
         await user.click(restoreButton);
 
         expect(
-          screen.getByPlaceholderText('Type your message...'),
+          screen.getByPlaceholderText(MESSAGE_PLACEHOLDER),
         ).toBeInTheDocument();
       });
 
@@ -771,13 +772,19 @@ describe('FloatingChat', () => {
         });
         await user.click(minimizeButton);
 
+        expect(
+          screen.queryByRole('button', { name: /maximize chat/i }),
+        ).not.toBeInTheDocument();
+
+        await user.click(screen.getByRole('button', { name: /restore chat/i }));
+
         const maximizeButton = screen.getByRole('button', {
           name: /maximize chat/i,
         });
         await user.click(maximizeButton);
 
         expect(
-          screen.getByPlaceholderText('Type your message...'),
+          screen.getByPlaceholderText(MESSAGE_PLACEHOLDER),
         ).toBeInTheDocument();
         const restoreSizeButton = screen.getByRole('button', {
           name: /restore size/i,
@@ -837,7 +844,7 @@ describe('FloatingChat', () => {
         await user.click(minimizeButton);
 
         expect(
-          screen.queryByPlaceholderText('Type your message...'),
+          screen.queryByPlaceholderText(MESSAGE_PLACEHOLDER),
         ).not.toBeInTheDocument();
         const restoreButton = screen.getByRole('button', {
           name: /restore chat/i,
@@ -933,7 +940,7 @@ describe('FloatingChat', () => {
 
       renderFloatingChat(defaultProps);
 
-      const input = screen.getByPlaceholderText('Type your message...');
+      const input = screen.getByPlaceholderText(MESSAGE_PLACEHOLDER);
       await user.type(input, 'What is the weather?');
 
       const sendButton = screen.getByRole('button', { name: /send/i });
@@ -991,7 +998,7 @@ describe('FloatingChat', () => {
       });
       await user.click(debugSwitch);
 
-      const input = screen.getByPlaceholderText('Type your message...');
+      const input = screen.getByPlaceholderText(MESSAGE_PLACEHOLDER);
       await user.type(input, 'What is the weather?');
 
       const sendButton = screen.getByRole('button', { name: /send/i });
@@ -1048,7 +1055,7 @@ describe('FloatingChat', () => {
         name: /tool calls/i,
       });
 
-      const input = screen.getByPlaceholderText('Type your message...');
+      const input = screen.getByPlaceholderText(MESSAGE_PLACEHOLDER);
       await user.type(input, 'What is the weather?');
 
       const sendButton = screen.getByRole('button', { name: /send/i });
@@ -1096,7 +1103,7 @@ describe('FloatingChat', () => {
 
       renderFloatingChat(defaultProps);
 
-      const input = screen.getByPlaceholderText('Type your message...');
+      const input = screen.getByPlaceholderText(MESSAGE_PLACEHOLDER);
       await user.type(input, 'Test message');
 
       const sendButton = screen.getByRole('button', { name: /send/i });
@@ -1118,7 +1125,10 @@ describe('FloatingChat', () => {
 
       // Should call getQueryResult
       await waitFor(() => {
-        expect(chatService.getQueryResult).toHaveBeenCalledWith('default', 'query-123');
+        expect(chatService.getQueryResult).toHaveBeenCalledWith(
+          'default',
+          'query-123',
+        );
       });
 
       // Should eventually show the response
@@ -1174,7 +1184,7 @@ describe('FloatingChat', () => {
 
       renderFloatingChat(defaultProps);
 
-      const input = screen.getByPlaceholderText('Type your message...');
+      const input = screen.getByPlaceholderText(MESSAGE_PLACEHOLDER);
       await user.type(input, 'Test message');
 
       const sendButton = screen.getByRole('button', { name: /send/i });
@@ -1226,7 +1236,7 @@ describe('FloatingChat', () => {
 
       renderFloatingChat(defaultProps);
 
-      const input = screen.getByPlaceholderText('Type your message...');
+      const input = screen.getByPlaceholderText(MESSAGE_PLACEHOLDER);
       await user.type(input, 'Test message');
 
       const sendButton = screen.getByRole('button', { name: /send/i });
@@ -1291,7 +1301,7 @@ describe('FloatingChat', () => {
 
       renderFloatingChat(defaultProps);
 
-      const input = screen.getByPlaceholderText('Type your message...');
+      const input = screen.getByPlaceholderText(MESSAGE_PLACEHOLDER);
       await user.type(input, 'Test');
 
       const sendButton = screen.getByRole('button', { name: /send/i });
@@ -1318,7 +1328,7 @@ describe('FloatingChat', () => {
 
       renderFloatingChat(defaultProps);
 
-      const input = screen.getByPlaceholderText('Type your message...');
+      const input = screen.getByPlaceholderText(MESSAGE_PLACEHOLDER);
       await user.type(input, 'Test message');
 
       const sendButton = screen.getByRole('button', { name: /send/i });
@@ -1343,7 +1353,7 @@ describe('FloatingChat', () => {
 
       renderFloatingChat(defaultProps);
 
-      const input = screen.getByPlaceholderText('Type your message...');
+      const input = screen.getByPlaceholderText(MESSAGE_PLACEHOLDER);
       await user.type(input, 'First message');
 
       const sendButton = screen.getByRole('button', { name: /send/i });
@@ -1379,7 +1389,7 @@ describe('FloatingChat', () => {
 
       renderFloatingChat(defaultProps, store);
 
-      const input = screen.getByPlaceholderText('Type your message...');
+      const input = screen.getByPlaceholderText(MESSAGE_PLACEHOLDER);
       await user.type(input, 'First message');
 
       const sendButton = screen.getByRole('button', { name: /send/i });
@@ -1425,7 +1435,7 @@ describe('FloatingChat', () => {
 
       renderFloatingChat(defaultProps);
 
-      const input = screen.getByPlaceholderText('Type your message...');
+      const input = screen.getByPlaceholderText(MESSAGE_PLACEHOLDER);
       await user.type(input, 'Test message');
 
       const sendButton = screen.getByRole('button', { name: /send/i });

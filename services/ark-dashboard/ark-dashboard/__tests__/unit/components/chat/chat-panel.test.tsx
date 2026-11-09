@@ -125,7 +125,7 @@ describe('ChatPanel output schema override', () => {
     });
 
     await user.type(
-      screen.getByPlaceholderText('Type your message...'),
+      screen.getByPlaceholderText('Write here to chat with your agent...'),
       'Hello{Enter}',
     );
 
