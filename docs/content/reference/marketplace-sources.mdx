@@ -39,7 +39,7 @@ so Helm-seeded entries and user edits can coexist.
 | --- | --- | --- |
 | `url` | yes | Absolute `https` URL of a marketplace manifest. The filename is not constrained. |
 | `displayName` | no | Human label shown in the dashboard. Defaults to the source name. |
-| `auth` | no | Authenticated fetch. Object with `scheme` (`bearer` or `basic`) and `secretRef` (the credential Secret name). The token is never stored here — only in the Secret. |
+| `auth` | no | Authenticated fetch. Object with `scheme` (`bearer` or `basic`) and `secretRef`, which must be `marketplace-source-<name>-auth`. The token is never stored here — only in the Secret. |
 
 Source names must match the Kubernetes ConfigMap key rules (alphanumeric, `-`,
 `_`, `.`). ark-api validates `url` on every write (HTTPS-only, parseable
@@ -61,6 +61,10 @@ reads the Secret **under the requesting user's identity** (impersonation), so a
 user who cannot read the Secret cannot fetch with it — the source reports an
 `auth_error` for them. Credentialed fetches keep the SSRF guard and never follow
 redirects or send the header to another host.
+
+ark-api only uses the Secret named `marketplace-source-<name>-auth` for a source.
+A `secretRef` naming any other Secret is ignored: the source reports `auth_error`,
+and updating or deleting the source never reads, writes, or deletes that Secret.
 
 ## RBAC
 
