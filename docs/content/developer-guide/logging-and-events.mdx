@@ -69,7 +69,9 @@ As an example, query execution emits these events following the `{Operation}{Sta
 - `Normal/AgentExecutionComplete`: Agent execution completes with duration
 - `Normal/QueryExecutionComplete`: Query execution completes
 
-All events with structured data store it in the `ark.mckinsey.com/event-data` annotation as JSON.
+Where these events go depends on the broker. When a broker is configured, the controller and the completions executor send operation events to it, and you can read them with `ark query ... -o events-pretty`, the dashboard, or `GET /v1/broker/events/{queryUid}` on Ark API. Without a broker, the controller writes its `QueryExecution*` events as Kubernetes Events and the executor's events (`AgentExecution*`, `LLMCall*`, `ToolCall*`, `TeamMember*`) are dropped.
+
+Kubernetes Events with structured data store it in the `ark.mckinsey.com/event-data` annotation as JSON. Broker events carry the same fields in `data`.
 
 Use Logging For:
 
