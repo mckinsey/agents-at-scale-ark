@@ -11,9 +11,10 @@ describe('settingsSections', () => {
     const settings = settingsSections.find(s => s.sectionKey === 'settings');
     expect(settings).toBeDefined();
     expect(settings!.sectionLabel).toBe('');
-    expect(settings!.items).toHaveLength(4);
+    expect(settings!.items).toHaveLength(5);
     expect(settings!.items.map(i => i.key)).toEqual([
       'queries',
+      'general',
       'experimental-features',
       'execution-engines',
       'manage-marketplace',

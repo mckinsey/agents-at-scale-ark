@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   onboardingPhaseAtom,
+  restartOnboardingAtom,
   storedOnboardingCompletedAtom,
   tourStepAtom,
 } from '@/atoms/onboarding';
@@ -26,6 +27,9 @@ vi.mock('@/providers/NamespaceProvider', () => ({
     readOnlyMode: mockNamespace.readOnlyMode,
   }),
 }));
+
+const floatingButton = () =>
+  screen.queryByRole('button', { name: /Take the Tour|Resume tour/i });
 
 const nextButton = () =>
   screen.getByRole('button', { name: /Next|Finish Tour/i });
@@ -59,15 +63,13 @@ describe('OnboardingManager', () => {
     expect(store.get(tourStepAtom)).toBe(0);
   });
 
-  it('skips onboarding and shows the floating relaunch button', () => {
+  it('skips onboarding without showing a floating relaunch button', () => {
     const store = createStore();
     renderManager(store);
     fireEvent.click(screen.getByRole('button', { name: /Skip for now/i }));
     expect(store.get(onboardingPhaseAtom)).toBe('idle');
     expect(store.get(storedOnboardingCompletedAtom)).toBe(true);
-    expect(
-      screen.getByRole('button', { name: /Take the Tour/i }),
-    ).toBeInTheDocument();
+    expect(floatingButton()).not.toBeInTheDocument();
   });
 
   it('marks onboarding completed when the welcome dialog is closed', () => {
@@ -83,9 +85,7 @@ describe('OnboardingManager', () => {
     store.set(storedOnboardingCompletedAtom, true);
     renderManager(store);
     expect(screen.queryByText('Welcome to Ark')).not.toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: /Take the Tour/i }),
-    ).toBeInTheDocument();
+    expect(floatingButton()).not.toBeInTheDocument();
   });
 
   it('walks the tour to completion and creates the first agent', () => {
@@ -103,6 +103,7 @@ describe('OnboardingManager', () => {
     );
     expect(store.get(onboardingPhaseAtom)).toBe('idle');
     expect(mockPush).toHaveBeenCalledWith('/agents/new');
+    expect(floatingButton()).not.toBeInTheDocument();
   });
 
   it('supports Back navigation during the tour', () => {
@@ -136,12 +137,14 @@ describe('OnboardingManager', () => {
     expect(store.get(tourStepAtom)).toBe(actionStep + 1);
   });
 
-  it('restarts from the first step via the floating button', () => {
+  it('reopens the welcome dialog when onboarding is restarted', () => {
     const store = createStore();
     store.set(storedOnboardingCompletedAtom, true);
     store.set(tourStepAtom, 4);
+    store.set(restartOnboardingAtom);
     renderManager(store);
-    fireEvent.click(screen.getByRole('button', { name: /Take the Tour/i }));
+    expect(screen.getByText('Welcome to Ark')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Start Guided Tour/i }));
     expect(store.get(onboardingPhaseAtom)).toBe('tour');
     expect(store.get(tourStepAtom)).toBe(0);
   });
@@ -154,6 +157,7 @@ describe('OnboardingManager', () => {
     fireEvent.click(screen.getByRole('button', { name: /Maybe later/i }));
     expect(store.get(onboardingPhaseAtom)).toBe('idle');
     expect(mockPush).not.toHaveBeenCalled();
+    expect(floatingButton()).not.toBeInTheDocument();
   });
 
   it('disables create actions during the tour in read-only mode', () => {

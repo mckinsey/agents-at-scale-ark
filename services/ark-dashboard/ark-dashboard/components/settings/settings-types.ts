@@ -1,5 +1,6 @@
 export type SettingPage =
   | 'queries'
+  | 'general'
   | 'experimental-features'
   | 'execution-engines'
   | 'manage-marketplace';
@@ -36,6 +37,10 @@ export const settingsSections: SettingsSection[] = [
       {
         key: 'queries',
         label: 'Queries settings',
+      },
+      {
+        key: 'general',
+        label: 'General',
       },
       {
         key: 'experimental-features',

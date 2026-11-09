@@ -50,6 +50,7 @@ describe('SettingsSidebar', () => {
   it('should render all menu items', () => {
     renderWithStore();
     expect(screen.getByText('Queries settings')).toBeInTheDocument();
+    expect(screen.getByText('General')).toBeInTheDocument();
     expect(screen.getByText('Experimental features')).toBeInTheDocument();
   });
 

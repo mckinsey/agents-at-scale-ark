@@ -67,8 +67,7 @@ export function OnboardingManager() {
     push(href);
   };
 
-  const handleFloatingClick = () => {
-    if (phase !== 'paused') setTourStep(0);
+  const handleResume = () => {
     setPhase('tour');
   };
 
@@ -102,11 +101,8 @@ export function OnboardingManager() {
         onDismiss={() => setPhase('idle')}
       />
 
-      {(phase === 'idle' || phase === 'paused') && (
-        <FloatingTourButton
-          label={phase === 'paused' ? 'Resume tour' : 'Take the Tour'}
-          onClick={handleFloatingClick}
-        />
+      {phase === 'paused' && (
+        <FloatingTourButton label="Resume tour" onClick={handleResume} />
       )}
     </>
   );

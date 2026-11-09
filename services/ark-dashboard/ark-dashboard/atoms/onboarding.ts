@@ -1,5 +1,5 @@
 import { atom } from 'jotai';
-import { atomWithStorage } from 'jotai/utils';
+import { RESET, atomWithStorage } from 'jotai/utils';
 
 import { TOUR_STEPS } from '@/lib/constants/tour-steps';
 
@@ -34,4 +34,10 @@ export const tourActiveSectionAtom = atom(get =>
 
 export const completeOnboardingAtom = atom(null, (_get, set) => {
   set(storedOnboardingCompletedAtom, true);
+});
+
+export const restartOnboardingAtom = atom(null, (_get, set) => {
+  set(storedOnboardingCompletedAtom, RESET);
+  set(tourStepAtom, 0);
+  set(onboardingPhaseAtom, 'welcome');
 });

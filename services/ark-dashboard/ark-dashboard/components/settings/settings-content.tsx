@@ -7,6 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { AddMarketplaceButton } from './add-marketplace-dialog';
 import { ExecutionEnginesSettings } from './execution-engines-settings';
 import { ExperimentalFeaturesSettings } from './experimental-features-settings';
+import { GeneralSettings } from './general-settings';
 import { ManageMarketplaceSettings } from './manage-marketplace-settings';
 import { QueriesSettings } from './queries-settings';
 import type { SettingPage } from './settings-types';
@@ -47,6 +48,10 @@ export function SettingsContent({ activePage }: SettingsContentProps) {
       queries: {
         title: 'Queries settings',
         component: <QueriesSettings />,
+      },
+      general: {
+        title: 'General',
+        component: <GeneralSettings />,
       },
       'experimental-features': {
         title: 'Experimental features',
