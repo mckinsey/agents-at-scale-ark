@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { EmbeddedChatPanel } from '@/components/chat/embedded-chat-panel';
+import { OutputSchemaField } from '@/components/common/output-schema-field';
 import { ResourceStudioLayout } from '@/components/common/resource-studio-layout';
 import { YamlViewer } from '@/components/common/yaml-viewer';
 import { CustomHeadersField } from '@/components/forms/shared/custom-headers-field';
@@ -90,6 +91,7 @@ export function ViewAgentForm({
     handleToolToggle,
     handleDeleteTool,
     isToolSelected,
+    isOutputSchemaSupported,
     onSubmit,
     onInvalid,
   } = actions;
@@ -97,6 +99,9 @@ export function ViewAgentForm({
   const promptValue = form.watch('prompt') || '';
   const isA2A = agent?.isA2A ?? false;
   const a2aServerName = agent?.annotations?.[ARK_ANNOTATIONS.A2A_SERVER_NAME];
+  const showOutputSchema = isOutputSchemaSupported(
+    form.watch('executionEngineName'),
+  );
   const isDisabled = form.formState.isSubmitting || isA2A;
 
   const fetchAgentYaml = useCallback(
@@ -310,6 +315,21 @@ export function ViewAgentForm({
                   </FieldDescription>
                 )}
               </FieldSet>
+            )}
+
+            {showOutputSchema && (
+              <FormField
+                control={form.control}
+                name="outputSchema"
+                render={({ field }) => (
+                  <OutputSchemaField
+                    value={field.value || ''}
+                    onChange={field.onChange}
+                    disabled={isDisabled}
+                    description="JSON schema the response must follow."
+                  />
+                )}
+              />
             )}
 
             {!isA2A && (

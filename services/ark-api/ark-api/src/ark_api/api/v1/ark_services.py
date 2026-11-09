@@ -1,11 +1,12 @@
 """ARK services API endpoints."""
 import logging
-from typing import Optional, List
+from typing import Optional, List, Dict, Any, Tuple
 from dataclasses import dataclass
 
 from fastapi import APIRouter, Depends, Query, HTTPException
 from kubernetes_asyncio import client
 from kubernetes_asyncio.client.rest import ApiException
+from pyhelm3.errors import Error as HelmError
 from ark_sdk.k8s import get_context
 from ark_sdk.impersonation import ImpersonationConfig
 
@@ -15,6 +16,7 @@ from ...models.ark_services import (
     ArkService,
     ArkServiceListResponse,
     HelmRelease,
+    HelmReleaseError,
     HelmReleaseListResponse,
     ChartMetadata,
     HTTPRouteInfo
@@ -137,6 +139,22 @@ async def get_httproutes_for_ark_service(namespace: str, release_name: str, impe
 
 
 
+async def _list_helm_releases(namespace: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, str]]]:
+    try:
+        return await get_helm_releases(namespace)
+    except Exception as e:
+        logger.error(f"Failed to list Helm releases: {e!r}")
+        if isinstance(e, HelmError) and "forbidden" in str(e).lower():
+            raise HTTPException(
+                status_code=403,
+                detail=f"Ark doesn't have permission to read Helm releases in namespace '{namespace}'."
+            ) from e
+        raise HTTPException(
+            status_code=500,
+            detail=f"Couldn't list Helm releases in namespace '{namespace}'. Check the ark-api logs for details."
+        ) from e
+
+
 @router.get("", response_model=ArkServiceListResponse)
 async def list_ark_services(
     list_all_services: Optional[bool] = Query(False, description="List all Helm releases, not just ARK services"),
@@ -156,7 +174,13 @@ async def list_ark_services(
     if namespace is None:
         namespace = get_context()["namespace"]
 
-    helm_releases = await get_helm_releases(namespace)
+    helm_releases, release_errors = await _list_helm_releases(namespace)
+    if release_errors:
+        failed = "; ".join(f"{error['name']}: {error['message']}" for error in release_errors)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Couldn't read Helm releases in namespace '{namespace}': {failed}"
+        )
     ark_services = []
     
     for release in helm_releases:
@@ -202,15 +226,15 @@ async def list_ark_services(
     )
 
 
-@router.get("/marketplace-items", response_model=HelmReleaseListResponse)
-async def list_marketplace_items(
+@router.get("/helm-releases", response_model=HelmReleaseListResponse)
+async def list_helm_releases(
     namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION)
 ) -> HelmReleaseListResponse:
     """
-    List Helm releases for marketplace item detection.
+    List deployed, failed and pending Helm releases in a namespace.
 
-    Returns full Helm release data including chart metadata and annotations
-    for marketplace item detection via ark.mckinsey.com/marketplace-item-name.
+    Returns full Helm release data including chart metadata and annotations,
+    without filtering by Ark service annotation or looking up HTTPRoutes.
 
     Args:
         namespace: The namespace to list Helm releases from (defaults to current context)
@@ -219,11 +243,12 @@ async def list_marketplace_items(
         HelmReleaseListResponse containing:
         - items: List of Helm releases with chart metadata
         - count: Number of releases found
+        - errors: Releases whose details could not be read
     """
     if namespace is None:
         namespace = get_context()["namespace"]
 
-    helm_releases_data = await get_helm_releases(namespace)
+    helm_releases_data, release_errors = await _list_helm_releases(namespace)
 
     helm_releases = [
         HelmRelease(
@@ -242,7 +267,8 @@ async def list_marketplace_items(
 
     return HelmReleaseListResponse(
         items=helm_releases,
-        count=len(helm_releases)
+        count=len(helm_releases),
+        errors=[HelmReleaseError(**error) for error in release_errors]
     )
 
 
