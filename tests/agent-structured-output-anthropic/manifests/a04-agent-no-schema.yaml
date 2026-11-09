@@ -1,0 +1,8 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: no-schema-agent
+spec:
+  prompt: Answer briefly.
+  modelRef:
+    name: test-model-anthropic
