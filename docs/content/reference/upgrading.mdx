@@ -93,24 +93,7 @@ ark import ark-export.yaml --upsert
 
 Exports created by older Ark CLI versions may contain stale `metadata.resourceVersion` and `status` fields. Regenerate or clean those files before importing them with `--upsert`.
 
-## v0.1.73
-
-### Revoked and Expired API Keys Are Deleted After 90 Days
-
-Revoked API keys were previously kept indefinitely. ark-api now deletes the Secret of any API key revoked or expired more than 90 days ago, checking at startup and then every hour. The first check after upgrading deletes every key already past that age, along with its creator and last-use metadata.
-
-API keys created through the API with an expiry that had no timezone still cannot authenticate, and ark-api now logs a warning naming the key. Create a replacement key. New keys always store their expiry with a timezone.
-
-**Migration:**
-- To keep revoked and expired keys indefinitely, set `API_KEY_RETENTION_SECONDS` to `"0"` in the ark-api chart's `app.env` before upgrading.
-- To keep a record of the key metadata, export it before upgrading:
-
-```bash
-kubectl get secrets -n <ark-api-namespace> -l ark.mckinsey.com/api-key=true \
-  -o jsonpath='{range .items[*]}{.metadata.annotations.ark\.mckinsey\.com/api-key-metadata}{"\n"}{end}' > api-key-metadata.jsonl
-```
-
-See [Revoked and Expired Key Retention](/developer-guide/authentication#revoked-and-expired-key-retention).
+## Unreleased
 
 ### Reserved Configuration Names
 
@@ -131,6 +114,31 @@ kubectl get configmap -A --field-selector metadata.name=marketplace-sources -o j
 ```
 
 Re-create each one through the dashboard, or with `PATCH /api/v1/namespaces/{namespace}/marketplace-sources/{name}` carrying the full source (`url`, `displayName`, and `auth` with the credential), which stores the credential under the expected name. Ark does not delete the old Secret; remove it yourself if nothing else uses it. For a source seeded through `marketplaceSources` in the dashboard chart, rename the Secret to `marketplace-source-<name>-auth` and set `secretRef` to match.
+
+## v0.1.73
+
+### Revoked and Expired API Keys Are Deleted After 90 Days
+
+Revoked API keys were previously kept indefinitely. ark-api now deletes the Secret of any API key revoked or expired more than 90 days ago, checking at startup and then every hour. The first check after upgrading deletes every key already past that age, along with its creator and last-use metadata.
+
+API keys created through the API with an expiry that had no timezone still cannot authenticate, and ark-api now logs a warning naming the key. Create a replacement key. New keys always store their expiry with a timezone.
+
+**Migration:**
+- To keep revoked and expired keys indefinitely, set `API_KEY_RETENTION_SECONDS` to `"0"` in the ark-api chart's `app.env` before upgrading.
+- To keep a record of the key metadata, export it before upgrading:
+
+```bash
+kubectl get secrets -n <ark-api-namespace> -l ark.mckinsey.com/api-key=true \
+  -o jsonpath='{range .items[*]}{.metadata.annotations.ark\.mckinsey\.com/api-key-metadata}{"\n"}{end}' > api-key-metadata.jsonl
+```
+
+See [Revoked and Expired Key Retention](/developer-guide/authentication#revoked-and-expired-key-retention).
+
+### Generic Resources API Serves CronWorkflows
+
+The generic resources API under `/v1/resources` now serves `argoproj.io/v1alpha1` `CronWorkflow` with `get`, `list`, `create`, `update` and `delete`. Since v0.1.71 these requests returned `403`. To suspend or resume a CronWorkflow, update it with `spec.suspend` set to `true` or `false`.
+
+CronWorkflow writes follow the same identity rule as the other writes on this API. With `AUTH_MODE` set to `sso` or `hybrid`, a signed-in user's write needs [user impersonation](/developer-guide/authentication#user-impersonation), and the user needs RBAC on `cronworkflows` in `argoproj.io`. API key requests and `open` mode run as the `ark-api` service account, which the chart already allows to manage CronWorkflows.
 
 ## v0.1.72
 

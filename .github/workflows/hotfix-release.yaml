@@ -1,0 +1,309 @@
+name: Hotfix Release
+
+# Out-of-band stable release for a hotfix that must NOT carry main's drift.
+#
+# Normal releases build "main's tested RC commit" and tag main HEAD. A hotfix
+# instead ships "<last stable> + the fix only", so it builds from a dedicated
+# hotfix branch cut from the last stable tag and tags THAT commit.
+#
+# Prepare the source branch first (once per hotfix):
+#   git checkout -b hotfix/X.Y.Z v<last-stable>
+#   git cherry-pick <fix commits>        # resolve any conflicts
+#   git push origin hotfix/X.Y.Z
+# Then dispatch this workflow with source_ref=<hotfix tip sha> and version=X.Y.Z.
+#
+# This workflow:
+#   1. tags v<version> at source_ref and creates the GitHub Release
+#   2. builds wheels, charts, ark-cli and fark FROM source_ref (stamped as the
+#      stable version) and attaches them to the release
+#   3. triggers deploy.yml to build/publish containers from source_ref and push
+#      charts/npm/PyPI/pages + run installation verification
+#
+# Only source_ref's tree ever ships; main is untouched. This file must live on
+# main's default branch so GITHUB_TOKEN can push the tag/release (no PAT).
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: 'Commit SHA or branch to build/tag (the prepared hotfix branch tip, cut from the last stable tag)'
+        required: true
+        type: string
+      version:
+        description: 'Stable version to publish, e.g. 0.1.73 (blank = read version.txt at source_ref)'
+        required: false
+        default: ''
+        type: string
+
+permissions: {}
+
+jobs:
+  tag-and-release:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    outputs:
+      stable: ${{ steps.v.outputs.stable }}
+      tag: ${{ steps.v.outputs.tag }}
+      rc_sha: ${{ steps.v.outputs.rc_sha }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.source_ref }}
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: true
+
+      - name: Resolve version and source commit
+        id: v
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          STABLE="$INPUT_VERSION"
+          if [ -z "$STABLE" ]; then
+            [ -f version.txt ] || { echo "version input blank and version.txt missing at source_ref"; exit 1; }
+            STABLE=$(tr -d '[:space:]' < version.txt)
+          fi
+          STABLE="${STABLE#v}"
+          if ! printf '%s' "$STABLE" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "version '$STABLE' must be a stable semver like 0.1.73 (no -rc, no suffix)"; exit 1
+          fi
+          TAG="v${STABLE}"
+          git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null 2>&1 && { echo "${TAG} already exists"; exit 1; }
+          RC_SHA=$(git rev-parse HEAD)
+          PREV_STABLE=$( { git tag --list 'v*' | grep -vE -- '-rc' | grep -v "^${TAG}$"; echo "${TAG}"; } \
+            | sort -V | awk -v t="${TAG}" '$0==t{print prev; exit} {prev=$0}' )
+          echo "stable=${STABLE}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "rc_sha=${RC_SHA}" >> "$GITHUB_OUTPUT"
+          echo "prev_stable=${PREV_STABLE}" >> "$GITHUB_OUTPUT"
+          echo "Releasing ${TAG} from ${RC_SHA}; notes since ${PREV_STABLE:-<none>}"
+
+      - name: Create tag at source_ref + GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "${{ steps.v.outputs.tag }}" -m "Release ${{ steps.v.outputs.tag }}" "${{ steps.v.outputs.rc_sha }}"
+          git push origin "${{ steps.v.outputs.tag }}"
+          NOTES=()
+          [ -n "${{ steps.v.outputs.prev_stable }}" ] && NOTES=(--notes-start-tag "${{ steps.v.outputs.prev_stable }}")
+          gh release create "${{ steps.v.outputs.tag }}" \
+            --title "${{ steps.v.outputs.tag }}" \
+            --generate-notes "${NOTES[@]}"
+
+  # ---- Build stable artifacts FROM source_ref (stamped as the stable version) ----
+
+  release-libs:
+    needs: [tag-and-release]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.tag-and-release.outputs.rc_sha }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+        with:
+          version: "0.11.21"
+      - name: Stamp stable version
+        run: bash scripts/stamp-version.sh "${{ needs.tag-and-release.outputs.stable }}"
+      - name: Build libraries
+        run: make libs-build-all
+      - name: Attach wheels to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          find out -name "*.whl" -type f | while read -r whl; do
+            gh release upload "${{ needs.tag-and-release.outputs.tag }}" "$whl" --clobber
+          done
+
+  release-charts:
+    needs: [tag-and-release]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    strategy:
+      matrix:
+        chart:
+          - { name: ark-controller, path: ark/dist/chart }
+          - { name: ark-apiserver, path: ark/dist/chart-apiserver }
+          - { name: ark-completions, path: ark/executors/completions/chart }
+          - { name: ark-api, path: services/ark-api/chart }
+          - { name: ark-dashboard, path: services/ark-dashboard/chart }
+          - { name: ark-mcp, path: services/ark-mcp/chart }
+          - { name: ark-broker, path: services/ark-broker/chart }
+          - { name: localhost-gateway, path: services/localhost-gateway/chart }
+          - { name: ark-tenant, path: charts/ark-tenant }
+          - { name: argo-workflows, path: services/argo-workflows/chart }
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.tag-and-release.outputs.rc_sha }}
+          persist-credentials: false
+      - name: Install Helm
+        uses: azure/setup-helm@v5
+        with:
+          version: "3.14.0"
+      - name: Stamp stable version
+        run: bash scripts/stamp-version.sh "${{ needs.tag-and-release.outputs.stable }}"
+      - name: Package ${{ matrix.chart.name }}
+        run: |
+          cd ${{ matrix.chart.path }}
+          helm dependency update
+          helm lint .
+          helm package .
+      - name: Attach ${{ matrix.chart.name }} to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ needs.tag-and-release.outputs.tag }}" ${{ matrix.chart.path }}/${{ matrix.chart.name }}-*.tgz --clobber
+
+  release-ark-cli:
+    needs: [tag-and-release]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.tag-and-release.outputs.rc_sha }}
+          persist-credentials: false
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+      - name: Stamp stable version
+        run: bash scripts/stamp-version.sh "${{ needs.tag-and-release.outputs.stable }}"
+      - name: Build + pack ark-cli
+        run: |
+          cd tools/ark-cli
+          npm ci
+          npm run build
+          npm pack
+          mkdir -p ../../out
+          mv agents-at-scale-ark-*.tgz ../../out/ark-cli.tgz
+      - name: Attach ark-cli to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ needs.tag-and-release.outputs.tag }}" out/ark-cli.tgz --clobber
+
+  release-fark:
+    needs: [tag-and-release]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.tag-and-release.outputs.rc_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.9"
+          cache-dependency-path: tools/fark/go.sum
+      - name: Stamp stable version
+        run: bash scripts/stamp-version.sh "${{ needs.tag-and-release.outputs.stable }}"
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
+        with:
+          distribution: goreleaser
+          version: latest
+          args: release --clean --skip=publish
+          workdir: ./tools/fark
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_CURRENT_TAG: ${{ needs.tag-and-release.outputs.tag }}
+      - name: Attach fark binaries to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          find ./tools/fark/dist -name "*.tar.gz" -o -name "*.zip" | while read -r a; do
+            gh release upload "${{ needs.tag-and-release.outputs.tag }}" "$a" --clobber
+          done
+          [ -f ./tools/fark/dist/checksums.txt ] && gh release upload "${{ needs.tag-and-release.outputs.tag }}" ./tools/fark/dist/checksums.txt --clobber || true
+
+  # ---- Publish via the existing deploy pipeline, building images from source_ref ----
+
+  trigger-deploy:
+    needs: [tag-and-release, release-libs, release-charts, release-ark-cli]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Trigger Deploy (build from source_ref, publish as stable)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run deploy.yml \
+            --field ark_version="${{ needs.tag-and-release.outputs.tag }}" \
+            --field source_ref="${{ needs.tag-and-release.outputs.rc_sha }}" \
+            --field deploy_containers=true \
+            --field deploy_containers_to_latest=true \
+            --field deploy_helm_chart=true \
+            --field deploy_to_npm=true \
+            --field deploy_to_pypi=true \
+            --field deploy_to_pages=true
+
+  # ---- Keep main's version past the hotfix so release-please never reuses it ----
+
+  sync-main-version:
+    needs: [tag-and-release]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Open PR bumping main to the released version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          STABLE="${{ needs.tag-and-release.outputs.stable }}"
+          CURRENT=$(tr -d '[:space:]' < version.txt)
+          HIGHER=$(printf '%s\n%s\n' "$CURRENT" "$STABLE" | sort -V | tail -1)
+          if [ "$CURRENT" = "$STABLE" ] || [ "$HIGHER" != "$STABLE" ]; then
+            echo "main is at ${CURRENT}, already >= ${STABLE}; nothing to sync"
+            exit 0
+          fi
+
+          BRANCH="chore/sync-version-${STABLE}"
+          EXISTING=$(gh pr list --base main --head "$BRANCH" --json number --jq '.[0].number' || true)
+          if [ -n "$EXISTING" ]; then
+            echo "sync PR #${EXISTING} already open for ${STABLE}"; exit 0
+          fi
+          if git ls-remote --heads origin "$BRANCH" | grep -q "$BRANCH"; then
+            git push origin --delete "$BRANCH" || true
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          bash scripts/stamp-version.sh "${STABLE}"
+          # stamp does a blanket CURRENT->STABLE replace; upgrading.mdx holds
+          # historical "## vX" headings that must not be rewritten (the STABLE
+          # upgrade note is authored by the hotfix PR, not this version bump).
+          git checkout -- docs/content/reference/upgrading.mdx
+          git add -A
+          git commit -m "chore: sync version to ${STABLE} after hotfix release"
+          git push origin "$BRANCH"
+          gh pr create --base main --head "$BRANCH" \
+            --title "chore: sync version to ${STABLE} after hotfix release" \
+            --body "## Summary
+          Bumps main from \`${CURRENT}\` to \`${STABLE}\` after the out-of-band hotfix release \`v${STABLE}\`.
+          release-please treats the manifest as the last released version, so without this its next release would reuse \`${STABLE}\` and collide with the hotfix tag. Merging this makes the next release start above \`${STABLE}\`."

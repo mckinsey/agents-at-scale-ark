@@ -5,6 +5,10 @@ import { Suspense, useMemo } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 
 import { AddMarketplaceButton } from './add-marketplace-dialog';
+import {
+  DeploymentDetailsActions,
+  DeploymentDetailsSettings,
+} from './deployment-details-settings';
 import { ExecutionEnginesSettings } from './execution-engines-settings';
 import { ExperimentalFeaturesSettings } from './experimental-features-settings';
 import { ManageMarketplaceSettings } from './manage-marketplace-settings';
@@ -60,6 +64,11 @@ export function SettingsContent({ activePage }: SettingsContentProps) {
         title: 'Manage marketplace',
         component: <ManageMarketplaceSettings />,
         action: <AddMarketplaceButton />,
+      },
+      'deployment-details': {
+        title: 'Deployment details',
+        component: <DeploymentDetailsSettings />,
+        action: <DeploymentDetailsActions />,
       },
     }),
     [],
