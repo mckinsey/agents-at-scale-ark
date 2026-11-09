@@ -112,6 +112,7 @@ function FloatingChat({
 
   return (
     <div
+      data-testid="chat-window"
       className={cn(
         'bg-surface-bg-base border-stroke-divider text-fg-primary shadow-elevation-2 flex flex-col overflow-hidden border transition-all duration-300',
         isMaximized
