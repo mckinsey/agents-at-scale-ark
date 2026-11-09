@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/openai/openai-go"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 func extractMessageContent(msg Message) (string, string) {
@@ -73,6 +74,16 @@ type anthropicRequest struct {
 	Tools            []anthropicTool        `json:"tools,omitempty"`
 	ToolChoice       map[string]interface{} `json:"tool_choice,omitempty"`
 	Model            string                 `json:"model,omitempty"`
+	OutputConfig     *anthropicOutputConfig `json:"output_config,omitempty"`
+}
+
+type anthropicOutputConfig struct {
+	Format anthropicOutputFormat `json:"format"`
+}
+
+type anthropicOutputFormat struct {
+	Type   string          `json:"type"`
+	Schema json.RawMessage `json:"schema"`
 }
 
 type anthropicTool struct {
@@ -458,6 +469,13 @@ func buildAnthropicRequest(messages []anthropicMessage, systemPrompt []anthropic
 		Tools:        tools,
 		ToolChoice:   anthropicToolChoice(toolChoice),
 	}
+}
+
+func anthropicOutputConfigFor(schema *runtime.RawExtension) *anthropicOutputConfig {
+	if schema == nil || len(schema.Raw) == 0 {
+		return nil
+	}
+	return &anthropicOutputConfig{Format: anthropicOutputFormat{Type: "json_schema", Schema: schema.Raw}}
 }
 
 func anthropicToolChoice(toolChoice ToolChoice) map[string]interface{} {

@@ -72,7 +72,7 @@ spec:
 | `spec.description` | string | no | Human-readable description of the agent. |
 | `spec.modelRef` | object | no | Model the agent uses. **If omitted, defaults to a `Model` named `default`** in the agent's namespace. The mutating webhook sets the default and marks the agent with the `ark.mckinsey.com/defaulted-model-ref` annotation. A2A and engine-backed agents are not defaulted. |
 | `spec.modelRef.name` | string | yes (when `modelRef` set) | Name of the `Model` resource (minLength 1). |
-| `spec.modelRef.namespace` | string | no | Namespace of the `Model`. Defaults to the agent's namespace. |
+| `spec.modelRef.namespace` | string | no | Namespace of the `Model`. Defaults to the agent's namespace. Another namespace requires the `Model` to list the agent's namespace in the `ark.mckinsey.com/allowed-namespaces` annotation (see [Namespace scope](/reference/relationships#namespace-scope)). |
 | `spec.executionEngine` | object | no | Named `ExecutionEngine` to run this agent (e.g. LangChain, A2A). **If unset, the built-in completions executor is used.** |
 | `spec.executionEngine.name` | string | yes (when `executionEngine` set) | Name of the `ExecutionEngine` resource (minLength 1). |
 | `spec.executionEngine.namespace` | string | no | Namespace of the `ExecutionEngine`. Defaults to the agent's namespace. |
@@ -224,9 +224,12 @@ spec:
         enum: [positive, negative, neutral]
       confidence:
         type: number
-        minimum: 0
-        maximum: 1
+        description: Confidence between 0 and 1
+    additionalProperties: false
 ```
+
+Ark does not rewrite the schema; the provider validates it, and an unsupported schema fails the Query.
+For `anthropic` and `bedrock` Models it becomes Claude's `output_config.format`, which needs a Claude model with structured outputs and a [JSON Schema subset](https://platform.claude.com/docs/en/build-with-claude/structured-outputs) (for example `additionalProperties: false` on every object and no `minimum`/`maximum`).
 
 ### Templated prompt from ConfigMap
 

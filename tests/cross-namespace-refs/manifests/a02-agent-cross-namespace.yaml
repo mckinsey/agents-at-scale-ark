@@ -1,0 +1,9 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: cross-namespace-agent
+spec:
+  prompt: You are a helpful assistant.
+  modelRef:
+    name: test-model-mock
+    namespace: TARGET_NAMESPACE

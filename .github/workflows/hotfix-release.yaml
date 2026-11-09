@@ -268,6 +268,7 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
+          fetch-tags: true
           persist-credentials: true
       - name: Open PR bumping main to the released version
         env:
@@ -299,6 +300,16 @@ jobs:
           # historical "## vX" headings that must not be rewritten (the STABLE
           # upgrade note is authored by the hotfix PR, not this version bump).
           git checkout -- docs/content/reference/upgrading.mdx
+          # The hotfix tag is off-mainline, so release-please would anchor the next
+          # release's changelog to it and pull in the whole mainline backlog. Point
+          # last-release-sha at the pre-hotfix mainline release (the fork point) so
+          # notes cover the true delta. prepare-release.yaml clears it when the next
+          # stable ships and the latest tag is back on mainline.
+          ANCHOR_SHA=$(git merge-base "${{ needs.tag-and-release.outputs.tag }}" HEAD)
+          for cfg in .github/release-please-config.json .github/release-please-config-rc.json; do
+            tmp=$(mktemp)
+            jq --arg sha "$ANCHOR_SHA" '.["last-release-sha"] = $sha' "$cfg" > "$tmp" && mv "$tmp" "$cfg"
+          done
           git add -A
           git commit -m "chore: sync version to ${STABLE} after hotfix release"
           git push origin "$BRANCH"
