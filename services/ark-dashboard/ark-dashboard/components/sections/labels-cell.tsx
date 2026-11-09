@@ -8,7 +8,9 @@ import {
 export const MAX_VISIBLE_LABELS = 3;
 
 interface TagOverflowListProps<T> {
-  readonly items: readonly T[];
+  // May be undefined when an API list response omits the field (e.g. the
+  // /v1/secrets list response does not include `labels`); guarded below.
+  readonly items?: readonly T[];
   readonly maxVisible: number;
   readonly getKey: (item: T) => string;
   readonly getLabel: (item: T) => string;
@@ -22,7 +24,7 @@ export function TagOverflowList<T>({
   getLabel,
   tagClassName = 'max-w-[120px] overflow-hidden',
 }: Readonly<TagOverflowListProps<T>>) {
-  if (items.length === 0) {
+  if (!items || items.length === 0) {
     return <span className="text-fg-secondary label-regular-primary">-</span>;
   }
 
@@ -61,10 +63,12 @@ export function TagOverflowList<T>({
   );
 }
 
-export function LabelsCell({ labels }: Readonly<{ labels: readonly string[] }>) {
+export function LabelsCell({
+  labels,
+}: Readonly<{ labels?: readonly string[] }>) {
   return (
     <TagOverflowList
-      items={labels}
+      items={labels ?? []}
       maxVisible={MAX_VISIBLE_LABELS}
       getKey={label => label}
       getLabel={label => label}
