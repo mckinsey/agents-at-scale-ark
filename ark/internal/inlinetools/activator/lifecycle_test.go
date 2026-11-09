@@ -996,5 +996,6 @@ func TestActivatorFailsAtTheActivationBudgetWhenOnlyThePreviousRevisionAnswers(t
 	_, err := invoke(a, context.Background(), fixture)
 
 	require.ErrorContains(t, err, "connect to inline runner")
+	assert.Equal(t, 1, strings.Count(err.Error(), "connect to inline runner"), "the prefix appears once")
 	assert.NoFileExists(t, marker, "the previous revision must never run")
 }

@@ -122,7 +122,7 @@ func (a *Activator) Invoke(ctx context.Context, key types.NamespacedName, uid ty
 			return result, err
 		}
 		if a.wait(activationCtx) != nil {
-			return nil, connectError(err)
+			return nil, err
 		}
 	}
 }
@@ -143,7 +143,11 @@ func (a *Activator) call(ctx, activationCtx context.Context, initial, current *t
 		return nil, err
 	}
 	// One send only. A lost response is uncertain execution, never a replay.
-	return session.CallTool(executionCtx, &mcp.CallToolParams{Name: key.Name, Arguments: json.RawMessage(argument)})
+	result, err := session.CallTool(executionCtx, &mcp.CallToolParams{Name: key.Name, Arguments: json.RawMessage(argument)})
+	if errors.Is(err, errOtherRevision) {
+		return nil, connectError(err)
+	}
+	return result, err
 }
 
 // Readiness does not mean the Service IP is programmed: kube-proxy lags ready
