@@ -65,6 +65,34 @@ class TestGetArgoServerVersion(unittest.IsolatedAsyncioTestCase):
 
         self.assertIsNone(version)
 
+    async def test_returns_none_for_empty_url_without_calling_argo(self):
+        def handler(request):
+            raise AssertionError("no request expected")
+
+        with patch("ark_api.api.v1.argo_server.httpx.AsyncClient", argo_client_factory(handler)):
+            version = await argo_server.get_argo_server_version("")
+
+        self.assertIsNone(version)
+
+    async def test_returns_none_for_non_object_json_body(self):
+        for body in (["x"], "str", 41, None):
+            with self.subTest(body=body):
+                def handler(request, body=body):
+                    return httpx.Response(200, json=body)
+
+                with patch("ark_api.api.v1.argo_server.httpx.AsyncClient", argo_client_factory(handler)):
+                    version = await argo_server.get_argo_server_version(ARGO_URL)
+
+                self.assertIsNone(version)
+
+    async def test_returns_none_for_non_string_version(self):
+        for value in (41, None, ["v4.1.0"], {"a": 1}):
+            with self.subTest(value=value):
+                with patch("ark_api.api.v1.argo_server.httpx.AsyncClient", argo_client_factory(version_handler(value))):
+                    version = await argo_server.get_argo_server_version(ARGO_URL)
+
+                self.assertIsNone(version)
+
 
 class TestIsVersionSupported(unittest.TestCase):
     def test_minimum_supported_version_is_supported(self):

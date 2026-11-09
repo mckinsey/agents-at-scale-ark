@@ -131,12 +131,14 @@ class TestSystemInfoEndpoint(unittest.TestCase):
             return_value=SimpleNamespace(git_version="v1.31.2")
         )
 
+        mock_get_version.return_value = None
+
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop("ARGO_SERVER_URL", None)
             response = self.client.get("/v1/system-info")
 
         self.assertIsNone(response.json()["argo_server_version_supported"])
-        mock_get_version.assert_not_called()
+        mock_get_version.assert_called_once_with("")
 
     @patch("ark_api.api.v1.system_info.argo_server.get_argo_server_version")
     @patch("ark_api.api.v1.system_info.client.VersionApi")

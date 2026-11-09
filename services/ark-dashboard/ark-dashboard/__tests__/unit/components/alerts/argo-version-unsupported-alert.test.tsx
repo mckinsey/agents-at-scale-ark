@@ -18,7 +18,7 @@ function mockSystemInfo(data: unknown) {
 
 describe('ArgoVersionUnsupportedAlert', () => {
   beforeEach(() => {
-    window.localStorage.clear();
+    globalThis.localStorage.clear();
   });
 
   it('renders the warning when the Argo Server version is unsupported', () => {
@@ -31,6 +31,19 @@ describe('ArgoVersionUnsupportedAlert', () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText('Argo Workflows version is not supported'),
+    ).toBeInTheDocument();
+  });
+
+  it('announces the warning politely and labels the dismiss control', () => {
+    mockSystemInfo({ argo_server_version_supported: false });
+
+    render(<ArgoVersionUnsupportedAlert />);
+
+    expect(screen.getByRole('status')).toBe(
+      screen.getByTestId('argo-version-unsupported-alert'),
+    );
+    expect(
+      screen.getByLabelText('Dismiss Argo version warning'),
     ).toBeInTheDocument();
   });
 
@@ -51,7 +64,10 @@ describe('ArgoVersionUnsupportedAlert', () => {
   });
 
   it('renders nothing against an ark-api that does not report the field', () => {
-    mockSystemInfo({ kubernetes_version: 'v1.31.2', system_version: 'v0.1.68' });
+    mockSystemInfo({
+      kubernetes_version: 'v1.31.2',
+      system_version: 'v0.1.68',
+    });
 
     const { container } = render(<ArgoVersionUnsupportedAlert />);
 

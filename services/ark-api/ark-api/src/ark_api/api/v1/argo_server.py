@@ -32,16 +32,26 @@ def get_argo_server_url() -> str:
 
 
 async def get_argo_server_version(base_url: str) -> Optional[str]:
-    """Fetch the Argo Server version string, or None if it cannot be determined."""
+    """Fetch the Argo Server version string, or None if it cannot be determined.
+
+    Best effort: system info must not fail because of what Argo Server returns.
+    """
+    if not base_url:
+        return None
     url = f"{base_url}/api/v1/version"
     try:
         async with httpx.AsyncClient(timeout=ARGO_SERVER_TIMEOUT_SECONDS) as http_client:
             response = await http_client.get(url)
         response.raise_for_status()
-        return response.json().get("version")
+        data = response.json()
     except (httpx.HTTPError, ValueError) as e:
         logger.warning(f"Argo Server version check failed: {e}")
         return None
+    version = data.get("version") if isinstance(data, dict) else None
+    if not isinstance(version, str):
+        logger.warning("Argo Server version check returned an unexpected response body")
+        return None
+    return version
 
 
 def is_version_supported(version: Optional[str]) -> Optional[bool]:
