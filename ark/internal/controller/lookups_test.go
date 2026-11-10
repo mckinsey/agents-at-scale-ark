@@ -37,7 +37,7 @@ func TestFindAgentsForModel_ReturnsMatchingAgent(t *testing.T) {
 	}
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(s).
-		WithIndex(&arkv1alpha1.Agent{}, ".spec.modelRef.name", agentModelRefIndexer).
+		WithIndex(&arkv1alpha1.Agent{}, agentModelRefIndex, agentModelRefIndexer).
 		WithObjects(agent).
 		Build()
 
@@ -49,6 +49,38 @@ func TestFindAgentsForModel_ReturnsMatchingAgent(t *testing.T) {
 	assert.Len(t, reqs, 1)
 	assert.Equal(t, "my-agent", reqs[0].Name)
 	assert.Equal(t, "default", reqs[0].Namespace)
+}
+
+func TestFindAgentsForModel_IncludesAgentsInOtherNamespaces(t *testing.T) {
+	s := newTestScheme()
+	local := &arkv1alpha1.Agent{
+		ObjectMeta: metav1.ObjectMeta{Name: "local", Namespace: "tenant-b"},
+		Spec:       arkv1alpha1.AgentSpec{ModelRef: &arkv1alpha1.AgentModelRef{Name: "shared"}},
+	}
+	remote := &arkv1alpha1.Agent{
+		ObjectMeta: metav1.ObjectMeta{Name: "remote", Namespace: "tenant-a"},
+		Spec:       arkv1alpha1.AgentSpec{ModelRef: &arkv1alpha1.AgentModelRef{Name: "shared", Namespace: "tenant-b"}},
+	}
+	sameNameElsewhere := &arkv1alpha1.Agent{
+		ObjectMeta: metav1.ObjectMeta{Name: "unrelated", Namespace: "tenant-a"},
+		Spec:       arkv1alpha1.AgentSpec{ModelRef: &arkv1alpha1.AgentModelRef{Name: "shared"}},
+	}
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(s).
+		WithIndex(&arkv1alpha1.Agent{}, agentModelRefIndex, agentModelRefIndexer).
+		WithObjects(local, remote, sameNameElsewhere).
+		Build()
+
+	r := &AgentReconciler{Client: fakeClient}
+	trigger := &arkv1alpha1.Model{ObjectMeta: metav1.ObjectMeta{Name: "shared", Namespace: "tenant-b"}}
+
+	reqs := r.findAgentsForModel(context.Background(), trigger)
+
+	got := map[string]bool{}
+	for _, req := range reqs {
+		got[req.String()] = true
+	}
+	assert.Equal(t, map[string]bool{"tenant-b/local": true, "tenant-a/remote": true}, got)
 }
 
 func TestFindAgentsForTool_ReturnsMatchingAgent(t *testing.T) {

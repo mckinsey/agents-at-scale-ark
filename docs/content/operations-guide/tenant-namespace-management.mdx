@@ -92,6 +92,16 @@ This has three consequences:
 
 The namespace is added with a history replacement, so it creates no extra browser history entry and the back button is unaffected. Deployments served under a base path keep their prefix — see [Multi-tenant dashboard hosting](/operations-guide/multi-tenant-dashboard-hosting).
 
+## Cross-namespace references
+
+An `Agent` can name a `Model` in another namespace (`spec.modelRef.namespace`) and a `Query` can name a `Memory` in another namespace (`spec.memory.namespace`). Ark accepts such a reference only when the target lists the referencing namespace in the `ark.mckinsey.com/allowed-namespaces` annotation, as a comma-separated list or `*`. To share a model from `tenant-b` with `tenant-a`:
+
+```bash
+kubectl annotate model shared-gpt -n tenant-b ark.mckinsey.com/allowed-namespaces=tenant-a
+```
+
+Without the annotation the admission webhook rejects the `Agent` or `Query`, and the completions executor refuses to load the target. Sharing a `Memory` across namespaces is still subject to the broker rules in the next section.
+
 ## Broker storage isolation
 
 The cross-tenant isolation above applies to Kubernetes resources and is enforced by RBAC. The broker's message storage is a separate concern. The broker is a per-tenant component — each tenant namespace runs its own broker — while only the controller is a cluster-wide singleton.

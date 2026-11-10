@@ -21,6 +21,7 @@ func (wv *WebhookValidator[T]) ValidateUpdate(ctx context.Context, oldObj, newOb
 		return nil, err
 	}
 	ctx = ServiceAccountAuthzContextForUpdate(ctx, oldObj, newObj)
+	ctx = CrossNamespaceRefContextForUpdate(ctx, oldObj, newObj)
 	warnings, err := wv.V.Validate(ctx, newObj)
 	return admission.Warnings(warnings), err
 }

@@ -1618,9 +1618,21 @@ jobs:
             echo "release_as=${BASE_VERSION}" >> $GITHUB_OUTPUT
             echo "Promotion detected: RC tags exist for v${BASE_VERSION}, releasing stable"
           else
-            echo "config=.github/release-please-config-rc.json" >> $GITHUB_OUTPUT
+            CONFIG=.github/release-please-config-rc.json
+            echo "config=$CONFIG" >> $GITHUB_OUTPUT
             echo "type=rc" >> $GITHUB_OUTPUT
-            echo "Normal development flow, using RC config"
+            if [[ "$VERSION" != *-rc* ]]; then
+              # New cycle starting from a stable manifest: force the next MINOR as
+              # the RC base so every scheduled release bumps the minor, even a
+              # fix-only cycle. Patches are reserved for hotfix-release.yaml.
+              IFS='.' read -r MA MI _ <<< "$VERSION"
+              NEXT="${MA}.$((MI + 1)).0-rc"
+              tmp=$(mktemp); jq --arg v "$NEXT" '. + {"release-as": $v}' "$CONFIG" > "$tmp" && mv "$tmp" "$CONFIG"
+              echo "release_as=${NEXT}" >> $GITHUB_OUTPUT
+              echo "New cycle: forcing RC base ${NEXT} (minor bump)"
+            else
+              echo "Mid-cycle: prerelease strategy cycles the rc number"
+            fi
           fi
 
       - name: Create Release
