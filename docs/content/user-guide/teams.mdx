@@ -36,7 +36,7 @@ That's enough to apply, given two existing agents named `researcher` and `writer
 | **`selector`** | An LLM-powered **selector agent** picks the next member each turn. Required `maxTurns`. | Free-form coordination where the next speaker depends on context. |
 | **`selector` + `graph`** | Selector still chooses, but only from members the graph says are reachable. | Workflows that need structure (researcher must come before writer) but allow AI flexibility within those rails. |
 
-`round-robin` and standalone `graph` are deprecated and **migrated automatically by the mutating webhook** when you apply them — `round-robin` becomes `sequential + loops: true`; `graph` becomes `sequential` (the graph edges are discarded). Both stamp a `ark.mckinsey.com/migration-warning-<key>` annotation on the Team (e.g. `migration-warning-round-robin`, `migration-warning-graph`). New configs should use the strategies in the table.
+`round-robin` and standalone `graph` are deprecated and **migrated automatically by the mutating webhook** when you apply them — `round-robin` becomes `sequential + loops: true`; `graph` becomes `sequential` (the graph edges are discarded; `spec.graph` itself stays supported on `selector` teams). Both stamp a `ark.mckinsey.com/migration-warning-<key>` annotation on the Team (e.g. `migration-warning-round-robin`, `migration-warning-graph`). New configs should use the strategies in the table.
 
 ## Create a team
 
