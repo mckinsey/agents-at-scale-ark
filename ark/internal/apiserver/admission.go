@@ -111,6 +111,7 @@ func (s *AdmissionStorage) Update(ctx context.Context, name string, objInfo rest
 		}
 		validation.ApplyDefaults(ctx, obj, s.lookup)
 		ctx = validation.ServiceAccountAuthzContextForUpdate(ctx, old, obj)
+		ctx = validation.CrossNamespaceRefContextForUpdate(ctx, old, obj)
 		if err := s.admitInline(ctx, obj, old); err != nil {
 			return err
 		}

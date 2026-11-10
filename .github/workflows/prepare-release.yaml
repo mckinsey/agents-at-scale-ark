@@ -90,6 +90,14 @@ jobs:
 
           bash scripts/stamp-version.sh "${STABLE}"
 
+          # Once this stable ships, its tag sits on mainline, so release-please can
+          # anchor changelogs to the tag again. Drop any last-release-sha a prior
+          # hotfix pinned (set by hotfix-release.yaml) to avoid a stale anchor.
+          for cfg in .github/release-please-config.json .github/release-please-config-rc.json; do
+            tmp=$(mktemp)
+            jq 'del(.["last-release-sha"])' "$cfg" > "$tmp" && mv "$tmp" "$cfg"
+          done
+
           # Hand-off to release-on-merge: which RC commit to build the stable from.
           printf 'rc_tag=%s\nrc_sha=%s\n' "${{ steps.rc.outputs.rc_tag }}" "${{ steps.rc.outputs.rc_sha }}" > .releasing
 

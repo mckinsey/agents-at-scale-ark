@@ -1,0 +1,106 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: agent-structured-output-anthropic
+spec:
+  description: Agent outputSchema reaches an anthropic Model as output_config.format
+  timeouts:
+    apply: 30s
+    assert: 120s
+  steps:
+  - name: setup-mock-llm
+    try:
+    - script:
+        timeout: 180s
+        content: |
+          bash ../shared/install-mock-llm.sh
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - apply:
+        file: manifests/a00-rbac.yaml
+    - apply:
+        file: manifests/a01-model.yaml
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: test-model-anthropic
+        timeout: 3m
+        for:
+          condition:
+            name: ModelAvailable
+            value: 'True'
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: test-model-anthropic
+
+  - name: schema-sent
+    try:
+    - apply:
+        file: manifests/a02-agent.yaml
+    - apply:
+        file: manifests/a03-query.yaml
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: schema-query
+        timeout: 2m
+        for:
+          jsonPath:
+            path: '{.status.response.content}'
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: schema-query
+          status:
+            phase: done
+            (contains(response.content, '"sentiment":"positive"')): true
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: schema-query
+
+  - name: no-schema-not-sent
+    try:
+    - apply:
+        file: manifests/a04-agent-no-schema.yaml
+    - apply:
+        file: manifests/a05-query-no-schema.yaml
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: no-schema-query
+        timeout: 2m
+        for:
+          jsonPath:
+            path: '{.status.response.content}'
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: no-schema-query
+          status:
+            phase: done
+            (contains(response.content, 'no-output-config')): true
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: no-schema-query
+
+    cleanup:
+    - script:
+        content: |
+          helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
