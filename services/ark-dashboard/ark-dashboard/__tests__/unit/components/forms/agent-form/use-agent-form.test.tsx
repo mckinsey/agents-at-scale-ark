@@ -379,11 +379,10 @@ describe('useAgentForm tool approvals', () => {
       await result.current.actions.onSubmit(result.current.form.getValues());
     });
 
+    // The toast wrapper renders only the message (description is dropped), so the
+    // reason must be part of the message itself.
     expect(toast.error).toHaveBeenCalledWith(
-      'Unable to update agent',
-      expect.objectContaining({
-        description: 'admission webhook denied: invalid timeout "abc"',
-      }),
+      'Unable to update agent: admission webhook denied: invalid timeout "abc"',
     );
   });
 
