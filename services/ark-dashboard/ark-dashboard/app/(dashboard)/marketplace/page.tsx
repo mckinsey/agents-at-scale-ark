@@ -16,6 +16,7 @@ import {
 } from '@/components/icons';
 import { MarketplaceSourceErrors } from '@/components/marketplace/marketplace-source-errors';
 import {
+  ResourceErrorState,
   ResourceNoResults,
   ResourceSearchInput,
 } from '@/components/sections/resource-list-states';
@@ -28,6 +29,8 @@ import type {
   MarketplaceFilters,
   MarketplaceItemType,
 } from '@/lib/api/generated/marketplace-types';
+import { useMarketplaceInstallCapability } from '@/lib/hooks/use-marketplace-install-capability';
+import { useInstallStateResolver } from '@/lib/hooks/use-marketplace-install-state';
 import { SEARCH_DEBOUNCE_MS, useUrlState } from '@/lib/hooks/use-url-state';
 import { useGetMarketplaceItems } from '@/lib/services/marketplace-hooks';
 import { parsePage } from '@/lib/utils/pagination';
@@ -125,15 +128,28 @@ export default function MarketplacePage() {
   const [urlState, setUrlState, committedState] = useUrlState(URL_STATE_SPEC);
   const itemsPerPage = 6;
 
+  const installEnabled = useMarketplaceInstallCapability();
+  const resolveState = useInstallStateResolver();
+  const showingInstalled = urlState.category === 'installed';
+
   const filters = useMemo<MarketplaceFilters>(
     () => ({
       ...FILTERS[urlState.category],
       search: committedState.q || undefined,
+      ...(installEnabled && showingInstalled ? { status: undefined } : {}),
     }),
-    [urlState.category, committedState.q],
+    [urlState.category, committedState.q, installEnabled, showingInstalled],
   );
 
-  const { data, isPending } = useGetMarketplaceItems(filters);
+  const { data, isPending, isError, refetch } = useGetMarketplaceItems(filters);
+
+  const items = useMemo(() => {
+    const all = data?.items ?? [];
+    if (installEnabled && showingInstalled) {
+      return all.filter(item => resolveState(item) === 'installed');
+    }
+    return all;
+  }, [data?.items, installEnabled, showingInstalled, resolveState]);
 
   // Silent migration: discard the legacy per-browser source list. Sources now
   // live in the cluster (marketplace-sources ConfigMap). One-shot and
@@ -147,7 +163,7 @@ export default function MarketplacePage() {
     }
   }, []);
 
-  const totalItems = data?.items.length || 0;
+  const totalItems = items.length;
   const totalPages = Math.ceil(totalItems / itemsPerPage);
 
   useEffect(() => {
@@ -158,9 +174,9 @@ export default function MarketplacePage() {
   }, [data, totalPages, urlState.page, setUrlState]);
   const startIndex = (urlState.page - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
-  const currentItems = data?.items.slice(startIndex, endIndex) || [];
+  const currentItems = items.slice(startIndex, endIndex);
 
-  const pageTitle = data ? `Marketplace (${data.items.length})` : 'Marketplace';
+  const pageTitle = data ? `Marketplace (${totalItems})` : 'Marketplace';
 
   return (
     <div className="content-shell flex min-h-0 w-full flex-1 flex-col">
@@ -209,7 +225,17 @@ export default function MarketplacePage() {
           />
         </div>
 
-        {!isPending && <MarketplaceSourceErrors errors={data?.sourceErrors} />}
+        {!isPending && isError && (
+          <ResourceErrorState
+            title="Could not load the marketplace"
+            description="The marketplace sources could not be reached."
+            onRetry={() => refetch()}
+          />
+        )}
+
+        {!isPending && !isError && (
+          <MarketplaceSourceErrors errors={data?.sourceErrors} />
+        )}
 
         {isPending && (
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
@@ -219,7 +245,7 @@ export default function MarketplacePage() {
           </div>
         )}
 
-        {!isPending && data && data.items.length > 0 && (
+        {!isPending && !isError && data && totalItems > 0 && (
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {currentItems.map(item => (
               <MarketplaceItemCard key={item.id} item={item} />
@@ -227,7 +253,7 @@ export default function MarketplacePage() {
           </div>
         )}
 
-        {!isPending && data && data.items.length === 0 && (
+        {!isPending && !isError && data && totalItems === 0 && (
           <ResourceNoResults
             icon={<Storefront />}
             message="No marketplace items found"

@@ -38,6 +38,7 @@ import {
   UnfoldMore,
   VpnKey,
 } from '@/components/icons';
+import { MarketplaceInstallIndicator } from '@/components/marketplace/marketplace-install-indicator';
 import {
   Collapsible,
   CollapsibleContent,
@@ -499,6 +500,8 @@ export function AppSidebar() {
           <div className="px-2">
             <Separator className="my-2" />
             <SidebarMenu>
+              <MarketplaceInstallIndicator />
+
               <SidebarMenuItem>
                 <SidebarMenuButton
                   onClick={() => navigateToSection('settings')}
