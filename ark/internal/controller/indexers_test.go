@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 )
@@ -20,11 +21,20 @@ func TestAgentModelRefIndexer(t *testing.T) {
 			expected: nil,
 		},
 		{
-			name: "returns model name",
-			agent: &arkv1alpha1.Agent{Spec: arkv1alpha1.AgentSpec{
-				ModelRef: &arkv1alpha1.AgentModelRef{Name: "gpt-4"},
-			}},
-			expected: []string{"gpt-4"},
+			name: "defaults to the agent namespace",
+			agent: &arkv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "team-a"},
+				Spec:       arkv1alpha1.AgentSpec{ModelRef: &arkv1alpha1.AgentModelRef{Name: "gpt-4"}},
+			},
+			expected: []string{"team-a/gpt-4"},
+		},
+		{
+			name: "uses the referenced namespace",
+			agent: &arkv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "team-a"},
+				Spec:       arkv1alpha1.AgentSpec{ModelRef: &arkv1alpha1.AgentModelRef{Name: "gpt-4", Namespace: "team-b"}},
+			},
+			expected: []string{"team-b/gpt-4"},
 		},
 	}
 	for _, tt := range tests {

@@ -1,0 +1,14 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Model
+metadata:
+  name: test-model-anthropic
+spec:
+  provider: anthropic
+  model:
+    value: claude-mock
+  config:
+    anthropic:
+      baseUrl:
+        value: (join('', ['http://mock-llm.', $namespace, '.svc.cluster.local:6556']))
+      apiKey:
+        value: mock-api-key
