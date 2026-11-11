@@ -2981,6 +2981,7 @@ export interface components {
          * @description Tool configuration for an agent.
          */
         AgentTool: {
+            approval?: components["schemas"]["ToolApprovalConfig"] | null;
             labelSelector?: components["schemas"]["AgentLabelSelector"] | null;
             /** Name */
             name?: string | null;
@@ -3067,6 +3068,16 @@ export interface components {
             namespace: string;
             /** Taskid */
             taskId: string;
+        };
+        /**
+         * ArgumentMatch
+         * @description Narrows approval to tool calls whose arguments match a pattern.
+         */
+        ArgumentMatch: {
+            /** Argument */
+            argument: string;
+            /** Pattern */
+            pattern: string;
         };
         /**
          * ArkConfigMemoryRef
@@ -5163,6 +5174,20 @@ export interface components {
             selector?: components["schemas"]["Selector"] | null;
             /** Strategy */
             strategy?: string | null;
+        };
+        /**
+         * ToolApprovalConfig
+         * @description Approval configuration for human-in-the-loop tool execution.
+         */
+        ToolApprovalConfig: {
+            /** Argumentmatches */
+            argumentMatches?: components["schemas"]["ArgumentMatch"][] | null;
+            /** Ontimeout */
+            onTimeout?: string | null;
+            /** Required */
+            required?: boolean | null;
+            /** Timeout */
+            timeout?: string | null;
         };
         /** ToolDetailResponse */
         ToolDetailResponse: {
