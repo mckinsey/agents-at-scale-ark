@@ -1,9 +1,9 @@
 import {vi, type Mock} from 'vitest';
 
 const mockFetch = vi.fn() as Mock;
-global.fetch = mockFetch;
+globalThis.fetch = mockFetch;
 
-const {ArkApiClient} = await import('./arkApiClient.js');
+const {ArkApiClient, ArkApiHttpError} = await import('./arkApiClient.js');
 
 describe('ArkApiClient', () => {
   let client: InstanceType<typeof ArkApiClient>;
@@ -23,10 +23,16 @@ describe('ArkApiClient', () => {
     it('returns query targets from resource endpoints', async () => {
       mockFetch.mockImplementation(async (url: string) => {
         if (url.includes('/v1/agents')) {
-          return {ok: true, json: async () => ({items: [{name: 'test-agent'}]})};
+          return {
+            ok: true,
+            json: async () => ({items: [{name: 'test-agent'}]}),
+          };
         }
         if (url.includes('/v1/models')) {
-          return {ok: true, json: async () => ({items: [{name: 'test-model'}]})};
+          return {
+            ok: true,
+            json: async () => ({items: [{name: 'test-model'}]}),
+          };
         }
         return {ok: true, json: async () => ({items: []})};
       });
@@ -72,7 +78,9 @@ describe('ArkApiClient', () => {
       const agents = await client.getAgents();
 
       expect(agents).toEqual(mockAgents);
-      expect(mockFetch).toHaveBeenCalledWith('http://localhost:8080/v1/agents?limit=100');
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://localhost:8080/v1/agents?limit=100'
+      );
     });
 
     it('returns empty array when no items', async () => {
@@ -97,7 +105,9 @@ describe('ArkApiClient', () => {
         expect.fail('Should have thrown');
       } catch (error) {
         expect(error).toBeInstanceOf(Error);
-        expect((error as Error).message).toBe('Failed to get agents: HTTP error! status: 500');
+        expect((error as Error).message).toBe(
+          'Failed to get agents: HTTP error! status: 500'
+        );
         expect((error as Error).cause).toBeInstanceOf(Error);
       }
     });
@@ -111,7 +121,9 @@ describe('ArkApiClient', () => {
         expect.fail('Should have thrown');
       } catch (error) {
         expect(error).toBeInstanceOf(Error);
-        expect((error as Error).message).toBe('Failed to get agents: Network error');
+        expect((error as Error).message).toBe(
+          'Failed to get agents: Network error'
+        );
         expect((error as Error).cause).toBe(originalError);
       }
     });
@@ -124,7 +136,9 @@ describe('ArkApiClient', () => {
         expect.fail('Should have thrown');
       } catch (error) {
         expect(error).toBeInstanceOf(Error);
-        expect((error as Error).message).toBe('Failed to get agents: Unknown error');
+        expect((error as Error).message).toBe(
+          'Failed to get agents: Unknown error'
+        );
         expect((error as Error).cause).toBe('string error');
       }
     });
@@ -133,24 +147,36 @@ describe('ArkApiClient', () => {
       mockFetch
         .mockResolvedValueOnce({
           ok: true,
-          json: () => Promise.resolve({items: [{name: 'a1'}], continue_token: 'tok-1'}),
+          json: () =>
+            Promise.resolve({items: [{name: 'a1'}], continue_token: 'tok-1'}),
         })
         .mockResolvedValueOnce({
           ok: true,
-          json: () => Promise.resolve({items: [{name: 'a2'}], continue_token: 'tok-2'}),
+          json: () =>
+            Promise.resolve({items: [{name: 'a2'}], continue_token: 'tok-2'}),
         })
         .mockResolvedValueOnce({
           ok: true,
-          json: () => Promise.resolve({items: [{name: 'a3'}], continue_token: null}),
+          json: () =>
+            Promise.resolve({items: [{name: 'a3'}], continue_token: null}),
         });
 
       const agents = await client.getAgents();
 
       expect(agents).toEqual([{name: 'a1'}, {name: 'a2'}, {name: 'a3'}]);
       expect(mockFetch).toHaveBeenCalledTimes(3);
-      expect(mockFetch).toHaveBeenNthCalledWith(1, 'http://localhost:8080/v1/agents?limit=100');
-      expect(mockFetch).toHaveBeenNthCalledWith(2, 'http://localhost:8080/v1/agents?limit=100&continue=tok-1');
-      expect(mockFetch).toHaveBeenNthCalledWith(3, 'http://localhost:8080/v1/agents?limit=100&continue=tok-2');
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        1,
+        'http://localhost:8080/v1/agents?limit=100'
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        2,
+        'http://localhost:8080/v1/agents?limit=100&continue=tok-1'
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        3,
+        'http://localhost:8080/v1/agents?limit=100&continue=tok-2'
+      );
     });
   });
 
@@ -165,7 +191,9 @@ describe('ArkApiClient', () => {
       const models = await client.getModels();
 
       expect(models).toEqual(mockModels);
-      expect(mockFetch).toHaveBeenCalledWith('http://localhost:8080/v1/models?limit=100');
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://localhost:8080/v1/models?limit=100'
+      );
     });
 
     it('throws error with cause on HTTP failure', async () => {
@@ -179,7 +207,9 @@ describe('ArkApiClient', () => {
         expect.fail('Should have thrown');
       } catch (error) {
         expect(error).toBeInstanceOf(Error);
-        expect((error as Error).message).toBe('Failed to get models: HTTP error! status: 404');
+        expect((error as Error).message).toBe(
+          'Failed to get models: HTTP error! status: 404'
+        );
         expect((error as Error).cause).toBeInstanceOf(Error);
       }
     });
@@ -192,7 +222,9 @@ describe('ArkApiClient', () => {
         expect.fail('Should have thrown');
       } catch (error) {
         expect(error).toBeInstanceOf(Error);
-        expect((error as Error).message).toBe('Failed to get models: Unknown error');
+        expect((error as Error).message).toBe(
+          'Failed to get models: Unknown error'
+        );
         expect((error as Error).cause).toBe('string error');
       }
     });
@@ -209,7 +241,9 @@ describe('ArkApiClient', () => {
       const tools = await client.getTools();
 
       expect(tools).toEqual(mockTools);
-      expect(mockFetch).toHaveBeenCalledWith('http://localhost:8080/v1/tools?limit=100');
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://localhost:8080/v1/tools?limit=100'
+      );
     });
 
     it('throws error with cause on HTTP failure', async () => {
@@ -223,7 +257,9 @@ describe('ArkApiClient', () => {
         expect.fail('Should have thrown');
       } catch (error) {
         expect(error).toBeInstanceOf(Error);
-        expect((error as Error).message).toBe('Failed to get tools: HTTP error! status: 503');
+        expect((error as Error).message).toBe(
+          'Failed to get tools: HTTP error! status: 503'
+        );
         expect((error as Error).cause).toBeInstanceOf(Error);
       }
     });
@@ -236,7 +272,9 @@ describe('ArkApiClient', () => {
         expect.fail('Should have thrown');
       } catch (error) {
         expect(error).toBeInstanceOf(Error);
-        expect((error as Error).message).toBe('Failed to get tools: Unknown error');
+        expect((error as Error).message).toBe(
+          'Failed to get tools: Unknown error'
+        );
         expect((error as Error).cause).toBe('string error');
       }
     });
@@ -253,7 +291,9 @@ describe('ArkApiClient', () => {
       const teams = await client.getTeams();
 
       expect(teams).toEqual(mockTeams);
-      expect(mockFetch).toHaveBeenCalledWith('http://localhost:8080/v1/teams?limit=100');
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://localhost:8080/v1/teams?limit=100'
+      );
     });
 
     it('throws error with cause on HTTP failure', async () => {
@@ -267,7 +307,9 @@ describe('ArkApiClient', () => {
         expect.fail('Should have thrown');
       } catch (error) {
         expect(error).toBeInstanceOf(Error);
-        expect((error as Error).message).toBe('Failed to get teams: HTTP error! status: 401');
+        expect((error as Error).message).toBe(
+          'Failed to get teams: HTTP error! status: 401'
+        );
         expect((error as Error).cause).toBeInstanceOf(Error);
       }
     });
@@ -280,7 +322,9 @@ describe('ArkApiClient', () => {
         expect.fail('Should have thrown');
       } catch (error) {
         expect(error).toBeInstanceOf(Error);
-        expect((error as Error).message).toBe('Failed to get teams: Unknown error');
+        expect((error as Error).message).toBe(
+          'Failed to get teams: Unknown error'
+        );
         expect((error as Error).cause).toBe('string error');
       }
     });
@@ -297,7 +341,9 @@ describe('ArkApiClient', () => {
       const sessions = await client.getSessions();
 
       expect(sessions).toEqual(mockSessions);
-      expect(mockFetch).toHaveBeenCalledWith('http://localhost:8080/v1/sessions');
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://localhost:8080/v1/sessions'
+      );
     });
 
     it('throws error with cause on HTTP failure', async () => {
@@ -311,7 +357,9 @@ describe('ArkApiClient', () => {
         expect.fail('Should have thrown');
       } catch (error) {
         expect(error).toBeInstanceOf(Error);
-        expect((error as Error).message).toBe('Failed to get sessions: HTTP error! status: 500');
+        expect((error as Error).message).toBe(
+          'Failed to get sessions: HTTP error! status: 500'
+        );
         expect((error as Error).cause).toBeInstanceOf(Error);
       }
     });
@@ -324,7 +372,9 @@ describe('ArkApiClient', () => {
         expect.fail('Should have thrown');
       } catch (error) {
         expect(error).toBeInstanceOf(Error);
-        expect((error as Error).message).toBe('Failed to get sessions: Unknown error');
+        expect((error as Error).message).toBe(
+          'Failed to get sessions: Unknown error'
+        );
         expect((error as Error).cause).toBe('string error');
       }
     });
@@ -357,7 +407,9 @@ describe('ArkApiClient', () => {
         expect.fail('Should have thrown');
       } catch (error) {
         expect(error).toBeInstanceOf(Error);
-        expect((error as Error).message).toBe('Failed to delete session: HTTP error! status: 404');
+        expect((error as Error).message).toBe(
+          'Failed to delete session: HTTP error! status: 404'
+        );
         expect((error as Error).cause).toBeInstanceOf(Error);
       }
     });
@@ -370,7 +422,9 @@ describe('ArkApiClient', () => {
         expect.fail('Should have thrown');
       } catch (error) {
         expect(error).toBeInstanceOf(Error);
-        expect((error as Error).message).toBe('Failed to delete session: Unknown error');
+        expect((error as Error).message).toBe(
+          'Failed to delete session: Unknown error'
+        );
         expect((error as Error).cause).toBe('string error');
       }
     });
@@ -403,7 +457,9 @@ describe('ArkApiClient', () => {
         expect.fail('Should have thrown');
       } catch (error) {
         expect(error).toBeInstanceOf(Error);
-        expect((error as Error).message).toBe('Failed to delete query messages: HTTP error! status: 500');
+        expect((error as Error).message).toBe(
+          'Failed to delete query messages: HTTP error! status: 500'
+        );
         expect((error as Error).cause).toBeInstanceOf(Error);
       }
     });
@@ -416,7 +472,9 @@ describe('ArkApiClient', () => {
         expect.fail('Should have thrown');
       } catch (error) {
         expect(error).toBeInstanceOf(Error);
-        expect((error as Error).message).toBe('Failed to delete query messages: Unknown error');
+        expect((error as Error).message).toBe(
+          'Failed to delete query messages: Unknown error'
+        );
         expect((error as Error).cause).toBe('string error');
       }
     });
@@ -449,7 +507,9 @@ describe('ArkApiClient', () => {
         expect.fail('Should have thrown');
       } catch (error) {
         expect(error).toBeInstanceOf(Error);
-        expect((error as Error).message).toBe('Failed to delete all sessions: HTTP error! status: 500');
+        expect((error as Error).message).toBe(
+          'Failed to delete all sessions: HTTP error! status: 500'
+        );
         expect((error as Error).cause).toBeInstanceOf(Error);
       }
     });
@@ -462,7 +522,9 @@ describe('ArkApiClient', () => {
         expect.fail('Should have thrown');
       } catch (error) {
         expect(error).toBeInstanceOf(Error);
-        expect((error as Error).message).toBe('Failed to delete all sessions: Unknown error');
+        expect((error as Error).message).toBe(
+          'Failed to delete all sessions: Unknown error'
+        );
         expect((error as Error).cause).toBe('string error');
       }
     });
@@ -480,13 +542,16 @@ describe('ArkApiClient', () => {
         target: {type: 'agent', name: 'test-agent'},
       });
 
-      expect(result).toEqual({name: 'cli-query-123', status: {phase: 'pending'}});
+      expect(result).toEqual({
+        name: 'cli-query-123',
+        status: {phase: 'pending'},
+      });
       expect(mockFetch).toHaveBeenCalledWith(
         'http://localhost:8080/v1/queries/',
         expect.objectContaining({
           method: 'POST',
           body: expect.stringContaining('"input":"Hello"'),
-        }),
+        })
       );
     });
 
@@ -515,7 +580,158 @@ describe('ArkApiClient', () => {
 
       const result = await client.getQuery('test-q');
       expect(result).toEqual({name: 'test-q', status: {phase: 'done'}});
-      expect(mockFetch).toHaveBeenCalledWith('http://localhost:8080/v1/queries/test-q');
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://localhost:8080/v1/queries/test-q'
+      );
+    });
+  });
+
+  describe('listA2ATasks', () => {
+    it('lists tasks without a namespace', async () => {
+      const tasks = [{name: 't1', namespace: 'default', taskId: 'id1'}];
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({items: tasks}),
+      });
+
+      const result = await client.listA2ATasks();
+
+      expect(result).toEqual(tasks);
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://localhost:8080/v1/a2a-tasks?limit=100'
+      );
+    });
+
+    it('scopes the request to a namespace when provided', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({items: []}),
+      });
+
+      await client.listA2ATasks('team-a');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://localhost:8080/v1/a2a-tasks?namespace=team-a&limit=100'
+      );
+    });
+  });
+
+  describe('getA2ATask', () => {
+    it('fetches a task by name with a namespace', async () => {
+      const detail = {name: 't1', namespace: 'default', taskId: 'id1'};
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(detail),
+      });
+
+      const result = await client.getA2ATask('t1', 'default');
+
+      expect(result).toEqual(detail);
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://localhost:8080/v1/a2a-tasks/t1?namespace=default'
+      );
+    });
+
+    it('fetches a task by name without a namespace', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({name: 't1'}),
+      });
+
+      await client.getA2ATask('t1');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://localhost:8080/v1/a2a-tasks/t1'
+      );
+    });
+
+    it('throws an ArkApiHttpError carrying the status code', async () => {
+      mockFetch.mockResolvedValue({ok: false, status: 404});
+
+      try {
+        await client.getA2ATask('missing');
+        expect.fail('Should have thrown');
+      } catch (error) {
+        expect(error).toBeInstanceOf(ArkApiHttpError);
+        expect((error as InstanceType<typeof ArkApiHttpError>).status).toBe(
+          404
+        );
+        expect((error as Error).message).toContain('missing');
+      }
+    });
+  });
+
+  describe('submitApproval', () => {
+    it('posts the decision and returns the result', async () => {
+      const submission = {
+        name: 't1',
+        namespace: 'default',
+        taskId: 'id1',
+        decision: 'approved',
+      };
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(submission),
+      });
+
+      const result = await client.submitApproval('t1', 'approved', 'default');
+
+      expect(result).toEqual(submission);
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://localhost:8080/v1/a2a-tasks/t1/approval?namespace=default',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({decision: 'approved'}),
+        })
+      );
+    });
+
+    it('omits the namespace param when none is given', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({}),
+      });
+
+      await client.submitApproval('t1', 'rejected');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://localhost:8080/v1/a2a-tasks/t1/approval',
+        expect.objectContaining({method: 'POST'})
+      );
+    });
+
+    it('throws an ArkApiHttpError with the response body on failure', async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 409,
+        text: async () => 'not awaiting approval',
+      });
+
+      try {
+        await client.submitApproval('t1', 'approved');
+        expect.fail('Should have thrown');
+      } catch (error) {
+        expect(error).toBeInstanceOf(ArkApiHttpError);
+        expect((error as InstanceType<typeof ArkApiHttpError>).status).toBe(
+          409
+        );
+        expect((error as Error).message).toBe('not awaiting approval');
+      }
+    });
+
+    it('falls back to a generic message when the body is empty', async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 500,
+        text: async () => '',
+      });
+
+      try {
+        await client.submitApproval('t1', 'approved');
+        expect.fail('Should have thrown');
+      } catch (error) {
+        expect((error as Error).message).toContain('500');
+      }
     });
   });
 });

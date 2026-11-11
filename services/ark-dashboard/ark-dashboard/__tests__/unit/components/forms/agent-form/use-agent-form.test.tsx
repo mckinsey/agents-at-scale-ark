@@ -7,6 +7,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { storedIsExperimentalExecutionEngineEnabledAtom } from '@/atoms/experimental-features';
 import { AgentFormMode } from '@/components/forms/agent-form/types';
 import { useAgentForm } from '@/components/forms/agent-form/use-agent-form';
+import { toast } from '@/components/ui/sonner';
+import type { AgentTool } from '@/lib/services';
 import { agentsService, executionEnginesService } from '@/lib/services';
 
 const OUTPUT_SCHEMA_KEY =
@@ -273,5 +275,155 @@ describe('useAgentForm tool selection', () => {
       { type: 'builtin', name: 'noop' },
       { type: 'custom', name: 'legacy' },
     ]);
+  });
+});
+
+describe('useAgentForm tool approvals', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    store = createStore();
+  });
+
+  function mockAgentWithTools(tools: AgentTool[]) {
+    vi.mocked(agentsService.getByName).mockResolvedValue({
+      id: 'a1',
+      name: 'a1',
+      namespace: 'test-namespace',
+      isA2A: false,
+      executionEngine: { name: 'executor-langchain' },
+      tools,
+    });
+    vi.mocked(agentsService.update).mockResolvedValue({
+      id: 'a1',
+      name: 'a1',
+      namespace: 'test-namespace',
+      isA2A: false,
+    });
+  }
+
+  it('detects toggling approval on as a change', async () => {
+    mockAgentWithTools([{ type: 'custom', name: 'write' }]);
+    const { result } = await renderLoadedForm();
+
+    expect(result.current.state.hasChanges).toBe(false);
+
+    act(() => {
+      result.current.actions.setToolApproval('write', { required: true });
+    });
+
+    expect(result.current.state.hasChanges).toBe(true);
+  });
+
+  it('detects toggling approval back off as no change', async () => {
+    mockAgentWithTools([{ type: 'custom', name: 'write' }]);
+    const { result } = await renderLoadedForm();
+
+    act(() => {
+      result.current.actions.setToolApproval('write', { required: true });
+    });
+    expect(result.current.state.hasChanges).toBe(true);
+
+    act(() => {
+      result.current.actions.setToolApproval('write', undefined);
+    });
+    expect(result.current.state.hasChanges).toBe(false);
+  });
+
+  it('loads an existing approval config for a tool', async () => {
+    const approval = { required: true, timeout: '5m', onTimeout: 'reject' };
+    mockAgentWithTools([{ type: 'custom', name: 'write', approval }]);
+    const { result } = await renderLoadedForm();
+
+    expect(result.current.actions.getToolApproval('write')).toEqual(approval);
+  });
+
+  it('sends the approval config in the update payload', async () => {
+    mockAgentWithTools([{ type: 'custom', name: 'write' }]);
+    const { result } = await renderLoadedForm();
+
+    act(() => {
+      result.current.actions.setToolApproval('write', {
+        required: true,
+        timeout: '5m',
+        onTimeout: 'reject',
+      });
+    });
+
+    await act(async () => {
+      await result.current.actions.onSubmit(result.current.form.getValues());
+    });
+
+    expect(agentsService.update).toHaveBeenCalledWith(
+      'test-namespace',
+      'a1',
+      expect.objectContaining({
+        tools: [
+          {
+            type: 'custom',
+            name: 'write',
+            approval: { required: true, timeout: '5m', onTimeout: 'reject' },
+          },
+        ],
+      }),
+    );
+  });
+
+  it('surfaces the server error reason when a save fails', async () => {
+    mockAgentWithTools([{ type: 'custom', name: 'write' }]);
+    vi.mocked(agentsService.update).mockRejectedValue(
+      new Error('admission webhook denied: invalid timeout "abc"'),
+    );
+    const { result } = await renderLoadedForm();
+
+    await act(async () => {
+      await result.current.actions.onSubmit(result.current.form.getValues());
+    });
+
+    // The toast wrapper renders only the message (description is dropped), so the
+    // reason must be part of the message itself.
+    expect(toast.error).toHaveBeenCalledWith(
+      'Unable to update agent: admission webhook denied: invalid timeout "abc"',
+    );
+  });
+
+  it('sends the approval config in the create payload', async () => {
+    vi.mocked(agentsService.create).mockResolvedValue({
+      id: 'new',
+      name: 'new-agent',
+      namespace: 'test-namespace',
+      isA2A: false,
+    });
+
+    const { result } = renderHook(
+      () => useAgentForm({ mode: AgentFormMode.CREATE }),
+      { wrapper },
+    );
+    await waitFor(() => {
+      expect(result.current.state.toolsLoading).toBe(false);
+    });
+
+    act(() => {
+      result.current.actions.handleToolToggle(
+        { id: 'write', name: 'write', type: 'custom' },
+        true,
+      );
+      result.current.actions.setToolApproval('write', { required: true });
+    });
+
+    await act(async () => {
+      await result.current.actions.onSubmit({
+        ...result.current.form.getValues(),
+        name: 'new-agent',
+      });
+    });
+
+    expect(agentsService.create).toHaveBeenCalledWith(
+      'test-namespace',
+      expect.objectContaining({
+        tools: [
+          { type: 'custom', name: 'write', approval: { required: true } },
+        ],
+      }),
+    );
   });
 });
