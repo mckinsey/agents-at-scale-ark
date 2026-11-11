@@ -45,6 +45,7 @@ function renderManager(store: ReturnType<typeof createStore>) {
 describe('OnboardingManager', () => {
   beforeEach(() => {
     localStorage.clear();
+    sessionStorage.clear();
     mockPush.mockClear();
     mockNamespace.readOnlyMode = false;
   });
@@ -135,6 +136,47 @@ describe('OnboardingManager', () => {
     fireEvent.click(screen.getByRole('button', { name: /Resume tour/i }));
     expect(store.get(onboardingPhaseAtom)).toBe('tour');
     expect(store.get(tourStepAtom)).toBe(actionStep + 1);
+  });
+
+  it('keeps a paused tour paused after a page reload', () => {
+    const actionStep = TOUR_STEPS.findIndex(step => step.action);
+    const { unmount } = renderManager(createStore());
+    fireEvent.click(screen.getByRole('button', { name: /Start Guided Tour/i }));
+    for (let i = 0; i < actionStep; i++) {
+      fireEvent.click(nextButton());
+    }
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: new RegExp(TOUR_STEPS[actionStep].action ?? '', 'i'),
+      }),
+    );
+    unmount();
+
+    const reloadedStore = createStore();
+    renderManager(reloadedStore);
+
+    expect(screen.queryByText('Welcome to Ark')).not.toBeInTheDocument();
+    expect(reloadedStore.get(onboardingPhaseAtom)).toBe('paused');
+    fireEvent.click(screen.getByRole('button', { name: /Resume tour/i }));
+    expect(reloadedStore.get(onboardingPhaseAtom)).toBe('tour');
+    expect(reloadedStore.get(tourStepAtom)).toBe(actionStep + 1);
+  });
+
+  it('pauses a running tour after a page reload', () => {
+    const { unmount } = renderManager(createStore());
+    fireEvent.click(screen.getByRole('button', { name: /Start Guided Tour/i }));
+    fireEvent.click(nextButton());
+    unmount();
+
+    const reloadedStore = createStore();
+    renderManager(reloadedStore);
+
+    expect(screen.queryByText('Welcome to Ark')).not.toBeInTheDocument();
+    expect(reloadedStore.get(onboardingPhaseAtom)).toBe('paused');
+    expect(reloadedStore.get(tourStepAtom)).toBe(1);
+    expect(
+      screen.getByRole('button', { name: /Resume tour/i }),
+    ).toBeInTheDocument();
   });
 
   it('reopens the welcome dialog when onboarding is restarted', () => {

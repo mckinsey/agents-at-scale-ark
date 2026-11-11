@@ -1,11 +1,11 @@
 'use client';
 
-import { useAtom, useAtomValue, useSetAtom } from 'jotai';
+import { useAtom, useSetAtom } from 'jotai';
 import { useEffect, useRef } from 'react';
 
 import {
   completeOnboardingAtom,
-  onboardingCompletedAtom,
+  initOnboardingAtom,
   onboardingPhaseAtom,
   tourStepAtom,
 } from '@/atoms/onboarding';
@@ -22,8 +22,8 @@ export function OnboardingManager() {
   const { push } = useNamespacedNavigation();
   const { readOnlyMode } = useNamespace();
 
-  const completed = useAtomValue(onboardingCompletedAtom);
   const completeOnboarding = useSetAtom(completeOnboardingAtom);
+  const initOnboarding = useSetAtom(initOnboardingAtom);
 
   const [phase, setPhase] = useAtom(onboardingPhaseAtom);
   const [tourStep, setTourStep] = useAtom(tourStepAtom);
@@ -33,10 +33,8 @@ export function OnboardingManager() {
   useEffect(() => {
     if (hasCheckedFirstVisit.current) return;
     hasCheckedFirstVisit.current = true;
-    if (!completed) {
-      setPhase('welcome');
-    }
-  }, [completed, setPhase]);
+    initOnboarding();
+  }, [initOnboarding]);
 
   const startTour = () => {
     setTourStep(0);

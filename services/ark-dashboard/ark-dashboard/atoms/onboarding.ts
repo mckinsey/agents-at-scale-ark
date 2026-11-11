@@ -1,5 +1,5 @@
 import { atom } from 'jotai';
-import { RESET, atomWithStorage } from 'jotai/utils';
+import { RESET, atomWithStorage, createJSONStorage } from 'jotai/utils';
 
 import { TOUR_STEPS } from '@/lib/constants/tour-steps';
 
@@ -22,9 +22,47 @@ export type OnboardingPhase =
   | 'paused'
   | 'post_tour';
 
-export const onboardingPhaseAtom = atom<OnboardingPhase>('idle');
+export const ONBOARDING_PHASE_KEY = 'onboarding-phase';
+export const ONBOARDING_TOUR_STEP_KEY = 'onboarding-tour-step';
 
-export const tourStepAtom = atom<number>(0);
+const serverStorage = {
+  getItem: (): string | null => null,
+  setItem: () => undefined,
+  removeItem: () => undefined,
+};
+
+const getSessionStorage = () =>
+  typeof window === 'undefined' ? serverStorage : window.sessionStorage;
+
+const onboardingPhaseStorage =
+  createJSONStorage<OnboardingPhase>(getSessionStorage);
+
+const currentOnboardingPhaseAtom = atom<OnboardingPhase>('idle');
+
+export const onboardingPhaseAtom = atom(
+  get => get(currentOnboardingPhaseAtom),
+  (_get, set, phase: OnboardingPhase) => {
+    set(currentOnboardingPhaseAtom, phase);
+    onboardingPhaseStorage.setItem(ONBOARDING_PHASE_KEY, phase);
+  },
+);
+
+export const tourStepAtom = atomWithStorage<number>(
+  ONBOARDING_TOUR_STEP_KEY,
+  0,
+  createJSONStorage<number>(getSessionStorage),
+  { getOnInit: true },
+);
+
+export const initOnboardingAtom = atom(null, (get, set) => {
+  if (get(onboardingCompletedAtom)) return;
+  const storedPhase = onboardingPhaseStorage.getItem(
+    ONBOARDING_PHASE_KEY,
+    'idle',
+  );
+  const tourInProgress = storedPhase === 'tour' || storedPhase === 'paused';
+  set(onboardingPhaseAtom, tourInProgress ? 'paused' : 'welcome');
+});
 
 export const tourActiveSectionAtom = atom(get =>
   get(onboardingPhaseAtom) === 'tour'
