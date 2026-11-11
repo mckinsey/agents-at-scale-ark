@@ -86,9 +86,58 @@ func sourceDir(t *testing.T, source string) string {
 	return dir
 }
 
+var testConfig = Config{ToolName: "echo-args", Language: arkv1alpha1.InlineLanguageBash, SourceHash: SourceHash("current")}
+
 func testHandler(t *testing.T, body string) http.Handler {
 	t.Helper()
-	return Handler(Config{ToolName: "echo-args"}, script(t, body))
+	return Handler(testConfig, script(t, body))
+}
+
+type revisionHeader struct{ revision string }
+
+func (h revisionHeader) RoundTrip(r *http.Request) (*http.Response, error) {
+	r = r.Clone(r.Context())
+	r.Header.Set(RevisionHeader, h.revision)
+	return http.DefaultTransport.RoundTrip(r)
+}
+
+func rawCall(t *testing.T, url, revision string) (int, string) {
+	t.Helper()
+	body := fmt.Sprintf(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":%q,"arguments":{}}}`, testConfig.ToolName)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url+MCPPath, strings.NewReader(body))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	if revision != "" {
+		req.Header.Set(RevisionHeader, revision)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+	return resp.StatusCode, resp.Header.Get(RevisionHeader)
+}
+
+func TestMCPRefusesACallerExpectingAnotherRevision(t *testing.T) {
+	marker := filepath.Join(t.TempDir(), "ran")
+	server := httptest.NewServer(testHandler(t, fmt.Sprintf(`touch %q`, marker)))
+	defer server.Close()
+
+	for _, revision := range []string{"", Revision(arkv1alpha1.InlineLanguageBash, "previous"), Revision(arkv1alpha1.InlineLanguagePython, "current")} {
+		status, served := rawCall(t, server.URL, revision)
+
+		assert.Equal(t, http.StatusConflict, status, "caller revision %q", revision)
+		assert.Equal(t, testConfig.Revision(), served)
+	}
+	assert.NoFileExists(t, marker, "a refused call must not run the script")
+}
+
+func TestMCPServesACallerExpectingThisRevision(t *testing.T) {
+	server := httptest.NewServer(testHandler(t, `printf 'ok'`))
+	defer server.Close()
+
+	status, _ := rawCall(t, server.URL, Revision(arkv1alpha1.InlineLanguageBash, "current"))
+
+	assert.Equal(t, http.StatusOK, status)
 }
 
 func TestReadinessProbeServesOnceLoaded(t *testing.T) {
@@ -111,14 +160,14 @@ func TestToolCallRunsTheScript(t *testing.T) {
 func TestHTTPCallCancellationStopsTheRunningScript(t *testing.T) {
 	pidPath := filepath.Join(t.TempDir(), "pid")
 	running := script(t, fmt.Sprintf(`printf '%%s' "$$" > %q; sleep 5`, pidPath))
-	server := httptest.NewServer(Handler(Config{ToolName: "echo-args"}, running))
+	server := httptest.NewServer(Handler(testConfig, running))
 	defer server.Close()
 	session := connect(t, server.URL)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	done := make(chan error, 1)
 	go func() {
-		_, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "echo-args", Arguments: map[string]any{}})
+		_, err := session.CallTool(ctx, &mcp.CallToolParams{Name: testConfig.ToolName, Arguments: map[string]any{}})
 		done <- err
 	}()
 	var pid int
@@ -160,7 +209,7 @@ func TestDiscoveryListsOnlyTheToolName(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Len(t, tools.Tools, 1)
-	assert.Equal(t, "echo-args", tools.Tools[0].Name)
+	assert.Equal(t, testConfig.ToolName, tools.Tools[0].Name)
 	listing, err := json.Marshal(tools)
 	require.NoError(t, err)
 	assert.NotContains(t, string(listing), "secret source")
@@ -176,6 +225,7 @@ func TestOversizedBodyIsRejectedBeforeDecoding(t *testing.T) {
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
+	req.Header.Set(RevisionHeader, testConfig.Revision())
 
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
@@ -187,7 +237,9 @@ func TestOversizedBodyIsRejectedBeforeDecoding(t *testing.T) {
 func connect(t *testing.T, url string) *mcp.ClientSession {
 	t.Helper()
 	client := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "v1"}, nil)
-	session, err := client.Connect(context.Background(), &mcp.StreamableClientTransport{Endpoint: url + MCPPath}, nil)
+	session, err := client.Connect(context.Background(), &mcp.StreamableClientTransport{
+		Endpoint: url + MCPPath, HTTPClient: &http.Client{Transport: revisionHeader{testConfig.Revision()}},
+	}, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = session.Close() })
 	return session
@@ -196,7 +248,7 @@ func connect(t *testing.T, url string) *mcp.ClientSession {
 func callTool(t *testing.T, url string, arguments map[string]any) *mcp.CallToolResult {
 	t.Helper()
 	session := connect(t, url)
-	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "echo-args", Arguments: arguments})
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: testConfig.ToolName, Arguments: arguments})
 	require.NoError(t, err)
 	return result
 }
