@@ -12,6 +12,10 @@ import (
 func (v *Validator) ValidateAgent(ctx context.Context, agent *arkv1alpha1.Agent) ([]string, error) {
 	var warnings []string
 
+	if err := v.validateCrossNamespaceRef(ctx, "Model", agentModelRefTarget(agent), agent.Namespace); err != nil {
+		return warnings, err
+	}
+
 	if err := v.ValidateParameters(ctx, agent.Namespace, agent.Spec.Parameters); err != nil {
 		return warnings, err
 	}

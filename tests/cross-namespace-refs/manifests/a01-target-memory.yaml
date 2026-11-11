@@ -1,0 +1,7 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Memory
+metadata:
+  name: shared-memory
+spec:
+  address:
+    value: MEMORY_ADDRESS
