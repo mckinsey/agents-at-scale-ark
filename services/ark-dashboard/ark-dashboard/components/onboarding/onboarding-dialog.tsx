@@ -40,7 +40,7 @@ export function OnboardingDialog({
       onOpenChange={isOpen => {
         if (!isOpen) onDismiss();
       }}>
-      <DialogContent className="content-center gap-8 p-12 sm:min-h-[28rem] sm:max-w-[38.5rem]">
+      <DialogContent className="gap-6 p-8 [--dialog-close-inset:2rem] sm:max-w-md">
         <DialogHeader className="items-center text-center sm:text-center">
           <div className="mb-2 flex size-12 items-center justify-center">
             <IconShell size="lg" className="text-fg-primary">
