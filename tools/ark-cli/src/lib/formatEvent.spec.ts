@@ -4,6 +4,9 @@ import {
   formatEvent,
   formatEventTimestamp,
   formatEventData,
+  formatBrokerEvent,
+  formatBrokerEventRaw,
+  brokerEventPayload,
   pad,
 } from './formatEvent.js';
 import {EVENT_ANNOTATIONS} from './constants.js';
@@ -50,8 +53,12 @@ describe('formatEvent', () => {
     const line = formatEvent(event);
     expect(line).toContain(chalk.white('hi'));
     expect(line).toContain(chalk.dim('>'));
-    expect(line).toContain(`${chalk.blue('agent')}${chalk.dim('=')}${chalk.white('weather')}`);
-    expect(line).toContain(`${chalk.blue('tokens')}${chalk.dim('=')}${chalk.green('42')}`);
+    expect(line).toContain(
+      `${chalk.blue('agent')}${chalk.dim('=')}${chalk.white('weather')}`
+    );
+    expect(line).toContain(
+      `${chalk.blue('tokens')}${chalk.dim('=')}${chalk.green('42')}`
+    );
   });
 
   it('colors Warning reasons yellow and unknown types red', () => {
@@ -91,12 +98,18 @@ describe('formatEventData', () => {
 
   it('drops the message and timestamp keys from the trailing fields', () => {
     const out = formatEventData(
-      JSON.stringify({message: 'done', timestamp: '2026-01-01T00:00:00Z', foo: 'bar'})
+      JSON.stringify({
+        message: 'done',
+        timestamp: '2026-01-01T00:00:00Z',
+        foo: 'bar',
+      })
     );
     expect(out).toContain(chalk.white('done'));
     expect(out).not.toContain(chalk.blue('message'));
     expect(out).not.toContain(chalk.blue('timestamp'));
-    expect(out).toContain(`${chalk.blue('foo')}${chalk.dim('=')}${chalk.white('bar')}`);
+    expect(out).toContain(
+      `${chalk.blue('foo')}${chalk.dim('=')}${chalk.white('bar')}`
+    );
   });
 
   it('orders input first, durationMs second, then the rest alphabetically', () => {
@@ -108,8 +121,8 @@ describe('formatEventData', () => {
         input: 'q',
       })
     );
-    const order = ['input', 'durationMs', 'alpha', 'zeta'].map(
-      (k) => out.indexOf(chalk.blue(k))
+    const order = ['input', 'durationMs', 'alpha', 'zeta'].map((k) =>
+      out.indexOf(chalk.blue(k))
     );
     expect(order.every((i) => i >= 0)).toBe(true);
     expect(order).toEqual([...order].sort((a, b) => a - b));
@@ -119,7 +132,9 @@ describe('formatEventData', () => {
     const out = formatEventData(
       JSON.stringify({input: 'ok?', queryName: 'cli-query-1'})
     );
-    expect(out).toContain(`${chalk.blue('input')}${chalk.dim('=')}${chalk.white('"ok?"')}`);
+    expect(out).toContain(
+      `${chalk.blue('input')}${chalk.dim('=')}${chalk.white('"ok?"')}`
+    );
     expect(out).toContain(
       `${chalk.blue('queryName')}${chalk.dim('=')}${chalk.white('cli-query-1')}`
     );
@@ -127,7 +142,9 @@ describe('formatEventData', () => {
 
   it('renders numeric string values as green numbers', () => {
     const out = formatEventData(JSON.stringify({durationMs: '12084.20'}));
-    expect(out).toContain(`${chalk.blue('durationMs')}${chalk.dim('=')}${chalk.green('12084.20')}`);
+    expect(out).toContain(
+      `${chalk.blue('durationMs')}${chalk.dim('=')}${chalk.green('12084.20')}`
+    );
   });
 
   it('colors the message red for Warning and Error events', () => {
@@ -148,7 +165,9 @@ describe('formatEventData', () => {
     expect(out).toContain('…');
     expect(out).toContain(chalk.white(`${'x'.repeat(120)}…`));
     // Field values are not truncated and the error field is not red.
-    expect(out).toContain(`${chalk.blue('error')}${chalk.dim('=')}${chalk.white(longError)}`);
+    expect(out).toContain(
+      `${chalk.blue('error')}${chalk.dim('=')}${chalk.white(longError)}`
+    );
   });
 });
 
@@ -176,5 +195,107 @@ describe('formatEventTimestamp', () => {
     const event = eventWithData('{not json');
     expect(() => formatEventTimestamp(event)).not.toThrow();
     expect(formatEventTimestamp(event)).toMatch(/^\d{2}:\d{2}:\d{2}\.\d{3}$/);
+  });
+});
+
+describe('broker events', () => {
+  const brokerEvent = {
+    timestamp: '2026-07-15T10:09:04.602422162Z',
+    eventType: 'Normal',
+    reason: 'QueryExecutionComplete',
+    message: 'Query execution completed',
+    data: {
+      durationMs: '7084.30',
+      message: 'Query execution completed',
+      queryId: 'uid-1',
+      queryName: 'cli-query-1',
+      timestamp: '2026-07-15T10:09:04.602422162Z',
+    },
+  };
+
+  it('uses the event data as payload, unchanged', () => {
+    expect(brokerEventPayload(brokerEvent)).toEqual(brokerEvent.data);
+    expect(Object.keys(brokerEventPayload(brokerEvent))).toEqual(
+      Object.keys(brokerEvent.data)
+    );
+  });
+
+  it('fills message and timestamp from the envelope when data lacks them', () => {
+    expect(
+      brokerEventPayload({
+        timestamp: '2026-07-15T10:09:04Z',
+        message: 'hello',
+        data: {queryId: 'uid-1'},
+      })
+    ).toEqual({
+      queryId: 'uid-1',
+      message: 'hello',
+      timestamp: '2026-07-15T10:09:04Z',
+    });
+    expect(brokerEventPayload({})).toEqual({});
+  });
+
+  it('lets data win over the envelope and sorts keys like the annotation', () => {
+    const payload = brokerEventPayload({
+      timestamp: 'envelope-ts',
+      message: 'envelope-msg',
+      data: {
+        timestamp: 'data-ts',
+        queryName: 'q',
+        message: 'data-msg',
+        durationMs: '1',
+      },
+    });
+    expect(payload).toEqual({
+      durationMs: '1',
+      message: 'data-msg',
+      queryName: 'q',
+      timestamp: 'data-ts',
+    });
+    expect(Object.keys(payload)).toEqual([
+      'durationMs',
+      'message',
+      'queryName',
+      'timestamp',
+    ]);
+  });
+
+  it('renders the pretty line like the kubectl path', () => {
+    const k8s = formatEvent(
+      eventWithData(JSON.stringify(brokerEvent.data), {
+        reason: 'QueryExecutionComplete',
+        type: 'Normal',
+      })
+    );
+    expect(formatBrokerEvent(brokerEvent)).toBe(k8s);
+  });
+
+  it('colors Warning broker events as warnings', () => {
+    const line = formatBrokerEvent({
+      ...brokerEvent,
+      eventType: 'Warning',
+      reason: 'QueryExecutionError',
+    });
+    expect(line).toContain(chalk.yellow('QueryExecutionError'));
+    expect(line).toContain(chalk.red('Query execution completed'));
+  });
+
+  it('falls back to the envelope timestamp and to defaults', () => {
+    const line = formatBrokerEvent({timestamp: '2023-01-02T03:04:05.678Z'});
+    expect(line).toContain(chalk.dim(hhmmss('2023-01-02T03:04:05.678Z')));
+    expect(line).toContain(chalk.green('Unknown'));
+  });
+
+  it('renders the raw line with the same JSON the annotation carries', () => {
+    const now = new Date('2023-01-02T03:04:05.678Z');
+    expect(formatBrokerEventRaw(brokerEvent, now)).toBe(
+      `${hhmmss(now.toISOString())} \x1b[32mQueryExecutionComplete\x1b[0m ${JSON.stringify(brokerEvent.data)}`
+    );
+    expect(
+      formatBrokerEventRaw({eventType: 'Warning', reason: 'X'}, now)
+    ).toContain('\x1b[33mX');
+    expect(formatBrokerEventRaw({eventType: 'Error'}, now)).toContain(
+      '\x1b[31mUnknown'
+    );
   });
 });
