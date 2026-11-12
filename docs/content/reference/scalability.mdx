@@ -7,7 +7,7 @@ description: Capacity management, resource monitoring, and capacity planning for
 
 This page describes how Ark scales, what to monitor, and how to plan capacity for production deployments. It complements the [Core Architecture](/reference/core-architecture) and [Monitoring](/operations-guide/monitoring) guides.
 
-Ark's control plane runs on Kubernetes and inherits its scaling primitives. The controller coordinates reconciliation via leader election. The API and dashboard are stateless and can be horizontally scaled. The broker holds data in memory, so it runs as a single replica by default.
+Ark's control plane runs on Kubernetes and inherits its scaling primitives. The controller coordinates reconciliation via leader election. The API and dashboard run as a single replica each; their charts don't expose a replica count yet. The broker holds data in memory, so it runs as a single replica by default.
 
 ## Capacity management
 
@@ -30,7 +30,9 @@ The two knobs are independent and both effective at the defaults. `maxConcurrent
 
 ### API and dashboard
 
-The API and dashboard are stateless and can be scaled horizontally by increasing replica counts in their Helm values.
+The API and dashboard charts run one replica each and don't expose a replica count yet. Scale them vertically by raising CPU and memory in their Helm values. The API runs a single uvicorn process, so it gains little beyond one CPU core.
+
+The API's REST endpoints hold no per-pod state. Its A2A gateway (`/a2a/agent/{name}`) keeps task state in memory per pod, so `tasks/get`, `tasks/cancel` and `tasks/subscribe` only work on the pod that ran the task. Multi-replica support is tracked in [#3934](https://github.com/mckinsey/agents-at-scale-ark/issues/3934).
 
 ### Broker
 
@@ -117,7 +119,7 @@ Node capacity should account for executor workloads, which are typically the mos
 
 1. **Start with defaults** — Deploy with the default Helm values and a single replica per service.
 2. **Monitor under load** — Use Prometheus metrics and pod resource usage to identify bottlenecks.
-3. **Scale horizontally** — Increase replica counts for the API, dashboard, and executors as needed.
+3. **Scale horizontally** — Increase replica counts for the executors as needed. The API and dashboard scale vertically for now.
 4. **Tune the controller** — Increase CPU and memory limits based on observed reconciliation load.
 5. **Consider PostgreSQL** — Switch from etcd to PostgreSQL if resource volume or query history exceeds etcd's practical limits.
 6. **Add autoscaling** — Configure HPA for executors and stateless services based on CPU or custom metrics.
