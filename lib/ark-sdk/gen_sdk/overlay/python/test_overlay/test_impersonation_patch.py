@@ -1,6 +1,9 @@
 import unittest
+from unittest.mock import AsyncMock, MagicMock
 
 from ark_sdk import impersonation_patch as ip
+from ark_sdk.impersonation import ImpersonationConfig
+from ark_sdk.k8s import apply_impersonation_headers
 
 
 def _collect(headers, name):
@@ -8,96 +11,170 @@ def _collect(headers, name):
     return [v for k, v in headers.items() if k == name]
 
 
-class TestSplitHelpers(unittest.TestCase):
-    def test_split_basic(self):
-        self.assertEqual(ip._split("team-a,admins"), ["team-a", "admins"])
+class TestGroupList(unittest.TestCase):
+    def test_list_value(self):
+        self.assertEqual(ip._group_list({ip._HEADER: ["a", "b"]}), ["a", "b"])
 
-    def test_split_strips_whitespace_and_drops_empties(self):
-        self.assertEqual(ip._split(" team-a , , admins "), ["team-a", "admins"])
+    def test_values_kept_intact(self):
+        self.assertEqual(
+            ip._group_list({ip._HEADER: ["a,system:masters", " team "]}),
+            ["a,system:masters", " team "],
+        )
 
-    def test_needs_split_only_when_comma_present(self):
-        self.assertTrue(ip._needs_split({ip._HEADER: "a,b"}))
-        self.assertFalse(ip._needs_split({ip._HEADER: "a"}))
-        self.assertFalse(ip._needs_split({"Impersonate-User": "u"}))
-        self.assertFalse(ip._needs_split(None))
+    def test_no_list(self):
+        self.assertIsNone(ip._group_list({ip._HEADER: "a,b"}))
+        self.assertIsNone(ip._group_list({"Impersonate-User": "u"}))
+        self.assertIsNone(ip._group_list(None))
 
 
-class TestSyncPatch(unittest.TestCase):
-    def test_comma_joined_group_becomes_repeated_headers(self):
+class _SyncHarness:
+    def __init__(self):
         from kubernetes.client import rest as srest
 
-        saved = srest.RESTClientObject.request
-        captured = {}
+        self.srest = srest
+        self.saved = srest.RESTClientObject.request
+        self.captured = {}
 
-        def fake(self, *args, **kwargs):
-            captured["headers"] = kwargs.get("headers")
+        def fake(_self, *args, **kwargs):
+            self.captured["headers"] = kwargs.get("headers")
             return "ok"
 
         srest.RESTClientObject.request = fake
-        try:
-            ip._patch_sync()
-            result = srest.RESTClientObject.request(
-                object(),
-                headers={
-                    "Impersonate-User": "jane@acme.com",
-                    ip._HEADER: "team-a,admins",
-                },
-            )
-            self.assertEqual(result, "ok")
-            hdr = captured["headers"]
-            self.assertEqual(_collect(hdr, ip._HEADER), ["team-a", "admins"])
-            self.assertEqual(_collect(hdr, "Impersonate-User"), ["jane@acme.com"])
-        finally:
-            srest.RESTClientObject.request = saved
+        ip._patch_sync()
 
-    def test_no_comma_passes_through_untouched(self):
-        from kubernetes.client import rest as srest
+    def send(self, headers):
+        return self.srest.RESTClientObject.request(object(), headers=headers)
 
-        saved = srest.RESTClientObject.request
-        captured = {}
-
-        def fake(self, *args, **kwargs):
-            captured["headers"] = kwargs.get("headers")
-            return "ok"
-
-        srest.RESTClientObject.request = fake
-        try:
-            ip._patch_sync()
-            original = {"Impersonate-User": "u", ip._HEADER: "solo"}
-            srest.RESTClientObject.request(object(), headers=original)
-            # Single group: header dict is handed through unchanged.
-            self.assertIs(captured["headers"], original)
-        finally:
-            srest.RESTClientObject.request = saved
+    def restore(self):
+        self.srest.RESTClientObject.request = self.saved
 
 
-class TestAsyncPatch(unittest.IsolatedAsyncioTestCase):
-    async def test_comma_joined_group_becomes_repeated_headers(self):
+class _AsyncHarness:
+    def __init__(self):
         from kubernetes_asyncio.client import rest as arest
 
-        saved = arest.RESTClientObject.request
-        captured = {}
+        self.arest = arest
+        self.saved = arest.RESTClientObject.request
+        self.captured = {}
 
-        async def fake(self, *args, **kwargs):
-            captured["headers"] = kwargs.get("headers")
+        async def fake(_self, *args, **kwargs):
+            self.captured["headers"] = kwargs.get("headers")
             return "ok"
 
         arest.RESTClientObject.request = fake
-        try:
-            ip._patch_async()
-            result = await arest.RESTClientObject.request(
-                object(),
-                headers={
-                    "Impersonate-User": "jane@acme.com",
-                    ip._HEADER: "team-a,admins",
-                },
-            )
-            self.assertEqual(result, "ok")
-            hdr = captured["headers"]
-            self.assertEqual(_collect(hdr, ip._HEADER), ["team-a", "admins"])
-            self.assertEqual(_collect(hdr, "Impersonate-User"), ["jane@acme.com"])
-        finally:
-            arest.RESTClientObject.request = saved
+        ip._patch_async()
+
+    async def send(self, headers):
+        return await self.arest.RESTClientObject.request(object(), headers=headers)
+
+    def restore(self):
+        self.arest.RESTClientObject.request = self.saved
+
+
+class TestSyncPatch(unittest.TestCase):
+    def setUp(self):
+        self.h = _SyncHarness()
+        self.addCleanup(self.h.restore)
+
+    def test_one_header_per_group(self):
+        result = self.h.send({"Impersonate-User": "jane@acme.com", ip._HEADER: ["team-a", "admins"]})
+        self.assertEqual(result, "ok")
+        hdr = self.h.captured["headers"]
+        self.assertEqual(_collect(hdr, ip._HEADER), ["team-a", "admins"])
+        self.assertEqual(_collect(hdr, "Impersonate-User"), ["jane@acme.com"])
+
+    def test_single_group_list(self):
+        self.h.send({"Impersonate-User": "u", ip._HEADER: ["solo"]})
+        self.assertEqual(_collect(self.h.captured["headers"], ip._HEADER), ["solo"])
+
+    def test_comma_in_group_is_not_split(self):
+        self.h.send({"Impersonate-User": "u", ip._HEADER: ["a,system:masters"]})
+        self.assertEqual(_collect(self.h.captured["headers"], ip._HEADER), ["a,system:masters"])
+
+    def test_ldap_dn_stays_one_group(self):
+        self.h.send({"Impersonate-User": "u", ip._HEADER: ["cn=devs,ou=groups,dc=corp", "oidc:team"]})
+        self.assertEqual(
+            _collect(self.h.captured["headers"], ip._HEADER),
+            ["cn=devs,ou=groups,dc=corp", "oidc:team"],
+        )
+
+    def test_string_value_passes_through_untouched(self):
+        original = {"Impersonate-User": "u", ip._HEADER: "a,b"}
+        self.h.send(original)
+        self.assertIs(self.h.captured["headers"], original)
+
+
+class TestAsyncPatch(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.h = _AsyncHarness()
+        self.addCleanup(self.h.restore)
+
+    async def test_one_header_per_group(self):
+        result = await self.h.send({"Impersonate-User": "jane@acme.com", ip._HEADER: ["team-a", "admins"]})
+        self.assertEqual(result, "ok")
+        hdr = self.h.captured["headers"]
+        self.assertEqual(_collect(hdr, ip._HEADER), ["team-a", "admins"])
+        self.assertEqual(_collect(hdr, "Impersonate-User"), ["jane@acme.com"])
+
+    async def test_comma_in_group_is_not_split(self):
+        await self.h.send({"Impersonate-User": "u", ip._HEADER: ["a,system:masters"]})
+        self.assertEqual(_collect(self.h.captured["headers"], ip._HEADER), ["a,system:masters"])
+
+    async def test_ldap_dn_stays_one_group(self):
+        await self.h.send({"Impersonate-User": "u", ip._HEADER: ["cn=devs,ou=groups,dc=corp", "oidc:team"]})
+        self.assertEqual(
+            _collect(self.h.captured["headers"], ip._HEADER),
+            ["cn=devs,ou=groups,dc=corp", "oidc:team"],
+        )
+
+    async def test_string_value_passes_through_untouched(self):
+        original = {"Impersonate-User": "u", ip._HEADER: "a,b"}
+        await self.h.send(original)
+        self.assertIs(self.h.captured["headers"], original)
+
+
+_GROUPS = ["team-a", "a,system:masters", "cn=devs,ou=groups,dc=corp"]
+
+
+class TestSyncApiClientEndToEnd(unittest.TestCase):
+    def test_groups_reach_transport_as_separate_headers(self):
+        from kubernetes import client as kclient
+
+        ip.apply()
+        api = kclient.ApiClient(kclient.Configuration(host="http://k8s.invalid"))
+        self.addCleanup(api.close)
+        pool = MagicMock()
+        pool.request.return_value = MagicMock(status=200)
+        api.rest_client.pool_manager = pool
+
+        apply_impersonation_headers(api, ImpersonationConfig(username="jane@acme.com", groups=_GROUPS))
+        api.call_api("/api/v1/namespaces", "GET", _preload_content=False)
+
+        headers = pool.request.call_args.kwargs["headers"]
+        self.assertEqual(_collect(headers, ip._HEADER), _GROUPS)
+        self.assertEqual(_collect(headers, "Impersonate-User"), ["jane@acme.com"])
+
+
+class TestAsyncApiClientEndToEnd(unittest.IsolatedAsyncioTestCase):
+    async def test_groups_reach_transport_as_separate_headers(self):
+        from kubernetes_asyncio import client as kclient
+
+        ip.apply()
+        api = kclient.ApiClient(kclient.Configuration(host="http://k8s.invalid"))
+        self.addAsyncCleanup(api.close)
+        pool = MagicMock()
+        pool.request = AsyncMock(return_value=MagicMock(status=200))
+        pool.close = AsyncMock()
+        original_pool = api.rest_client.pool_manager
+        self.addAsyncCleanup(original_pool.close)
+        api.rest_client.pool_manager = pool
+
+        apply_impersonation_headers(api, ImpersonationConfig(username="jane@acme.com", groups=_GROUPS))
+        await api.call_api("/api/v1/namespaces", "GET", _preload_content=False)
+
+        headers = pool.request.call_args.kwargs["headers"]
+        self.assertEqual(_collect(headers, ip._HEADER), _GROUPS)
+        self.assertEqual(_collect(headers, "Impersonate-User"), ["jane@acme.com"])
 
 
 class TestApplyIdempotent(unittest.TestCase):
