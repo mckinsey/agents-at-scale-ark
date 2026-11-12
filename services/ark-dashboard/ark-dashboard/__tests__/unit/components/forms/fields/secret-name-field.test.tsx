@@ -377,11 +377,11 @@ describe('SecretNameField', () => {
       expect(screen.getByRole('alert')).toHaveTextContent(PERSONAL_ERROR);
     });
 
-    it('accepts a personal name where personal secrets are allowed', () => {
+    it('leaves a personal name to the caller where personal secrets are allowed', () => {
       renderField({ value: PERSONAL_NAME, allowPersonal: true });
 
       expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-      expect(screen.getByText(HINT)).toBeInTheDocument();
+      expect(screen.queryByText(HINT)).not.toBeInTheDocument();
     });
 
     it('does not flag a promoted secret listed as shared', () => {

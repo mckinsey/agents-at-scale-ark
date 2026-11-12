@@ -112,7 +112,7 @@ export function SecretNameField({
     !focused &&
     (optionsByName.get(value)?.scope === 'personal' ||
       (isUnlisted && hasPersonalSecretPrefix(value)));
-  const showMissingHint = isUnlisted && !isPersonalRef;
+  const showMissingHint = isUnlisted && !hasPersonalSecretPrefix(value);
   const shownError =
     error ?? (isPersonalRef ? PERSONAL_SECRET_ERROR : undefined);
   const describedBy =

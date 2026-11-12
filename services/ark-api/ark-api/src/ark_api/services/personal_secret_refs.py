@@ -12,9 +12,9 @@ from ark_sdk.secret_scope import SecretScope, is_reserved_name
 logger = logging.getLogger(__name__)
 
 PERSONAL_SECRET_REF_ERROR = (
-    "This resource references a Secret it cannot use. Personal secrets can only be referenced "
-    "from MCP server header overrides of a Query that selects one server with matchLabels "
-    "ark.mckinsey.com/name."
+    "This resource references a Secret that does not exist or that it cannot use. Personal secrets "
+    "can only be referenced from MCP server header overrides of a Query that selects one server "
+    "with matchLabels ark.mckinsey.com/name."
 )
 SECRET_REF_CHECK_ERROR = "Could not check the Secrets this resource references"
 

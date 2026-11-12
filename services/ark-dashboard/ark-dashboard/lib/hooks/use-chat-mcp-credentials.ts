@@ -14,6 +14,7 @@ import type { QueryOverride } from '@/lib/services/chat';
 import type { MCPServer } from '@/lib/services/mcp-servers';
 import { useGetAllMcpServers } from '@/lib/services/mcp-servers-hooks';
 import { useGetAllSecrets } from '@/lib/services/secrets-hooks';
+import { hasPersonalSecretPrefix } from '@/lib/utils/secret-names';
 import { generateUUID } from '@/lib/utils/uuid';
 import { useNamespace } from '@/providers/NamespaceProvider';
 import { useUser } from '@/providers/UserProvider';
@@ -45,6 +46,7 @@ export type McpCredentialIssue =
   | 'servers-pending'
   | 'servers-unavailable'
   | 'secrets-pending'
+  | 'secret-missing'
   | 'invalid'
   | 'incomplete'
   | 'duplicate';
@@ -150,12 +152,28 @@ function serverIssue(
   return getMcpServerTargetIssue(server, servers);
 }
 
+function personalSecretIssue(
+  secret: string,
+  listedSecrets: ReadonlySet<string>,
+  secretsPending: boolean,
+  secretsUnavailable: boolean,
+): McpCredentialIssue | null {
+  if (!hasPersonalSecretPrefix(secret) || listedSecrets.has(secret)) {
+    return null;
+  }
+  if (secretsPending) {
+    return 'secrets-pending';
+  }
+  return secretsUnavailable ? null : 'secret-missing';
+}
+
 export function evaluateMcpCredentials(
   credentials: readonly StoredMcpCredential[],
   serversState: McpServersState,
   drafts: McpCredentialDrafts = {},
   listedSecrets: ReadonlySet<string> = new Set(),
   secretsPending = false,
+  secretsUnavailable = false,
 ): McpCredentialRow[] {
   const seen = new Set<string>();
 
@@ -178,6 +196,14 @@ export function evaluateMcpCredentials(
       credential.key.trim() !== DEFAULT_MCP_CREDENTIAL_KEY
     ) {
       issue = 'secrets-pending';
+    }
+    if (!issue) {
+      issue = personalSecretIssue(
+        credential.secret.trim(),
+        listedSecrets,
+        secretsPending,
+        secretsUnavailable,
+      );
     }
     if (!issue && invalidFields.length > 0) {
       issue = 'invalid';
@@ -326,6 +352,7 @@ export function useChatMcpCredentials({
         drafts,
         listedSecrets,
         secrets.isPending,
+        secrets.isError,
       ),
     [
       credentials,
@@ -334,6 +361,7 @@ export function useChatMcpCredentials({
       drafts,
       listedSecrets,
       secrets.isPending,
+      secrets.isError,
     ],
   );
 

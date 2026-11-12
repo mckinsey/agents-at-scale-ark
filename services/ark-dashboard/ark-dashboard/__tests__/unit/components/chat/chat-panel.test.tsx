@@ -183,7 +183,7 @@ describe('ChatPanel MCP credentials', () => {
     id: 'c1',
     server: 'github',
     header: 'Authorization',
-    secret: 'u-0123456789abcdef-github',
+    secret: 'github-token',
     key: 'token',
   };
   const BLOCKED_NOTICE =
@@ -528,7 +528,9 @@ describe('ChatPanel MCP credentials', () => {
         scope: 'personal',
       },
     ]);
-    storeCredentials([{ ...GITHUB_ROW, key: 'pat' }]);
+    storeCredentials([
+      { ...GITHUB_ROW, secret: 'u-0123456789abcdef-github', key: 'pat' },
+    ]);
 
     await renderPanel();
 
@@ -539,6 +541,28 @@ describe('ChatPanel MCP credentials', () => {
       'title',
       'Secrets in Ark keep their value under the token key.',
     );
+  });
+
+  it('blocks sending when a saved personal secret is no longer listed', async () => {
+    mockMcpServers([mcpServer('github', { [NAME_LABEL]: 'github' })]);
+    mockSecrets([]);
+    storeCredentials([{ ...GITHUB_ROW, secret: 'u-0123456789abcdef-github' }]);
+    const sendMessage = vi.fn(async () => {});
+
+    await renderPanel({ sendMessage });
+
+    expect(
+      screen.getByText(
+        'The secret u-0123456789abcdef-github no longer exists or is not one of your secrets. Pick another secret or remove this credential.',
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Not in the list of Ark secrets/),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('combobox', { name: 'Secret for github' }),
+    ).toHaveAttribute('aria-invalid', 'true');
+    await expectSendBlocked(sendMessage);
   });
 
   it('labels a free key field as the key inside the secret', async () => {

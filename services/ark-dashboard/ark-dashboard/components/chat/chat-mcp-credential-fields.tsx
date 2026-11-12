@@ -81,6 +81,8 @@ function issueMessage(row: McpCredentialRow): string | null {
       return "Couldn't load the MCP servers, so this credential can't be checked.";
     case 'secrets-pending':
       return 'Checking secrets…';
+    case 'secret-missing':
+      return `The secret ${row.secret.trim()} no longer exists or is not one of your secrets. Pick another secret or remove this credential.`;
     case 'invalid':
       return invalidMessage(row);
     case 'incomplete':
@@ -118,6 +120,9 @@ function invalidControls(row: McpCredentialRow): Set<McpCredentialField> {
   }
   if (row.issue === 'duplicate') {
     return new Set(['header']);
+  }
+  if (row.issue === 'secret-missing') {
+    return new Set(['secret']);
   }
   return new Set(
     (['server', 'header', 'secret', 'key'] as const).filter(
