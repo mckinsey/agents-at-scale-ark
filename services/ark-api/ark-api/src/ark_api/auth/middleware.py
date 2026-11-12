@@ -28,9 +28,20 @@ from ark_sdk.auth.basic import BasicAuthValidator
 
 from ..services.api_keys import APIKeyService
 
-__all__ = ['AuthMiddleware', 'TokenValidationError']
+__all__ = ['AuthMiddleware', 'ReservedIdentityError', 'TokenValidationError']
 
 logger = logging.getLogger(__name__)
+
+_RESERVED_IDENTITY_PREFIX = "system:"
+
+
+class ReservedIdentityError(Exception):
+    pass
+
+
+def _check_identity_value(value: str, kind: str) -> None:
+    if value.strip().lower().startswith(_RESERVED_IDENTITY_PREFIX):
+        raise ReservedIdentityError(f"Token {kind} uses the reserved '{_RESERVED_IDENTITY_PREFIX}' prefix")
 
 
 def _extract_claim(payload: Dict[str, Any], claim_path: str) -> Optional[Any]:
@@ -58,6 +69,11 @@ def _extract_user_identity(
         groups = [str(g) for g in raw_groups]
     elif isinstance(raw_groups, str):
         groups = [raw_groups]
+
+    if settings.enabled:
+        _check_identity_value(str(username), "username")
+        for group in groups:
+            _check_identity_value(group, "group")
 
     prefix = settings.prefix
     if prefix:
@@ -183,6 +199,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
                             },
                         )
 
+            except ReservedIdentityError as e:
+                logger.warning(f"Rejected token for {request.method} {path}: {e}")
+                return JSONResponse(status_code=401, content={"detail": str(e)})
             except TokenValidationError as e:
                 logger.debug(f"JWT validation failed: {e}")
                 auth_error = str(e)
