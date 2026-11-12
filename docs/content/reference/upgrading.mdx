@@ -95,6 +95,20 @@ Exports created by older Ark CLI versions may contain stale `metadata.resourceVe
 
 ## Unreleased
 
+### Impersonated Identities and Group Claims
+
+With `AUTH_MODE` set to `sso` or `hybrid` and user impersonation enabled, ark-api changes how it reads the username and groups claims.
+
+ark-api rejects a token with `401` when its username or any of its groups starts with `system:`. The check ignores case and leading whitespace, and it runs on the claim value before `IMPERSONATION_PREFIX` is applied. Kubernetes reserves the `system:` prefix for its own identities. A colon elsewhere in a value, as in `oidc:team` or `org:team:role`, is unaffected.
+
+Each element of the groups claim now reaches Kubernetes as exactly one group, including elements with commas such as the LDAP DN `cn=devs,ou=groups,dc=corp`. Earlier versions split those values on commas. If your identity provider packs several groups into one comma-separated string, for example `"groups": "team-a,team-b"`, that string is now a single group with that literal name, and RoleBindings on `team-a` or `team-b` no longer match.
+
+**Migration:**
+- Check that the identity provider does not issue usernames or groups starting with `system:`.
+- Emit the groups claim as a JSON list. Entra ID, Keycloak, Okta, Auth0 and Google already do.
+
+Nothing changes with impersonation disabled, in `open` mode, or for requests authenticated with an API key.
+
 ### MCP Token Secrets Must Carry the Ark Label
 
 ark-api now acts on the Secret named by an MCPServer's `spec.authorization.tokenSecretRef` only if the Secret does not exist yet or carries the label `ark.mckinsey.com/mcp-token-secret: "true"`. Secrets that ark-api created already have it. If the Secret exists without the label, `auth/start`, `auth/status` and `auth/logout` return `409`, the OAuth callback marks the flow failed, and the Secret is left unchanged.

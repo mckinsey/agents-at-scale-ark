@@ -536,6 +536,8 @@ Dot-path notation is supported for nested claims (e.g., `realm_access.roles`).
 | Auth0 | `email` | `https://custom/claims/groups` |
 | Google | `email` | `groups` |
 
+The groups claim should be a JSON list. Each element becomes one Kubernetes group, even when it contains commas, and a string claim counts as a single group. With impersonation enabled, ark-api rejects a token with `401` when its username or one of its groups starts with `system:`, the prefix Kubernetes reserves for its own identities.
+
 ### RBAC setup
 
 Ark ships viewer/editor/admin ClusterRoles for each resource type. These are role _definitions_ —
