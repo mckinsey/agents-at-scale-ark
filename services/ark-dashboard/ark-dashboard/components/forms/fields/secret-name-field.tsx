@@ -23,6 +23,7 @@ import { FormField } from '@/components/ui/form';
 import { InputGroup, InputGroupAddon } from '@/components/ui/input-group';
 import { Spinner } from '@/components/ui/spinner';
 import type { Secret } from '@/lib/services';
+import { hasPersonalSecretPrefix } from '@/lib/utils/secret-names';
 
 export type SecretNameOption = Pick<Secret, 'name'> &
   Partial<Pick<Secret, 'display_name' | 'scope'>>;
@@ -38,6 +39,7 @@ interface SecretNameFieldProps {
   readonly disabled?: boolean;
   readonly invalid?: boolean;
   readonly error?: string;
+  readonly allowPersonal?: boolean;
   readonly ref?: Ref<HTMLInputElement>;
   readonly 'aria-label'?: string;
 }
@@ -50,6 +52,9 @@ function emptyMessage(isError: boolean, hasSecrets: boolean) {
     ? 'No Ark secret matches. The typed name is used as is.'
     : 'No Ark secrets in this namespace. Type a secret name.';
 }
+
+const PERSONAL_SECRET_ERROR =
+  'This name belongs to a personal secret. Personal secrets can be used only in the MCP server overrides of a query.';
 
 function SecretOptionLabel({
   name,
@@ -84,6 +89,7 @@ export function SecretNameField({
   disabled,
   invalid,
   error,
+  allowPersonal = false,
   ref,
   'aria-label': ariaLabel,
 }: SecretNameFieldProps) {
@@ -94,16 +100,25 @@ export function SecretNameField({
   const errorId = useId();
   const names = secrets?.map(secret => secret.name) ?? [];
   const optionsByName = new Map(secrets?.map(secret => [secret.name, secret]));
-  const showMissingHint =
+  const isUnlisted =
     !!value &&
     !focused &&
     !isPending &&
     !isError &&
     !names.includes(value) &&
     !createdNames.includes(value);
+  const isPersonalRef =
+    !allowPersonal &&
+    !focused &&
+    (optionsByName.get(value)?.scope === 'personal' ||
+      (isUnlisted && hasPersonalSecretPrefix(value)));
+  const showMissingHint = isUnlisted && !isPersonalRef;
+  const shownError =
+    error ?? (isPersonalRef ? PERSONAL_SECRET_ERROR : undefined);
   const describedBy =
-    [showMissingHint && hintId, error && errorId].filter(Boolean).join(' ') ||
-    undefined;
+    [showMissingHint && hintId, shownError && errorId]
+      .filter(Boolean)
+      .join(' ') || undefined;
 
   return (
     <div className="flex flex-col gap-1">
@@ -128,7 +143,7 @@ export function SecretNameField({
                 placeholder={placeholder}
                 disabled={disabled}
                 aria-label={ariaLabel}
-                aria-invalid={invalid}
+                aria-invalid={invalid || isPersonalRef}
                 aria-describedby={describedBy}
                 onFocus={() => setFocused(true)}
                 onBlur={() => {
@@ -182,7 +197,7 @@ export function SecretNameField({
           name.
         </p>
       )}
-      <FieldError id={errorId}>{error}</FieldError>
+      <FieldError id={errorId}>{shownError}</FieldError>
     </div>
   );
 }

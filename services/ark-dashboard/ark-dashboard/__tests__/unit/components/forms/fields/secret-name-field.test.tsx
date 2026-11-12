@@ -25,6 +25,8 @@ vi.mock('@/components/forms/shared/create-resource-dialog', () => ({
 const SECRETS = [{ name: 'openai-token' }, { name: 'github-pat' }];
 
 const HINT = /Not in the list of Ark secrets/;
+const PERSONAL_ERROR =
+  /Personal secrets can be used only in the MCP server overrides/;
 
 type FieldProps = React.ComponentProps<typeof SecretNameField>;
 
@@ -324,7 +326,11 @@ describe('SecretNameField', () => {
     });
 
     it('does not flag a stored personal name as missing', () => {
-      renderField({ secrets: SCOPED, value: PERSONAL_NAME });
+      renderField({
+        secrets: SCOPED,
+        value: PERSONAL_NAME,
+        allowPersonal: true,
+      });
 
       expect(screen.queryByText(HINT)).not.toBeInTheDocument();
     });
@@ -355,6 +361,58 @@ describe('SecretNameField', () => {
 
       await user.click(promoted);
       expect(onChange).toHaveBeenLastCalledWith(PROMOTED);
+    });
+
+    it('flags a typed personal name that is not in the list', () => {
+      renderField({ value: PERSONAL_NAME });
+
+      expect(screen.getByRole('alert')).toHaveTextContent(PERSONAL_ERROR);
+      expect(input()).toHaveAttribute('aria-invalid', 'true');
+      expect(screen.queryByText(HINT)).not.toBeInTheDocument();
+    });
+
+    it('flags a personal secret picked from the list', () => {
+      renderField({ secrets: SCOPED, value: PERSONAL_NAME });
+
+      expect(screen.getByRole('alert')).toHaveTextContent(PERSONAL_ERROR);
+    });
+
+    it('accepts a personal name where personal secrets are allowed', () => {
+      renderField({ value: PERSONAL_NAME, allowPersonal: true });
+
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(screen.getByText(HINT)).toBeInTheDocument();
+    });
+
+    it('does not flag a promoted secret listed as shared', () => {
+      const PROMOTED = 'u-fedcba9876543210-openai';
+      renderField({
+        secrets: [{ name: PROMOTED, display_name: 'openai', scope: 'shared' }],
+        value: PROMOTED,
+      });
+
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('waits for the list before flagging a personal name', () => {
+      renderField({ value: PERSONAL_NAME, isPending: true });
+
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('does not flag names that only start with u-', () => {
+      renderField({ value: 'u-team-token' });
+
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(screen.getByText(HINT)).toBeInTheDocument();
+    });
+
+    it('keeps an error passed by the form over the personal one', () => {
+      renderField({ value: PERSONAL_NAME, error: 'API Key is required' });
+
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'API Key is required',
+      );
     });
 
     it('still renders plain names when the list has no scope details', async () => {

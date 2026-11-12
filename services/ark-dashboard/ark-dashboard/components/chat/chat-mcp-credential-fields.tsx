@@ -263,6 +263,7 @@ function CredentialRow({
             isError={isSecretsError}
             disabled={fieldsDisabled}
             invalid={invalid.has('secret')}
+            allowPersonal
             aria-label={`Secret for ${subject}`}
           />
         </div>

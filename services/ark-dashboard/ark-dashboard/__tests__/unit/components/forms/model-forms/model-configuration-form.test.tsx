@@ -271,6 +271,21 @@ describe('ModelConfiguratorForm - API Key secret field', () => {
     ).toBeInTheDocument();
   });
 
+  it('flags a typed personal secret name, which a model cannot use', async () => {
+    const user = userEvent.setup();
+    renderForm(openaiDefaults({ secret: '' }));
+
+    await user.type(apiKeyInput(), 'u-0123456789abcdef-openai');
+    await user.tab();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /Personal secrets can be used only in the MCP server overrides/,
+    );
+    expect(
+      screen.queryByText(/Not in the list of Ark secrets/),
+    ).not.toBeInTheDocument();
+  });
+
   it('says the secrets failed to load instead of flagging the stored secret', async () => {
     const user = userEvent.setup();
     vi.mocked(useGetAllSecrets).mockReturnValue({
