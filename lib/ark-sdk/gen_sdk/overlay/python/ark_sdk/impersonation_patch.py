@@ -1,21 +1,18 @@
 """Emit one ``Impersonate-Group`` header per group at the transport layer.
 
-ark_sdk builds the ``Impersonate-Group`` header as a single comma-joined value
-(``",".join(groups)``) in ``client.py`` (``_build_headers``) and ``k8s.py``
-(``SecretClient._get_api_client``). It has to: both Kubernetes client libraries
-carry headers in a plain ``dict`` (``Configuration.default_headers`` /
-``ApiClient`` default headers / per-call ``header_params``), and a dict cannot
-hold two values for the same key. A single comma-joined header is read by the API
-server as ONE group whose name literally contains commas, so group-based RBAC
-silently fails for any user in more than one group.
+ark_sdk stores the impersonated groups as a list under the ``Impersonate-Group``
+key of the client's default headers, in ``client.py`` (``_build_headers``) and
+``k8s.py`` (``apply_impersonation_headers``). Both Kubernetes client libraries
+carry headers in a plain ``dict`` (``ApiClient.default_headers`` / per-call
+``header_params``), which cannot hold two values for the same name, but they
+pass the list through unchanged down to ``RESTClientObject.request``.
 
-The lowest common choke point that CAN emit repeated headers is
-``RESTClientObject.request``: the async client (``kubernetes_asyncio``) accepts an
-aiohttp ``CIMultiDict`` and the sync client (``kubernetes``) accepts a urllib3
-``HTTPHeaderDict``, both of which serialise repeated headers correctly. ark uses
-BOTH clients — ``kubernetes_asyncio`` for the async paths (``SecretClient``, the
-generated context/namespace calls) and the sync ``kubernetes`` client for the
-generated resource clients (``versions.py``) — so we patch both.
+That is the lowest common choke point that CAN emit repeated headers: the async
+client (``kubernetes_asyncio``) accepts an aiohttp ``CIMultiDict`` and the sync
+client (``kubernetes``) accepts a urllib3 ``HTTPHeaderDict``. ark uses BOTH
+clients, so we patch both. Each list element becomes exactly one header with its
+value intact: a group name containing a comma (for example an LDAP DN) stays one
+group. A plain string value is passed through as a single group.
 
 ``apply()`` is idempotent and is invoked automatically when ``ark_sdk.k8s`` is
 imported (every client-construction path imports it), so every consumer —
@@ -29,16 +26,13 @@ logger = logging.getLogger("ark_sdk")
 _HEADER = "Impersonate-Group"
 
 
-def _split(value):
-    return [g.strip() for g in str(value).split(",") if g.strip()]
-
-
-def _needs_split(headers):
-    return (
-        headers is not None
-        and _HEADER in headers
-        and "," in str(headers[_HEADER])
-    )
+def _group_list(headers):
+    if headers is None or _HEADER not in headers:
+        return None
+    value = headers[_HEADER]
+    if isinstance(value, (list, tuple)):
+        return [str(g) for g in value]
+    return None
 
 
 def _patch_async():
@@ -53,10 +47,12 @@ def _patch_async():
 
     async def request(self, *args, **kwargs):
         headers = kwargs.get("headers")
-        if _needs_split(headers):
-            multi = CIMultiDict(headers)
-            multi.popall(_HEADER, None)
-            for g in _split(headers[_HEADER]):
+        groups = _group_list(headers)
+        if groups is not None:
+            multi = CIMultiDict(
+                (name, value) for name, value in headers.items() if name != _HEADER
+            )
+            for g in groups:
                 multi.add(_HEADER, g)
             kwargs["headers"] = multi
         return await original(self, *args, **kwargs)
@@ -77,13 +73,14 @@ def _patch_sync():
 
     def request(self, *args, **kwargs):
         headers = kwargs.get("headers")
-        if _needs_split(headers):
+        groups = _group_list(headers)
+        if groups is not None:
             hh = HTTPHeaderDict()
             for name, value in headers.items():
                 if name == _HEADER:
                     continue
                 hh.add(name, value)
-            for g in _split(headers[_HEADER]):
+            for g in groups:
                 hh.add(_HEADER, g)
             kwargs["headers"] = hh
         return original(self, *args, **kwargs)

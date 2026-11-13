@@ -36,9 +36,9 @@ USER_AGENT = "ArkSDK"
 # Make multi-group impersonation work for every ark_sdk consumer. Every path that
 # builds a Kubernetes client imports this module (the async clients here, the
 # generated sync clients in versions.py, and client.py), so applying the patch on
-# import guarantees a comma-joined Impersonate-Group is split into repeated
-# headers before it reaches the API server. Idempotent and a no-op unless a
-# comma-joined header is actually present.
+# import guarantees the Impersonate-Group list becomes repeated headers before
+# it reaches the API server. Idempotent and a no-op unless a group list is
+# actually present.
 _apply_impersonation_patch()
 
 
@@ -208,14 +208,13 @@ async def init_k8s():
 def apply_impersonation_headers(api: ApiClient, impersonation: Optional['ImpersonationConfig']) -> ApiClient:
     """Set the Impersonate-* default headers on an API client.
 
-    set_default_header stores headers in a plain dict, so groups must be
-    comma-joined here. impersonation_patch splits this back into one
+    Groups are stored as a list; impersonation_patch turns it into one
     Impersonate-Group header per group at the transport layer.
     """
     if impersonation:
         api.set_default_header("Impersonate-User", impersonation.username)
         if impersonation.groups:
-            api.set_default_header("Impersonate-Group", ",".join(impersonation.groups))
+            api.set_default_header("Impersonate-Group", list(impersonation.groups))
     return api
 
 
