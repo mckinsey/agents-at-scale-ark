@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from a2a.server.agent_execution import AgentExecutor
 from a2a.server.agent_execution.context import RequestContext
+from a2a.helpers import new_task
 from a2a.server.events.event_queue import EventQueue
 from a2a.types import Message, Part, Role, TaskState, TaskStatus, TaskStatusUpdateEvent
 
@@ -52,7 +53,7 @@ class ARKAgentExecutor(AgentExecutor):
         return "No message"
 
     def _create_status_event(self, context_id: str, task_id: str, state: TaskState,
-                           error_msg: str = None) -> TaskStatusUpdateEvent:
+                           error_msg: str = None, message: Message = None) -> TaskStatusUpdateEvent:
         """Create a task status update event.
 
         Args:
@@ -60,6 +61,7 @@ class ARKAgentExecutor(AgentExecutor):
             task_id: The task ID
             state: The task state
             error_msg: Optional error message for failed states
+            message: Optional agent message carried on the status
 
         Returns:
             A TaskStatusUpdateEvent
@@ -71,6 +73,8 @@ class ARKAgentExecutor(AgentExecutor):
 
         if error_msg and state == TaskState.TASK_STATE_FAILED:
             status.message.CopyFrom(_new_agent_text_message(f"Task failed: {error_msg}"))
+        elif message is not None:
+            status.message.CopyFrom(message)
 
         return TaskStatusUpdateEvent(
             context_id=context_id or "default",
@@ -123,6 +127,14 @@ class ARKAgentExecutor(AgentExecutor):
             logger.debug(f"Task {task_id} Context {context_id} - Query content: {user_message}")
             logger.info(f"Task {task_id} - Using timeout: {self.timeout} seconds")
 
+            if getattr(context, 'current_task', None) is None:
+                await event_queue.enqueue_event(new_task(
+                    task_id,
+                    context_id or "default",
+                    TaskState.TASK_STATE_SUBMITTED,
+                    history=[context.message] if isinstance(context.message, Message) else None,
+                ))
+
             # Send starting status
             await self._send_task_update(event_queue, context_id, task_id, TaskState.TASK_STATE_WORKING)
 
@@ -138,12 +150,11 @@ class ARKAgentExecutor(AgentExecutor):
                     # Wait up to configured timeout for result
                     result = await asyncio.wait_for(result_co, timeout=self.timeout)
 
-                    # Send the result
-                    result_msg = _new_agent_text_message(result, context_id=context_id, task_id=task_id)
-                    await event_queue.enqueue_event(result_msg)
-
                     # Send completion status
-                    await self._send_task_update(event_queue, context_id, task_id, TaskState.TASK_STATE_COMPLETED)
+                    result_msg = _new_agent_text_message(result, context_id=context_id, task_id=task_id)
+                    await event_queue.enqueue_event(self._create_status_event(
+                        context_id, task_id, TaskState.TASK_STATE_COMPLETED, message=result_msg
+                    ))
 
                     logger.info(f"Task {task_id} - Query completed successfully")
 
@@ -153,14 +164,6 @@ class ARKAgentExecutor(AgentExecutor):
                     # Cancel the coroutine if still running
                     if isinstance(result_co, asyncio.Task):
                         result_co.cancel()
-
-                    # Send timeout error
-                    timeout_msg = _new_agent_text_message(
-                        f"Query timed out after {self.timeout} seconds",
-                        context_id=context_id,
-                        task_id=task_id
-                    )
-                    await event_queue.enqueue_event(timeout_msg)
 
                     # Send failure status
                     failure_event = self._create_status_event(
@@ -188,12 +191,6 @@ class ARKAgentExecutor(AgentExecutor):
             task_id: The task ID
         """
         logger.error(f"Task {task_id} - Error processing query: {str(error)}")
-
-        # Send error message
-        error_message = _new_agent_text_message(f"Error: {str(error)}",
-                                             context_id=context_id,
-                                             task_id=task_id)
-        await event_queue.enqueue_event(error_message)
 
         # Send failure status
         failure_event = self._create_status_event(
