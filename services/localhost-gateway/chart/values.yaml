@@ -30,3 +30,11 @@ gateway:
 localhost:
   port: 8080  # Port used for port-forward (kubectl port-forward svc/localhost-gateway-nginx 8080:80)
 
+# Values for the nginx-gateway-fabric subchart.
+nginx-gateway-fabric:
+  nginxGateway:
+    # Let HTTPRoutes attach SnippetsFilter resources. ark-dashboard uses one to
+    # raise the proxy buffers for its chunked SSO session cookies.
+    snippetsFilters:
+      enable: true
+

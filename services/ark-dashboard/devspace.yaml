@@ -35,11 +35,26 @@ images:
     docker:
       useBuildKit: true
 
+functions:
+  # The SSO profile attaches a SnippetsFilter to the HTTPRoute. Its CRD comes
+  # from the localhost-gateway dependency, which may still be deploying.
+  wait_for_snippets_filter_crd: |-
+    if [ "${ENABLE_SSO}" = "true" ]; then
+      for _ in $(seq 1 90); do
+        kubectl get crd snippetsfilters.gateway.nginx.org > /dev/null 2>&1 && return 0
+        sleep 2
+      done
+      echo "snippetsfilters.gateway.nginx.org CRD not found: deploy localhost-gateway first" >&2
+      return 1
+    fi
+
 pipelines:
   deploy: |-
     build_images --all
+    wait_for_snippets_filter_crd
     create_deployments --all
   dev: |-
+    wait_for_snippets_filter_crd
     create_deployments --all
 
     # Patch deployment to add PVCs for node modules and the npm cache
@@ -115,6 +130,13 @@ profiles:
       - vars:
           ENABLE_SSO: true
     patches:
+      # The chunked SSO session cookie overflows the gateway's default proxy
+      # buffers (#3728). localhost-gateway runs NGINX Gateway Fabric with
+      # SnippetsFilters enabled, so the route can raise them.
+      - op: add
+        path: deployments.ark-dashboard.helm.values.httpRoute.proxyBuffers
+        value:
+          enabled: true
       # Helm replaces list values rather than merging them, so app.env has to
       # restate the chart defaults it is not changing.
       - op: add
