@@ -25,8 +25,10 @@ const testAgentName = "test-agent"
 func testNS() string { return "default" } //nolint:goconst
 
 type mockBackend struct {
-	objects map[string]runtime.Object
-	err     error
+	objects    map[string]runtime.Object
+	err        error
+	requireErr error
+	requiredRV uint64
 }
 
 func newMockBackend() *mockBackend {
@@ -128,6 +130,11 @@ func (m *mockBackend) Watch(ctx context.Context, kind, namespace string, opts st
 
 func (m *mockBackend) GetResourceVersion(ctx context.Context, kind, namespace, name string) (int64, error) {
 	return 1, nil
+}
+
+func (m *mockBackend) RequireResourceVersion(ctx context.Context, minRV uint64) error {
+	m.requiredRV = minRV
+	return m.requireErr
 }
 
 func (m *mockBackend) Cleanup(ctx context.Context, retention time.Duration) (int64, error) {
