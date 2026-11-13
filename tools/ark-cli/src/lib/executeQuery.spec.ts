@@ -46,9 +46,9 @@ vi.mock('./chatClient.js', () => ({
   ChatClient: mockChatClient,
 }));
 
-const mockWatchEventsLive = vi.fn();
-vi.mock('./kubectl.js', () => ({
-  watchEventsLive: mockWatchEventsLive,
+const mockWatchQueryEvents = vi.fn();
+vi.mock('./brokerEvents.js', () => ({
+  watchQueryEvents: mockWatchQueryEvents,
 }));
 
 const mockExit = vi.spyOn(process, 'exit').mockImplementation((() => {
@@ -430,8 +430,17 @@ describe('executeQuery', () => {
   });
 
   describe('executeQuery with output format', () => {
-    it('routes the events format to the live watcher (backward-compatible, non-pretty)', async () => {
-      mockExeca.mockResolvedValue({stdout: '', stderr: '', exitCode: 0});
+    it('routes the events format to the event watcher with the Query UID', async () => {
+      mockExeca.mockImplementation(async (_command: string, args: string[]) => {
+        if (args.includes('apply')) {
+          return {
+            stdout: JSON.stringify({metadata: {uid: 'uid-123'}}),
+            stderr: '',
+            exitCode: 0,
+          };
+        }
+        return {stdout: '', stderr: '', exitCode: 0};
+      });
 
       await executeQuery({
         targetType: 'model',
@@ -440,16 +449,30 @@ describe('executeQuery', () => {
         outputFormat: 'events',
       });
 
-      expect(mockWatchEventsLive).toHaveBeenCalledTimes(1);
-      expect(mockWatchEventsLive).toHaveBeenCalledWith(
-        expect.stringMatching(/cli-query-\d+/)
+      expect(mockExeca).toHaveBeenCalledWith(
+        'kubectl',
+        ['apply', '-f', '-', '-o', 'json'],
+        expect.any(Object)
       );
-      // Default events path must NOT enable pretty mode.
-      expect(mockWatchEventsLive.mock.calls[0]).toHaveLength(1);
+      expect(mockWatchQueryEvents).toHaveBeenCalledTimes(1);
+      expect(mockWatchQueryEvents).toHaveBeenCalledWith({
+        queryName: expect.stringMatching(/cli-query-\d+/),
+        queryUid: 'uid-123',
+        pretty: false,
+      });
     });
 
-    it('routes the events-pretty format to the live watcher with pretty enabled', async () => {
-      mockExeca.mockResolvedValue({stdout: '', stderr: '', exitCode: 0});
+    it('routes the events-pretty format to the event watcher with pretty enabled', async () => {
+      mockExeca.mockImplementation(async (_command: string, args: string[]) => {
+        if (args.includes('apply')) {
+          return {
+            stdout: JSON.stringify({metadata: {uid: 'uid-456'}}),
+            stderr: '',
+            exitCode: 0,
+          };
+        }
+        return {stdout: '', stderr: '', exitCode: 0};
+      });
 
       await executeQuery({
         targetType: 'model',
@@ -458,10 +481,52 @@ describe('executeQuery', () => {
         outputFormat: 'events-pretty',
       });
 
-      expect(mockWatchEventsLive).toHaveBeenCalledTimes(1);
-      expect(mockWatchEventsLive).toHaveBeenCalledWith(
-        expect.stringMatching(/cli-query-\d+/),
-        true
+      expect(mockWatchQueryEvents).toHaveBeenCalledWith({
+        queryName: expect.stringMatching(/cli-query-\d+/),
+        queryUid: 'uid-456',
+        pretty: true,
+      });
+    });
+
+    it.each([
+      ['an empty uid', {metadata: {uid: ''}}],
+      ['no metadata', {kind: 'Query'}],
+      ['a non-string uid', {metadata: {uid: 42}}],
+    ])('passes no UID when apply output has %s', async (_label, applied) => {
+      mockExeca.mockResolvedValue({
+        stdout: JSON.stringify(applied),
+        stderr: '',
+        exitCode: 0,
+      });
+
+      await executeQuery({
+        targetType: 'model',
+        targetName: 'default',
+        message: 'Hello',
+        outputFormat: 'events-pretty',
+      });
+
+      expect(mockWatchQueryEvents).toHaveBeenCalledWith(
+        expect.objectContaining({queryUid: undefined, pretty: true})
+      );
+    });
+
+    it('passes no UID when apply output is not parseable', async () => {
+      mockExeca.mockResolvedValue({
+        stdout: 'not json',
+        stderr: '',
+        exitCode: 0,
+      });
+
+      await executeQuery({
+        targetType: 'model',
+        targetName: 'default',
+        message: 'Hello',
+        outputFormat: 'events',
+      });
+
+      expect(mockWatchQueryEvents).toHaveBeenCalledWith(
+        expect.objectContaining({queryUid: undefined})
       );
     });
 

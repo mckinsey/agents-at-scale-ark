@@ -196,6 +196,33 @@ Every MCPServer carries the label `ark.mckinsey.com/name` set to its own name. A
 - `GET /v1/mcp-servers` returns each server's `labels`, like the detail route already did.
 - Agent and team chats in the dashboard show an **MCP credentials** block when the namespace has MCPServers. Each row names an MCP server, a header (default `Authorization`), a Secret and a key (default `token`), and every query the chat sends carries them as an `mcpserver` override that selects the server by `ark.mckinsey.com/name`. Only servers whose label matches their own name can be picked, and not when a server left over from before the upgrade carries the same label value. The chat does not send while a row points at a server that cannot be picked or no longer exists, is incomplete, repeats a header for the same server, or while the server list cannot be loaded. Rows are kept in the browser's local storage per user and namespace, as names only. A value that does not look like a Secret name, header or key is never saved there. When the Secret is in the list, the key is `token` and cannot be changed; while the list is still loading, a row with another key waits. The header, the key and a Secret name typed by hand are saved when you leave the field; a Secret picked from the list is saved at once. A header or key that looks like a token, such as one starting with `ghp_` or `sk-` or a long run of letters and digits, and a Secret name that looks like a UUID or a long run of letters and digits, block sending and are never saved, and older rows that hold one are cleaned on load. With single sign-on the Secret list also shows your personal Secrets, marked **Personal**.
 
+### Impersonated Identities and Group Claims
+
+With `AUTH_MODE` set to `sso` or `hybrid` and user impersonation enabled, ark-api changes how it reads the username and groups claims.
+
+ark-api rejects a token with `401` when its username or any of its groups starts with `system:`. The check ignores case and leading whitespace, and it runs on the claim value before `IMPERSONATION_PREFIX` is applied. Kubernetes reserves the `system:` prefix for its own identities. A colon elsewhere in a value, as in `oidc:team` or `org:team:role`, is unaffected.
+
+Each element of the groups claim now reaches Kubernetes as exactly one group, including elements with commas such as the LDAP DN `cn=devs,ou=groups,dc=corp`. Earlier versions split those values on commas. If your identity provider packs several groups into one comma-separated string, for example `"groups": "team-a,team-b"`, that string is now a single group with that literal name, and RoleBindings on `team-a` or `team-b` no longer match.
+
+**Migration:**
+- Check that the identity provider does not issue usernames or groups starting with `system:`.
+- Emit the groups claim as a JSON list. Entra ID, Keycloak, Okta, Auth0 and Google already do.
+
+Nothing changes with impersonation disabled, in `open` mode, or for requests authenticated with an API key.
+
+### MCP Token Secrets Must Carry the Ark Label
+
+ark-api now acts on the Secret named by an MCPServer's `spec.authorization.tokenSecretRef` only if the Secret does not exist yet or carries the label `ark.mckinsey.com/mcp-token-secret: "true"`. Secrets that ark-api created already have it. If the Secret exists without the label, `auth/start`, `auth/status` and `auth/logout` return `409`, the OAuth callback marks the flow failed, and the Secret is left unchanged.
+
+**Migration:**
+- Label each token Secret you created yourself, for example one applied from an earlier copy of `samples/mcp-notion.yaml`:
+
+```bash
+kubectl label secret <name> -n <namespace> ark.mckinsey.com/mcp-token-secret=true
+```
+
+- If `tokenSecretRef` points at a Secret that holds other data, point it at a dedicated Secret instead.
+
 ### Reserved Configuration Names
 
 The configurations API no longer creates or updates a configuration named `marketplace-sources` or `ark-export-metadata`. Those ConfigMaps belong to the marketplace and export features, and a create or update that names them returns HTTP 422. Manage marketplace sources through the marketplace endpoints or the dashboard. A configuration created under one of these names before the upgrade stays visible in the configurations list and can still be deleted through the API or the dashboard; the delete only removes a ConfigMap that carries the configuration annotation, never the marketplace or export ConfigMap itself.

@@ -177,6 +177,73 @@ class TestMiddlewareDispatchImpersonationHeaders(unittest.IsolatedAsyncioTestCas
         "AUTH_MODE": "sso",
         "OIDC_ISSUER_URL": "http://issuer",
         "OIDC_APPLICATION_ID": "app",
+        "IMPERSONATION_ENABLED": "true",
+        "IMPERSONATION_USERNAME_CLAIM": "email",
+        "IMPERSONATION_GROUPS_CLAIM": "groups",
+    })
+    @patch("ark_api.auth.middleware.APIKeyService")
+    @patch("ark_api.auth.middleware.TokenValidator")
+    async def test_reserved_identity_returns_401_without_calling_route(self, mock_validator_cls, mock_api_key_svc):
+        import json
+
+        from ark_api.auth.middleware import AuthMiddleware
+
+        cases = [
+            ({"email": "jane@acme.com", "groups": ["team-a", "system:masters"]}, "group"),
+            ({"email": "system:serviceaccount:ns:sa", "groups": ["team-a"]}, "username"),
+        ]
+        for claims, kind in cases:
+            with self.subTest(kind=kind):
+                mock_validator = MagicMock()
+                mock_validator.validate_token.return_value = {**claims, "sub": "123"}
+                mock_validator_cls.return_value = mock_validator
+
+                middleware = AuthMiddleware(MagicMock())
+                call_next = AsyncMock()
+
+                request = _make_request(headers={"authorization": "Bearer valid-token"})
+                response = await middleware.dispatch(request, call_next)
+
+                self.assertEqual(response.status_code, 401)
+                body = json.loads(response.body)
+                self.assertIn("reserved", body["detail"])
+                self.assertIn(kind, body["detail"])
+                call_next.assert_not_called()
+                self.assertFalse(hasattr(request.state, "user_identity"))
+
+    @patch.dict(os.environ, {
+        "AUTH_MODE": "sso",
+        "OIDC_ISSUER_URL": "http://issuer",
+        "OIDC_APPLICATION_ID": "app",
+        "IMPERSONATION_ENABLED": "true",
+        "IMPERSONATION_USERNAME_CLAIM": "email",
+    })
+    @patch("ark_api.auth.middleware._extract_user_identity", side_effect=RuntimeError("boom"))
+    @patch("ark_api.auth.middleware.APIKeyService")
+    @patch("ark_api.auth.middleware.TokenValidator")
+    async def test_identity_error_after_valid_token_returns_401(self, mock_validator_cls, mock_api_key_svc, _mock_extract):
+        import json
+
+        from ark_api.auth.middleware import AuthMiddleware
+
+        mock_validator = MagicMock()
+        mock_validator.validate_token.return_value = {"email": "jane@acme.com", "sub": "123"}
+        mock_validator_cls.return_value = mock_validator
+
+        middleware = AuthMiddleware(MagicMock())
+        call_next = AsyncMock()
+
+        request = _make_request(headers={"authorization": "Bearer valid-token"})
+        response = await middleware.dispatch(request, call_next)
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(json.loads(response.body)["detail"], "JWT authentication failed")
+        call_next.assert_not_called()
+
+    @patch.dict(os.environ, {
+        "AUTH_MODE": "sso",
+        "OIDC_ISSUER_URL": "http://issuer",
+        "OIDC_APPLICATION_ID": "app",
         "IMPERSONATION_ENABLED": "false",
         "IMPERSONATION_USERNAME_CLAIM": "email",
     })

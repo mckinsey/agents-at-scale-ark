@@ -1172,13 +1172,13 @@ class TestSecretClientDefaultHeaders(unittest.TestCase):
             namespace="ns",
             default_headers={
                 "Impersonate-User": "user@example.com",
-                "Impersonate-Group": "team-a,team-b",
+                "Impersonate-Group": ["team-a", "team-b"],
             },
         )
         api = Mock()
         secret_client._get_api_client(api)
         api.set_default_header.assert_any_call("Impersonate-User", "user@example.com")
-        api.set_default_header.assert_any_call("Impersonate-Group", "team-a,team-b")
+        api.set_default_header.assert_any_call("Impersonate-Group", ["team-a", "team-b"])
 
     def test_no_headers_is_noop(self):
         api = Mock()

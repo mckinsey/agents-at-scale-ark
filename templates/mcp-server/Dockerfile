@@ -1,5 +1,5 @@
 {{- if eq .Values.technology "node" }}
-FROM node:22.22.0-alpine
+FROM node:22.23.4-alpine
 
 # Install the MCP server package
 {{- if .Values.packageSource }}
@@ -78,7 +78,7 @@ WORKDIR /app
 RUN go build -o {{ .Values.mcpServerName }} .
 {{- end }}
 
-FROM node:22.22.0-alpine
+FROM node:22.23.4-alpine
 {{- if eq .Values.packageSource "go-install" }}
 COPY --from=go-builder /go/bin/{{ .Values.packageName }} /usr/local/bin/
 {{- else }}

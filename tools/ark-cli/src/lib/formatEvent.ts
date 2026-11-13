@@ -43,13 +43,17 @@ export function pad(value: number, width: number): string {
   return value.toString().padStart(width, '0');
 }
 
-function parseEventData(raw: string | undefined): Record<string, unknown> | null {
+function parseEventData(
+  raw: string | undefined
+): Record<string, unknown> | null {
   if (!raw) {
     return null;
   }
   try {
     const parsed: unknown = JSON.parse(raw);
-    return parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)
+    return parsed !== null &&
+      typeof parsed === 'object' &&
+      !Array.isArray(parsed)
       ? (parsed as Record<string, unknown>)
       : null;
   } catch {
@@ -79,7 +83,9 @@ function truncate(value: string, max = MAX_MESSAGE_LENGTH): string {
  * and falling back through the native Event time fields to wall-clock now.
  */
 export function formatEventTimestamp(event: K8sEvent): string {
-  const data = parseEventData(event.metadata?.annotations?.[EVENT_ANNOTATIONS.EVENT_DATA]);
+  const data = parseEventData(
+    event.metadata?.annotations?.[EVENT_ANNOTATIONS.EVENT_DATA]
+  );
   const dataTimestamp =
     typeof data?.timestamp === 'string' ? data.timestamp : undefined;
 
@@ -91,6 +97,10 @@ export function formatEventTimestamp(event: K8sEvent): string {
     event.metadata?.creationTimestamp,
   ]);
 
+  return formatClock(date);
+}
+
+export function formatClock(date: Date): string {
   return `${pad(date.getHours(), 2)}:${pad(date.getMinutes(), 2)}:${pad(date.getSeconds(), 2)}.${pad(date.getMilliseconds(), 3)}`;
 }
 
@@ -132,7 +142,10 @@ function renderFieldValue(key: string, value: unknown): string {
  * The message is clipped and colored red for Warning/Error events; trailing
  * fields keep their full value. Non-object payloads are echoed as-is.
  */
-export function formatEventData(eventData: string, eventType = 'Normal'): string {
+export function formatEventData(
+  eventData: string,
+  eventType = 'Normal'
+): string {
   const data = parseEventData(eventData);
   if (!data) {
     return ` ${eventData}`;
@@ -147,7 +160,10 @@ export function formatEventData(eventData: string, eventType = 'Normal'): string
   const fields = Object.keys(data)
     .filter((key) => !RESERVED_KEYS.has(key))
     .sort(compareKeys)
-    .map((key) => `${chalk.blue(key)}${chalk.dim('=')}${renderFieldValue(key, data[key])}`)
+    .map(
+      (key) =>
+        `${chalk.blue(key)}${chalk.dim('=')}${renderFieldValue(key, data[key])}`
+    )
     .join(' ');
 
   if (!fields) {
@@ -172,4 +188,66 @@ export function formatEvent(event: K8sEvent): string | null {
   const eventType = event.type || 'Normal';
 
   return `${chalk.dim(timestamp)} [${colorReason(reason, eventType)}]${formatEventData(eventData, eventType)}`;
+}
+
+export interface BrokerEvent {
+  timestamp?: string;
+  eventType?: string;
+  reason?: string;
+  message?: string;
+  data?: Record<string, unknown>;
+}
+
+export function brokerEventPayload(
+  event: BrokerEvent
+): Record<string, unknown> {
+  const merged: Record<string, unknown> = {...(event.data ?? {})};
+  if (merged.message === undefined && event.message !== undefined) {
+    merged.message = event.message;
+  }
+  if (merged.timestamp === undefined && event.timestamp !== undefined) {
+    merged.timestamp = event.timestamp;
+  }
+  return Object.fromEntries(
+    Object.keys(merged)
+      .sort()
+      .map((key) => [key, merged[key]])
+  );
+}
+
+export function formatRawEventLine(
+  reason: string,
+  eventType: string,
+  eventData: string,
+  now: Date = new Date()
+): string {
+  const colorCode =
+    eventType === 'Normal' ? 32 : eventType === 'Warning' ? 33 : 31;
+  return `${formatClock(now)} \x1b[${colorCode}m${reason}\x1b[0m ${eventData}`;
+}
+
+export function formatBrokerEventRaw(
+  event: BrokerEvent,
+  now: Date = new Date()
+): string {
+  return formatRawEventLine(
+    event.reason || 'Unknown',
+    event.eventType || 'Normal',
+    JSON.stringify(brokerEventPayload(event)),
+    now
+  );
+}
+
+export function formatBrokerEvent(event: BrokerEvent): string {
+  const payload = brokerEventPayload(event);
+  const timestamp = formatClock(
+    firstValidDate([
+      typeof payload.timestamp === 'string' ? payload.timestamp : undefined,
+      event.timestamp,
+    ])
+  );
+  const reason = event.reason || 'Unknown';
+  const eventType = event.eventType || 'Normal';
+
+  return `${chalk.dim(timestamp)} [${colorReason(reason, eventType)}]${formatEventData(JSON.stringify(payload), eventType)}`;
 }

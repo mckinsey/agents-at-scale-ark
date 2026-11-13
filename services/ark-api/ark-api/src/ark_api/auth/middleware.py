@@ -28,9 +28,20 @@ from ark_sdk.auth.basic import BasicAuthValidator
 
 from ..services.api_keys import APIKeyService
 
-__all__ = ['AuthMiddleware', 'TokenValidationError']
+__all__ = ['AuthMiddleware', 'ReservedIdentityError', 'TokenValidationError']
 
 logger = logging.getLogger(__name__)
+
+_RESERVED_IDENTITY_PREFIX = "system:"
+
+
+class ReservedIdentityError(Exception):
+    pass
+
+
+def _check_identity_value(value: str, kind: str) -> None:
+    if value.strip().lower().startswith(_RESERVED_IDENTITY_PREFIX):
+        raise ReservedIdentityError(f"Token {kind} uses the reserved '{_RESERVED_IDENTITY_PREFIX}' prefix")
 
 
 def _extract_claim(payload: Dict[str, Any], claim_path: str) -> Optional[Any]:
@@ -58,6 +69,11 @@ def _extract_user_identity(
         groups = [str(g) for g in raw_groups]
     elif isinstance(raw_groups, str):
         groups = [raw_groups]
+
+    if settings.enabled:
+        _check_identity_value(str(username), "username")
+        for group in groups:
+            _check_identity_value(group, "group")
 
     prefix = settings.prefix
     if prefix:
@@ -120,6 +136,86 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 return True
         return False
 
+    def _apply_user_identity(self, request: Request, jwt_payload: Dict[str, Any]) -> Optional[JSONResponse]:
+        try:
+            identity = _extract_user_identity(jwt_payload, self.impersonation_settings)
+        except ReservedIdentityError as e:
+            logger.warning(f"Rejected token for {request.method} {request.url.path}: {e}")
+            return JSONResponse(status_code=401, content={"detail": str(e)})
+
+        if identity is not None:
+            request.state.user_identity = identity
+            logger.debug(f"User identity: {identity.username}, groups: {identity.groups}")
+            return None
+
+        if not self.impersonation_settings.enabled:
+            return None
+
+        claim = self.impersonation_settings.username_claim
+        return JSONResponse(
+            status_code=401,
+            content={
+                "detail": (
+                    f"JWT is missing the '{claim}' claim required for impersonation. "
+                    f"Configure your identity provider to include '{claim}' in tokens, "
+                    f"or set IMPERSONATION_USERNAME_CLAIM to a different claim."
+                )
+            },
+        )
+
+    def _auth_failure(self, request: Request, auth_error: str) -> JSONResponse:
+        logger.warning(f"Authentication failed for {request.method} {request.url.path}: {auth_error}")
+        return JSONResponse(status_code=401, content={"detail": auth_error})
+
+    def _authenticate_bearer(self, request: Request, auth_header: str) -> Optional[JSONResponse]:
+        token = auth_header[len(AuthHeader.BEARER):]
+        if not token:
+            return self._auth_failure(request, "Missing token")
+        try:
+            jwt_payload = self._token_validator.validate_token(token)
+            logger.debug("JWT authentication successful")
+            return self._apply_user_identity(request, jwt_payload)
+        except TokenValidationError as e:
+            logger.debug(f"JWT validation failed: {e}")
+            return self._auth_failure(request, str(e))
+        except Exception as e:
+            logger.error(f"JWT authentication error: {e}")
+            return self._auth_failure(request, "JWT authentication failed")
+
+    async def _authenticate_basic(self, request: Request, auth_header: str, auth_mode: str) -> Optional[JSONResponse]:
+        try:
+            credentials = BasicAuthValidator.parse_basic_auth_header(auth_header)
+            if not credentials:
+                return self._auth_failure(request, "Invalid basic auth format")
+            public_key, secret_key = credentials
+
+            api_key_data = await self.api_key_service.verify_api_key(public_key, secret_key)
+            gate_requires_owner = self.impersonation_settings.enabled and auth_mode == AuthMode.HYBRID
+            # Same generic error for "no such key" and "key has no recorded owner" so a caller
+            # can't distinguish a wrong secret from an orphaned key.
+            key_rejected = not api_key_data or (gate_requires_owner and api_key_data.get("created_by") is None)
+            if key_rejected:
+                return self._auth_failure(
+                    request,
+                    f"Invalid API key credentials or key not found in namespace {self.api_key_service.namespace}",
+                )
+            logger.debug(f"Basic auth successful for key: {public_key} in namespace {self.api_key_service.namespace}")
+            request.state.api_key = api_key_data
+            return None
+        except Exception as e:
+            logger.error(f"Basic auth error: {e}")
+            return self._auth_failure(request, "Basic authentication failed")
+
+    @staticmethod
+    def _invalid_header_error(jwt_enabled: bool, basic_enabled: bool) -> str:
+        if jwt_enabled and basic_enabled:
+            return f"Invalid authorization header. Use '{AuthHeader.BEARER}<token>' or '{AuthHeader.BASIC}<credentials>'"
+        if jwt_enabled:
+            return f"Invalid authorization header. Use '{AuthHeader.BEARER}<token>'"
+        if basic_enabled:
+            return f"Invalid authorization header. Use '{AuthHeader.BASIC}<credentials>'"
+        return "No authentication methods configured"
+
     async def dispatch(self, request: Request, call_next):
         if self._has_impersonation_headers(request):
             return JSONResponse(
@@ -134,17 +230,14 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         jwt_enabled = auth_mode in [AuthMode.SSO, AuthMode.HYBRID]
         basic_enabled = auth_mode in [AuthMode.BASIC, AuthMode.HYBRID]
-        auth_disabled = auth_mode == AuthMode.OPEN
 
-        if auth_disabled:
+        if auth_mode == AuthMode.OPEN:
             logger.debug("Authentication disabled")
-            response = await call_next(request)
-            return response
+            return await call_next(request)
 
         if not is_route_authenticated(path):
             logger.debug(f"Route {path} is public, skipping authentication")
-            response = await call_next(request)
-            return response
+            return await call_next(request)
 
         auth_header = request.headers.get("Authorization")
         if not auth_header:
@@ -153,87 +246,17 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 content={"detail": "Missing authorization header"}
             )
 
-        auth_success = False
-        auth_error = "Authentication failed"
-
         if jwt_enabled and auth_header.startswith(AuthHeader.BEARER):
-            try:
-                token = auth_header[len(AuthHeader.BEARER):]
-                if not token:
-                    auth_error = "Missing token"
-                else:
-                    jwt_payload = self._token_validator.validate_token(token)
-                    auth_success = True
-                    logger.debug("JWT authentication successful")
-
-                    identity = _extract_user_identity(jwt_payload, self.impersonation_settings)
-                    if identity is not None:
-                        request.state.user_identity = identity
-                        logger.debug(f"User identity: {identity.username}, groups: {identity.groups}")
-                    elif self.impersonation_settings.enabled:
-                        claim = self.impersonation_settings.username_claim
-                        return JSONResponse(
-                            status_code=401,
-                            content={
-                                "detail": (
-                                    f"JWT is missing the '{claim}' claim required for impersonation. "
-                                    f"Configure your identity provider to include '{claim}' in tokens, "
-                                    f"or set IMPERSONATION_USERNAME_CLAIM to a different claim."
-                                )
-                            },
-                        )
-
-            except TokenValidationError as e:
-                logger.debug(f"JWT validation failed: {e}")
-                auth_error = str(e)
-            except Exception as e:
-                logger.error(f"JWT authentication error: {e}")
-                auth_error = "JWT authentication failed"
-
+            rejection = self._authenticate_bearer(request, auth_header)
         elif basic_enabled and auth_header.startswith(AuthHeader.BASIC):
-            try:
-                credentials = BasicAuthValidator.parse_basic_auth_header(auth_header)
-                if not credentials:
-                    auth_error = "Invalid basic auth format"
-                else:
-                    public_key, secret_key = credentials
-
-                    api_key_data = await self.api_key_service.verify_api_key(public_key, secret_key)
-                    gate_requires_owner = self.impersonation_settings.enabled and auth_mode == AuthMode.HYBRID
-                    # Same generic error for "no such key" and "key has no recorded owner" so a caller
-                    # can't distinguish a wrong secret from an orphaned key.
-                    key_rejected = not api_key_data or (gate_requires_owner and api_key_data.get("created_by") is None)
-                    if key_rejected:
-                        auth_error = f"Invalid API key credentials or key not found in namespace {self.api_key_service.namespace}"
-                    else:
-                        auth_success = True
-                        logger.debug(f"Basic auth successful for key: {public_key} in namespace {self.api_key_service.namespace}")
-                        request.state.api_key = api_key_data
-
-            except Exception as e:
-                logger.error(f"Basic auth error: {e}")
-                auth_error = "Basic authentication failed"
-
+            rejection = await self._authenticate_basic(request, auth_header, auth_mode)
         else:
-            if jwt_enabled and basic_enabled:
-                auth_error = f"Invalid authorization header. Use '{AuthHeader.BEARER}<token>' or '{AuthHeader.BASIC}<credentials>'"
-            elif jwt_enabled:
-                auth_error = f"Invalid authorization header. Use '{AuthHeader.BEARER}<token>'"
-            elif basic_enabled:
-                auth_error = f"Invalid authorization header. Use '{AuthHeader.BASIC}<credentials>'"
-            else:
-                auth_error = "No authentication methods configured"
+            rejection = self._auth_failure(request, self._invalid_header_error(jwt_enabled, basic_enabled))
 
-        if not auth_success:
-            logger.warning(f"Authentication failed for {request.method} {path}: {auth_error}")
-            return JSONResponse(
-                status_code=401,
-                content={"detail": auth_error}
-            )
+        if rejection is not None:
+            return rejection
 
-        response = await call_next(request)
-        return response
-
+        return await call_next(request)
 
 def add_auth_to_routes(router: APIRouter) -> None:
     logger.info("AuthMiddleware is now handling authentication globally - no need to modify individual routes")
