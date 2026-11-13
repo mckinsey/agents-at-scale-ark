@@ -40,4 +40,21 @@ describe('useGetSystemInfo', () => {
     expect(result.current.data).toEqual(info);
     expect(systemInfoService.get).toHaveBeenCalledTimes(1);
   });
+
+  it('surfaces the Argo Server version support field', async () => {
+    vi.mocked(systemInfoService.get).mockResolvedValue({
+      kubernetes_version: 'v1.31.2',
+      system_version: 'v0.1.68',
+      argo_server_configured: true,
+      argo_server_version_supported: true,
+    });
+
+    const { result } = renderHook(() => useGetSystemInfo(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(result.current.data?.argo_server_version_supported).toBe(true);
+  });
 });
