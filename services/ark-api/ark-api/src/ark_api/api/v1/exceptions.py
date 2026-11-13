@@ -57,6 +57,93 @@ def _rbac_impersonation(
     return impersonation
 
 
+def _error_context(resource_type: str, resource_name: str, namespace: str) -> str:
+    if resource_name and namespace:
+        return f"{resource_type} '{resource_name}' in namespace {namespace}"
+    if namespace:
+        return f"{resource_type}s in namespace {namespace}"
+    if resource_name:
+        return f"{resource_type} '{resource_name}'"
+    return resource_type
+
+
+def _not_found_detail(
+    exception: ApiException | SyncApiException,
+    operation: str,
+    resource_type: str,
+    resource_name: str,
+    namespace: str,
+) -> str:
+    if operation == "list" and namespace:
+        return f"Kubernetes API error: {exception.reason}"
+    detail = f"{resource_type.title()} "
+    if resource_name:
+        detail += f"'{resource_name}' "
+    detail += "not found"
+    if namespace:
+        detail += f" in namespace {namespace}"
+    return detail
+
+
+def _conflict_detail(
+    exception: ApiException | SyncApiException,
+    resource_type: str,
+    resource_name: str,
+    namespace: str,
+) -> str:
+    detail = resource_type.title()
+    if resource_name:
+        detail += f" '{resource_name}'"
+    in_namespace = f" in namespace {namespace}" if namespace else ""
+    if _extract_error_reason(exception) == "Conflict":
+        return f"{detail}{in_namespace} was modified by another request; reload it and try again"
+    return f"{detail} already exists{in_namespace}"
+
+
+async def _handle_forbidden(
+    exception: ApiException | SyncApiException,
+    func: Callable,
+    args: tuple,
+    kwargs: dict,
+    operation: str,
+    resource_type: str,
+    impersonation_fallback: bool,
+) -> Any:
+    impersonation = _rbac_impersonation(exception, kwargs.get("impersonation"))
+    if impersonation is None:
+        raise HTTPException(status_code=403, detail=_extract_error_detail(exception))
+
+    namespace = kwargs.get("namespace", "")
+    settings = ImpersonationSettings.from_env()
+    if settings.fallback and impersonation_fallback:
+        logger.warning(
+            f"Impersonation fallback: user={impersonation.username} "
+            f"action={operation} resource={resource_type} namespace={namespace}"
+        )
+        kwargs["impersonation"] = None
+        response = await func(*args, **kwargs)
+        if hasattr(response, "headers"):
+            response.headers["X-Ark-Impersonation-Fallback"] = "true"
+        return response
+
+    imp_response = build_impersonation_forbidden_response(
+        exception, impersonation, resource_type, operation, namespace
+    )
+    if imp_response is not None:
+        return imp_response
+    raise HTTPException(status_code=403, detail=_extract_error_detail(exception))
+
+
+def _unexpected_error(exception: Exception) -> HTTPException:
+    original_exception = exception.__cause__ or exception.__context__
+    if isinstance(original_exception, (ApiException, SyncApiException)) and original_exception.status in (403, 422):
+        return HTTPException(
+            status_code=original_exception.status,
+            detail=_extract_error_detail(original_exception),
+        )
+    return HTTPException(status_code=500, detail="Internal server error")
+
+
 def handle_k8s_errors(
     operation: str = "operation",
     resource_type: str = "resource",
@@ -80,83 +167,26 @@ def handle_k8s_errors(
             try:
                 return await func(*args, **kwargs)
             except (ApiException, SyncApiException) as e:
-                # Build context for error messages
                 namespace = kwargs.get("namespace", "")
                 resource_name = kwargs.get(f"{resource_type}_name", "")
-                
-                # Create detailed error context
-                if resource_name and namespace:
-                    context = f"{resource_type} '{resource_name}' in namespace {namespace}"
-                elif namespace:
-                    context = f"{resource_type}s in namespace {namespace}"
-                elif resource_name:
-                    context = f"{resource_type} '{resource_name}'"
-                else:
-                    context = resource_type
-                
-                # Log the error
+                context = _error_context(resource_type, resource_name, namespace)
                 logger.error(f"Failed to {operation} {context}: {e}")
-                
-                # Handle specific status codes
+
                 if e.status == 404:
-                    # For list operations, 404 usually means namespace not found
-                    if operation == "list" and namespace:
-                        raise HTTPException(
-                            status_code=404,
-                            detail=f"Kubernetes API error: {e.reason}"
-                        )
-                    # For single resource operations, it's the resource that's not found
-                    detail = f"{resource_type.title()} "
-                    if resource_name:
-                        detail += f"'{resource_name}' "
-                    detail += "not found"
-                    if namespace:
-                        detail += f" in namespace {namespace}"
-                    raise HTTPException(status_code=404, detail=detail)
-                
-                elif e.status == 409:
-                    detail = resource_type.title()
-                    if resource_name:
-                        detail += f" '{resource_name}'"
-                    if _extract_error_reason(e) == "Conflict":
-                        if namespace:
-                            detail += f" in namespace {namespace}"
-                        detail += " was modified by another request; reload it and try again"
-                    else:
-                        detail += " already exists"
-                        if namespace:
-                            detail += f" in namespace {namespace}"
-                    raise HTTPException(status_code=409, detail=detail)
-                
-                elif e.status == 422:
-                    raise HTTPException(status_code=422, detail=_extract_error_detail(e))
-                
-                elif e.status == 403:
-                    impersonation = _rbac_impersonation(e, kwargs.get("impersonation"))
-                    if impersonation is not None:
-                        settings = ImpersonationSettings.from_env()
-                        if settings.fallback and impersonation_fallback:
-                            logger.warning(
-                                f"Impersonation fallback: user={impersonation.username} "
-                                f"action={operation} resource={resource_type} namespace={namespace}"
-                            )
-                            kwargs["impersonation"] = None
-                            response = await func(*args, **kwargs)
-                            if hasattr(response, "headers"):
-                                response.headers["X-Ark-Impersonation-Fallback"] = "true"
-                            return response
-
-                        imp_response = build_impersonation_forbidden_response(
-                            e, impersonation, resource_type, operation, namespace
-                        )
-                        if imp_response is not None:
-                            return imp_response
-                    raise HTTPException(status_code=403, detail=_extract_error_detail(e))
-
-                raise HTTPException(
-                    status_code=e.status,
-                    detail=_extract_error_detail(e)
-                )
+                    raise HTTPException(
+                        status_code=404,
+                        detail=_not_found_detail(e, operation, resource_type, resource_name, namespace),
+                    )
+                if e.status == 409:
+                    raise HTTPException(
+                        status_code=409,
+                        detail=_conflict_detail(e, resource_type, resource_name, namespace),
+                    )
+                if e.status == 403:
+                    return await _handle_forbidden(
+                        e, func, args, kwargs, operation, resource_type, impersonation_fallback
+                    )
+                raise HTTPException(status_code=e.status, detail=_extract_error_detail(e))
 
             except ResourceNotFoundError as e:
                 kind = kwargs.get("kind", resource_type)
@@ -167,24 +197,12 @@ def handle_k8s_errors(
                 )
 
             except HTTPException:
-                # Re-raise HTTP exceptions as-is
                 raise
-                
+
             except Exception as e:
                 logger.error(f"Unexpected error during {operation} {resource_type}: {e}")
                 logger.exception("Full traceback:")
+                raise _unexpected_error(e)
 
-                original_exception = e.__cause__ or e.__context__
-                if isinstance(original_exception, (ApiException, SyncApiException)):
-                    if original_exception.status == 422:
-                        raise HTTPException(status_code=422, detail=_extract_error_detail(original_exception))
-                    elif original_exception.status == 403:
-                        raise HTTPException(status_code=403, detail=_extract_error_detail(original_exception))
-                
-                raise HTTPException(
-                    status_code=500,
-                    detail="Internal server error"
-                )
-                
         return wrapper
     return decorator
