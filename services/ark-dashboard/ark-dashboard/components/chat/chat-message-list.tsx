@@ -1,9 +1,8 @@
-import { useMemo, useEffect } from 'react';
+import { useMemo } from 'react';
 import type { RefObject } from 'react';
 
+import type { TokenUsage } from '@/atoms/chat-history';
 import { ChatMessage } from '@/components/chat/chat-message';
-import { ErrorIcon } from '@/components/icons';
-import { IconShell } from '@/components/ui/icon-shell';
 import { ConversationStoppedEvent } from '@/components/chat/conversation-stopped-event';
 import { GraphEnd } from '@/components/chat/graph-end';
 import { GraphTransition } from '@/components/chat/graph-transition';
@@ -12,8 +11,13 @@ import { SelectorFailureEvent } from '@/components/chat/selector-failure-event';
 import { SelectorTransition } from '@/components/chat/selector-transition';
 import { StrategyIndicator } from '@/components/chat/strategy-indicator';
 import { TerminationEvent } from '@/components/chat/termination-event';
-import type { TokenUsage } from '@/atoms/chat-history';
-import type { ChatMessage as ChatMessageType, ExtendedChatMessage, GraphEdge } from '@/lib/types/chat-message';
+import { ErrorIcon } from '@/components/icons';
+import { IconShell } from '@/components/ui/icon-shell';
+import type {
+  ChatMessage as ChatMessageType,
+  ExtendedChatMessage,
+  GraphEdge,
+} from '@/lib/types/chat-message';
 
 interface ChatMessageListProps {
   messages: ExtendedChatMessage[];
@@ -108,7 +112,8 @@ function determineMessageFlags(
   const isMaxTurnsMessage =
     msg.role === 'system' && content.includes('maximum turns limit');
   const isSelectorFailureMessage =
-    msg.role === 'system' && content.includes('Selector returned invalid agent name');
+    msg.role === 'system' &&
+    content.includes('Selector returned invalid agent name');
   const isConversationStoppedMessage =
     msg.role === 'system' && content === 'Conversation stopped by user';
   const hasToolCalls =
@@ -204,7 +209,8 @@ export function ChatMessageList({
         messages,
         index,
       );
-      const { terminateToolCall, terminateMessage } = extractTerminateInfo(toolCallsWithResults);
+      const { terminateToolCall, terminateMessage } =
+        extractTerminateInfo(toolCallsWithResults);
       const {
         isMaxTurnsMessage,
         isSelectorFailureMessage,
@@ -212,7 +218,13 @@ export function ChatMessageList({
         hasToolCalls,
         hasContent,
         hasTermination,
-      } = determineMessageFlags(msg, content, toolCallsWithResults, terminateToolCall, debugMode);
+      } = determineMessageFlags(
+        msg,
+        content,
+        toolCallsWithResults,
+        terminateToolCall,
+        debugMode,
+      );
 
       const hasApprovalRequest = message.approvalRequest !== undefined;
 
@@ -257,7 +269,6 @@ export function ChatMessageList({
     return result;
   }, [messages, debugMode]);
 
-
   const lastAssistantName = useMemo(() => {
     if (!isGraphStrategy) return undefined;
     for (let i = processedMessages.length - 1; i >= 0; i--) {
@@ -268,6 +279,11 @@ export function ChatMessageList({
     }
     return undefined;
   }, [processedMessages, isGraphStrategy]);
+
+  const lastUserMessageIndex = useMemo(
+    () => messages.findLastIndex(message => message.role === 'user'),
+    [messages],
+  );
 
   const hasTerminationOrMaxTurns = useMemo(() => {
     return processedMessages.some(
@@ -320,6 +336,7 @@ export function ChatMessageList({
 
       {processedMessages.map((pm, pmIndex) => {
         let transitionElement: React.ReactNode = null;
+        const isCollapsible = !isProcessing || pm.index <= lastUserMessageIndex;
 
         if (isGraphStrategy && pm.msg.role === 'assistant' && pm.senderName) {
           for (let j = pmIndex - 1; j >= 0; j--) {
@@ -384,20 +401,18 @@ export function ChatMessageList({
                 tokenUsage={messageTokenUsage?.[pm.index]}
                 approvalRequest={pm.message.approvalRequest}
                 pollAfterApproval={pollAfterApproval}
+                collapsible={isCollapsible}
               />
             )}
             {!pm.hasContent && pm.message.approvalRequest && (
-              <>
-                {console.log('[HITL Debug] Rendering approval request for message:', pm.index, pm.message.approvalRequest)}
-                <ChatMessage
-                  role="assistant"
-                  content=""
-                  viewMode={viewMode}
-                  queryName={pm.message.metadata?.queryName}
-                  approvalRequest={pm.message.approvalRequest}
-                  pollAfterApproval={pollAfterApproval}
-                />
-              </>
+              <ChatMessage
+                role="assistant"
+                content=""
+                viewMode={viewMode}
+                queryName={pm.message.metadata?.queryName}
+                approvalRequest={pm.message.approvalRequest}
+                pollAfterApproval={pollAfterApproval}
+              />
             )}
             {pm.hasTermination && (
               <div className="mt-2 flex flex-col gap-2">
@@ -410,6 +425,7 @@ export function ChatMessageList({
                     content={pm.terminateMessage}
                     viewMode={viewMode}
                     sender={pm.senderName}
+                    collapsible={isCollapsible}
                   />
                 )}
               </div>

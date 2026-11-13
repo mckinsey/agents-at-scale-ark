@@ -1,16 +1,17 @@
 'use client';
 
-import { useState } from 'react';
+import { type ComponentType, memo, useState } from 'react';
 
 import { ChatPanel } from '@/components/chat/chat-panel';
 import {
-  ChatBubble,
   Close,
   CollapseContent,
   ExpandContent,
+  Group,
+  Memory,
+  SmartToy,
 } from '@/components/icons';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { IconShell } from '@/components/ui/icon-shell';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -19,166 +20,181 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { cn } from '@/lib/utils';
 import type { GraphEdge } from '@/lib/types/chat-message';
+import { cn } from '@/lib/utils';
 
 type ChatType = 'model' | 'team' | 'agent';
-type WindowState = 'default' | 'minimized' | 'maximized';
 
 interface FloatingChatProps {
   id: string;
   name: string;
   type: ChatType;
-  position: number;
   strategy?: string;
   selectorAgentName?: string;
   graphEdges?: GraphEdge[];
-  onClose: () => void;
+  minimized?: boolean;
+  onMinimizedChange?: (id: string, minimized: boolean) => void;
+  onClose: (id: string) => void;
 }
 
-export default function FloatingChat({
+const CHAT_TYPE_ICONS: Record<ChatType, ComponentType> = {
+  agent: SmartToy,
+  team: Group,
+  model: Memory,
+};
+
+function FloatingChat({
+  id,
   name,
   type,
-  position,
   strategy,
   selectorAgentName,
   graphEdges,
+  minimized,
+  onMinimizedChange,
   onClose,
 }: FloatingChatProps) {
-  const [windowState, setWindowState] = useState<WindowState>('default');
+  const [localMinimized, setLocalMinimized] = useState(false);
+  const [isMaximized, setIsMaximized] = useState(false);
   const [viewMode, setViewMode] = useState<'text' | 'markdown'>('markdown');
 
-  const rightPosition = 16 + position * 568;
+  const isMinimized = minimized ?? localMinimized;
+  const setMinimized = (value: boolean) =>
+    onMinimizedChange ? onMinimizedChange(id, value) : setLocalMinimized(value);
+  const handleClose = () => onClose(id);
+  const TypeIcon = CHAT_TYPE_ICONS[type];
 
-  // Handle window state styling
-  const getCardStyles = () => {
-    switch (windowState) {
-      case 'maximized':
-        return 'fixed inset-4 shadow-2xl dark:shadow-[0_10px_30px_rgba(0,0,0,0.8)] z-50 transition-all duration-300';
-      case 'minimized':
-        return 'fixed bottom-4 shadow-2xl dark:shadow-[0_10px_30px_rgba(0,0,0,0.8)] z-50 w-[548px] h-auto min-h-0 transition-all duration-300';
-      case 'default':
-      default:
-        return 'fixed bottom-4 shadow-2xl dark:shadow-[0_10px_30px_rgba(0,0,0,0.8)] z-50 w-[548px] h-[708px] max-h-[calc(100vh-2rem)] transition-all duration-300';
-    }
-  };
+  const title = (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="flex min-w-0 flex-1 items-center gap-1">
+            <IconShell className="flex-shrink-0">
+              <TypeIcon />
+            </IconShell>
+            <span className="text-fg-primary headings-h4-semibold truncate">
+              {name}
+            </span>
+          </div>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>{name}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
 
-  const isMinimized = windowState === 'minimized';
-  const isMaximized = windowState === 'maximized';
-  const cardStyles = getCardStyles();
+  if (isMinimized) {
+    return (
+      <div className="bg-surface-bg-secondary border-stroke-divider shadow-elevation-2 flex h-9 w-full items-center gap-1 border py-1 pr-2 pl-3">
+        {title}
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={() => setMinimized(false)}
+          aria-label="Restore chat">
+          <IconShell size="sm">
+            <ExpandContent />
+          </IconShell>
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={handleClose}
+          aria-label="Close chat">
+          <IconShell size="sm">
+            <Close />
+          </IconShell>
+        </Button>
+      </div>
+    );
+  }
 
   return (
-    <Card
-      className={`${cardStyles} p-0`}
-      style={isMaximized ? {} : { right: `${rightPosition}px` }}>
-      <div className="flex h-full flex-col overflow-hidden">
-        {/* Dialog-style Header */}
-        <div className="border-stroke-divider flex-shrink-0 border-b">
-          {/* Title Row */}
-          <div className="flex items-center justify-between px-3 py-2">
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="flex min-w-0 flex-1 items-center gap-2">
-                    <IconShell
-                      size="sm"
-                      variant="secondary"
-                      className="flex-shrink-0">
-                      <ChatBubble />
-                    </IconShell>
-                    <span className="text-fg-primary truncate font-medium">
-                      {name}
-                    </span>
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>{name}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+    <div
+      data-testid="chat-window"
+      className={cn(
+        'bg-surface-bg-base border-stroke-divider text-fg-primary shadow-elevation-2 flex flex-col overflow-hidden border transition-all duration-300',
+        isMaximized
+          ? 'fixed inset-4 z-50'
+          : 'h-[708px] max-h-[calc(100vh-2.5rem)] w-full',
+      )}>
+      <div className="border-stroke-divider flex-shrink-0 border-b">
+        <div className="flex h-12 items-center justify-between gap-1 px-3 py-2">
+          {title}
 
-            <div className="ml-2 flex items-center gap-1">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() =>
-                  setWindowState(isMinimized ? 'default' : 'minimized')
-                }
-                className="h-6 w-6 p-0"
-                aria-label={isMinimized ? 'Restore chat' : 'Minimize chat'}>
-                <IconShell size="sm">
-                  {isMinimized ? <ExpandContent /> : <CollapseContent />}
-                </IconShell>
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() =>
-                  setWindowState(isMaximized ? 'default' : 'maximized')
-                }
-                className="h-6 w-6 p-0"
-                aria-label={isMaximized ? 'Restore size' : 'Maximize chat'}>
-                <IconShell size="sm">
-                  {isMaximized ? <CollapseContent /> : <ExpandContent />}
-                </IconShell>
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onClose}
-                className="h-6 w-6 p-0"
-                aria-label="Close chat">
-                <IconShell size="sm">
-                  <Close />
-                </IconShell>
-              </Button>
-            </div>
+          <div className="flex items-center">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => {
+                setIsMaximized(false);
+                setMinimized(true);
+              }}
+              aria-label="Minimize chat">
+              <IconShell size="sm">
+                <CollapseContent />
+              </IconShell>
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setIsMaximized(!isMaximized)}
+              aria-label={isMaximized ? 'Restore size' : 'Maximize chat'}>
+              <IconShell size="sm">
+                {isMaximized ? <CollapseContent /> : <ExpandContent />}
+              </IconShell>
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleClose}
+              aria-label="Close chat">
+              <IconShell size="sm">
+                <Close />
+              </IconShell>
+            </Button>
           </div>
-
-          {!isMinimized && (
-            <>
-              <Separator />
-
-              {/* Controls Row */}
-              <div className="flex justify-end px-3 py-1.5">
-                <div className="flex items-center gap-1 text-xs">
-                  <button
-                    className={cn(
-                      'px-2 py-1 transition-colors',
-                      viewMode === 'text'
-                        ? 'bg-surface-bg-tertiary text-fg-primary font-medium'
-                        : 'text-fg-secondary hover:text-fg-primary hover:bg-stateslayer-overlay-hover',
-                    )}
-                    onClick={() => setViewMode('text')}>
-                    Text
-                  </button>
-                  <button
-                    className={cn(
-                      'px-2 py-1 transition-colors',
-                      viewMode === 'markdown'
-                        ? 'bg-surface-bg-tertiary text-fg-primary font-medium'
-                        : 'text-fg-secondary hover:text-fg-primary hover:bg-stateslayer-overlay-hover',
-                    )}
-                    onClick={() => setViewMode('markdown')}>
-                    Markdown
-                  </button>
-                </div>
-              </div>
-            </>
-          )}
         </div>
 
-        {!isMinimized && (
-          <ChatPanel
-            name={name}
-            type={type}
-            strategy={strategy}
-            selectorAgentName={selectorAgentName}
-            graphEdges={graphEdges}
-            viewMode={viewMode}
-          />
-        )}
+        <Separator />
+
+        <div className="flex justify-end px-3 py-1.5">
+          <div className="flex items-center gap-1 text-xs">
+            <button
+              className={cn(
+                'px-2 py-1 transition-colors',
+                viewMode === 'text'
+                  ? 'bg-surface-bg-tertiary text-fg-primary font-medium'
+                  : 'text-fg-secondary hover:text-fg-primary hover:bg-stateslayer-overlay-hover',
+              )}
+              onClick={() => setViewMode('text')}>
+              Text
+            </button>
+            <button
+              className={cn(
+                'px-2 py-1 transition-colors',
+                viewMode === 'markdown'
+                  ? 'bg-surface-bg-tertiary text-fg-primary font-medium'
+                  : 'text-fg-secondary hover:text-fg-primary hover:bg-stateslayer-overlay-hover',
+              )}
+              onClick={() => setViewMode('markdown')}>
+              Markdown
+            </button>
+          </div>
+        </div>
       </div>
-    </Card>
+
+      <ChatPanel
+        name={name}
+        type={type}
+        strategy={strategy}
+        selectorAgentName={selectorAgentName}
+        graphEdges={graphEdges}
+        viewMode={viewMode}
+      />
+    </div>
   );
 }
+
+export default memo(FloatingChat);

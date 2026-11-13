@@ -18,9 +18,9 @@ vi.mock('jotai', () => ({
 
 // Mock the FloatingChat component
 vi.mock('@/components/floating-chat', () => ({
-  default: vi.fn(({ name, onClose }) => (
+  default: vi.fn(({ id, name, onClose }) => (
     <div data-testid={`floating-chat-${name}`}>
-      <button onClick={() => onClose(name)}>Close {name}</button>
+      <button onClick={() => onClose(id)}>Close {name}</button>
     </div>
   )),
 }));
@@ -28,6 +28,10 @@ vi.mock('@/components/floating-chat', () => ({
 // Mock the openChatWindowsAtom
 vi.mock('@/atoms/internal-states', () => ({
   openChatWindowsAtom: {},
+}));
+
+vi.mock('@/components/ui/sidebar', () => ({
+  useSidebar: () => ({ state: 'expanded', isMobile: false }),
 }));
 
 function dispatchChatEvent(
@@ -133,7 +137,7 @@ describe('ChatManager', () => {
     });
   });
 
-  it('should handle multiple chat windows with correct positions', async () => {
+  it('should render multiple chat windows side by side', async () => {
     render(<ChatManager />);
 
     act(() => {
@@ -147,7 +151,7 @@ describe('ChatManager', () => {
     });
   });
 
-  it('should close chat window and update positions', async () => {
+  it('should close one chat window and keep the others open', async () => {
     render(<ChatManager />);
 
     act(() => {

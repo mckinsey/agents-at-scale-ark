@@ -1,17 +1,18 @@
 import {
+  type ReactNode,
+  type RefObject,
   useEffect,
   useMemo,
   useRef,
   useState,
-  type ReactNode,
-  type RefObject,
 } from 'react';
 
+import { ExpandableMessageContent } from '@/components/chat/expandable-message-content';
 import { ToolCall, type ToolCallData } from '@/components/chat/tool-call';
-import { ApprovalNotification } from '@/components/sessions-conversations/approval-notification';
-import { renderMarkdown } from '@/lib/hooks/render-markdown';
 import { Warning } from '@/components/icons';
+import { ApprovalNotification } from '@/components/sessions-conversations/approval-notification';
 import { IconShell } from '@/components/ui/icon-shell';
+import { renderMarkdown } from '@/lib/hooks/render-markdown';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 import { submitApproval } from '@/lib/services/a2a-task-approvals';
 import type { ToolApprovalRequest } from '@/lib/types/chat-message';
@@ -39,6 +40,7 @@ interface ChatMessageProps {
   pollAfterApproval?: () => Promise<void>;
   defaultCodeCollapsed?: boolean;
   constrainWidth?: boolean;
+  collapsible?: boolean;
 }
 
 type ApprovalDecision = 'approved' | 'rejected';
@@ -284,6 +286,7 @@ function MessageBubbleContent({
   tokenUsage,
   queryName,
   contentRef,
+  collapsible,
 }: Readonly<{
   isUser: boolean;
   isFailed: boolean;
@@ -294,6 +297,7 @@ function MessageBubbleContent({
   tokenUsage?: ChatMessageProps['tokenUsage'];
   queryName?: string;
   contentRef: RefObject<HTMLDivElement | null>;
+  collapsible?: boolean;
 }>) {
   const { push } = useNamespacedNavigation();
   const showErrorIcon = isFailed && queryName;
@@ -310,27 +314,29 @@ function MessageBubbleContent({
       {sender && !isUser && (
         <div className="text-fg-tertiary text-xs font-medium">{sender}</div>
       )}
-      <div className="flex items-center gap-2">
-        <div ref={contentRef} className="min-w-0 flex-1 overflow-x-auto">
-          {viewMode === 'markdown' ? (
-            <div className="text-sm break-words">{markdownContent}</div>
-          ) : (
-            <pre className="m-0 border-0 bg-transparent p-0 font-mono text-sm whitespace-pre-wrap">
-              {content}
-            </pre>
+      <ExpandableMessageContent enabled={collapsible ?? false}>
+        <div className="flex items-center gap-2">
+          <div ref={contentRef} className="min-w-0 flex-1 overflow-x-auto">
+            {viewMode === 'markdown' ? (
+              <div className="text-sm break-words">{markdownContent}</div>
+            ) : (
+              <pre className="m-0 border-0 bg-transparent p-0 font-mono text-sm whitespace-pre-wrap">
+                {content}
+              </pre>
+            )}
+          </div>
+          {showErrorIcon && (
+            <button
+              onClick={handleErrorIconClick}
+              className="text-status-error hover:bg-status-error/10 flex-shrink-0 p-1 transition-colors"
+              title="View events for this query">
+              <IconShell size="sm">
+                <Warning />
+              </IconShell>
+            </button>
           )}
         </div>
-        {showErrorIcon && (
-          <button
-            onClick={handleErrorIconClick}
-            className="text-status-error hover:bg-status-error/10 flex-shrink-0 p-1 transition-colors"
-            title="View events for this query">
-            <IconShell size="sm">
-              <Warning />
-            </IconShell>
-          </button>
-        )}
-      </div>
+      </ExpandableMessageContent>
       {!isUser && tokenUsage && tokenUsage.total_tokens > 0 && (
         <div className="text-fg-tertiary text-xs opacity-60">
           {tokenUsage.total_tokens.toLocaleString()} tokens (
@@ -360,6 +366,7 @@ function StandardMessage({
   className,
   defaultCodeCollapsed,
   constrainWidth,
+  collapsible,
 }: Readonly<{
   isUser: boolean;
   isFailed: boolean;
@@ -372,6 +379,7 @@ function StandardMessage({
   className?: string;
   defaultCodeCollapsed?: boolean;
   constrainWidth?: boolean;
+  collapsible?: boolean;
 }>) {
   const markdownContent = useMemo(
     () => renderMarkdown(content, { defaultCodeCollapsed }),
@@ -422,6 +430,7 @@ function StandardMessage({
             tokenUsage={tokenUsage}
             queryName={queryName}
             contentRef={contentRef}
+            collapsible={collapsible}
           />
         </div>
       )}
@@ -455,6 +464,7 @@ export function ChatMessage({
   pollAfterApproval,
   defaultCodeCollapsed,
   constrainWidth,
+  collapsible,
 }: Readonly<ChatMessageProps>) {
   const isUser = role === 'user';
   const isFailed = status === 'failed';
@@ -498,6 +508,7 @@ export function ChatMessage({
       className={className}
       defaultCodeCollapsed={defaultCodeCollapsed}
       constrainWidth={constrainWidth}
+      collapsible={collapsible}
     />
   );
 }
