@@ -171,6 +171,22 @@ class TestHandleK8sErrorsAdmissionDenial(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 403)
         self.assertEqual(json.loads(response.body)["error"], "impersonation_forbidden")
 
+    async def test_403_without_structured_response_raises_http_exception(self):
+        @handle_k8s_errors(operation="list", resource_type="agent")
+        async def handler(namespace="default", impersonation=None):
+            raise _make_api_exception(403)
+
+        config = ImpersonationConfig(username="bob@acme.com", groups=["viewers"])
+        with (
+            patch.dict("os.environ", {"IMPERSONATION_FALLBACK": "false"}),
+            patch("ark_api.api.v1.exceptions.build_impersonation_forbidden_response", return_value=None),
+            pytest.raises(HTTPException) as exc_info,
+        ):
+            await handler(namespace="default", impersonation=config)
+
+        self.assertEqual(exc_info.value.status_code, 403)
+        self.assertEqual(exc_info.value.detail, "Forbidden")
+
 
 if __name__ == "__main__":
     unittest.main()
