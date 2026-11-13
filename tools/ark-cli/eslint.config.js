@@ -14,6 +14,7 @@ export default [
     languageOptions: {
       parser: tsParser,
       globals: {
+        ...globals.node,
         console: 'readonly',
         process: 'readonly',
         setTimeout: 'readonly',

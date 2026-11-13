@@ -36,7 +36,8 @@ export function BasicInfoSection({
           render={({ field }) => (
             <FormItem>
               <FormLabel>
-                Name {!isEditing && <span className="text-status-error">*</span>}
+                Name{' '}
+                {!isEditing && <span className="text-status-error">*</span>}
               </FormLabel>
               <FormControl>
                 <Input
