@@ -350,9 +350,11 @@ export function useStudioChat({
           dispatchInput,
           'agent',
           ARGO_MAKE_AUTHOR_AGENT_NAME,
-          activeSessionId,
-          conversationIdRef.current,
-          timeout,
+          {
+            sessionId: activeSessionId,
+            conversationId: conversationIdRef.current,
+            timeout,
+          },
         );
         invalidateQueriesList();
 

@@ -171,7 +171,7 @@ create_basic_secret() {
     
     if [[ "$DRY_RUN" == "true" ]]; then
         echo "Would execute: $cmd --dry-run=client -o yaml"
-        kubectl create secret generic "$SECRET_NAME" --namespace="$NAMESPACE" "${secret_data[@]}" --dry-run=client -o yaml
+        kubectl create secret generic "$SECRET_NAME" --namespace="$NAMESPACE" "${secret_data[@]}" --dry-run=client -o yaml | kubectl label --local -f - ark.mckinsey.com/resource-type=secret ark.mckinsey.com/scope=shared -o yaml
     else
         # Delete existing secret if it exists
         if kubectl get secret "$SECRET_NAME" --namespace="$NAMESPACE" &> /dev/null; then
@@ -179,7 +179,9 @@ create_basic_secret() {
             kubectl delete secret "$SECRET_NAME" --namespace="$NAMESPACE"
         fi
         
-        kubectl create secret generic "$SECRET_NAME" --namespace="$NAMESPACE" "${secret_data[@]}"
+        kubectl create secret generic "$SECRET_NAME" --namespace="$NAMESPACE" "${secret_data[@]}" --dry-run=client -o yaml \
+            | kubectl label --local -f - ark.mckinsey.com/resource-type=secret ark.mckinsey.com/scope=shared -o yaml \
+            | kubectl create -f -
         log_success "Created secret '$SECRET_NAME' in namespace '$NAMESPACE'"
     fi
 }
@@ -197,7 +199,7 @@ create_cross_account_secret() {
     
     if [[ "$DRY_RUN" == "true" ]]; then
         echo "Would execute: $cmd --dry-run=client -o yaml"
-        kubectl create secret generic "$SECRET_NAME" --namespace="$NAMESPACE" "${secret_data[@]}" --dry-run=client -o yaml
+        kubectl create secret generic "$SECRET_NAME" --namespace="$NAMESPACE" "${secret_data[@]}" --dry-run=client -o yaml | kubectl label --local -f - ark.mckinsey.com/resource-type=secret ark.mckinsey.com/scope=shared -o yaml
     else
         # Delete existing secret if it exists
         if kubectl get secret "$SECRET_NAME" --namespace="$NAMESPACE" &> /dev/null; then
@@ -205,7 +207,9 @@ create_cross_account_secret() {
             kubectl delete secret "$SECRET_NAME" --namespace="$NAMESPACE"
         fi
         
-        eval "$cmd"
+        kubectl create secret generic "$SECRET_NAME" --namespace="$NAMESPACE" "${secret_data[@]}" --dry-run=client -o yaml \
+            | kubectl label --local -f - ark.mckinsey.com/resource-type=secret ark.mckinsey.com/scope=shared -o yaml \
+            | kubectl create -f -
         log_success "Created cross-account secret '$SECRET_NAME' in namespace '$NAMESPACE'"
     fi
 }

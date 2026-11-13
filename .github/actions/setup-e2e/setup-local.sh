@@ -116,7 +116,8 @@ if [ "${PREFETCH_TEST_IMAGES}" = "true" ]; then
     docker.io/mockserver/mockserver:5.15.0 \
     ghcr.io/orange-opensource/hurl:6.1.1 \
     docker.io/python:3.12-bookworm \
-    ghcr.io/dwmkerr/mock-llm:0.1.28; do
+    ghcr.io/dwmkerr/mock-llm:0.1.28 \
+    ghcr.io/dexidp/dex:v2.45.1; do
     sudo k3s crictl pull "$img" > /dev/null 2>&1 &
     IMAGE_PULL_PIDS+=($!)
   done

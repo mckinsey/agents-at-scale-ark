@@ -111,16 +111,22 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: default-model-token
+  labels:
+    ark.mckinsey.com/resource-type: secret
+    ark.mckinsey.com/scope: shared
 type: Opaque
 stringData:
   token: "your-api-key-here"
 ```
 
-Create the API-key Secret directly with:
+Or create the API-key Secret with kubectl and label it:
 
 ```bash
 kubectl create secret generic default-model-token --from-literal=token="your-api-key-here"
+kubectl label secret default-model-token ark.mckinsey.com/resource-type=secret ark.mckinsey.com/scope=shared
 ```
+
+The labels mark it as an Ark secret. See [Manage secrets](/user-guide/secrets).
 
 ### Azure OpenAI
 

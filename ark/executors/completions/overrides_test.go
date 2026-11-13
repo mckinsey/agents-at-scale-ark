@@ -12,6 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/secretscope"
 )
 
 func setupTestClient(objects []client.Object) client.Client {
@@ -636,7 +637,7 @@ func TestResolveHeadersFromOverrides(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			fakeClient := setupTestClient(tt.objects)
 			ctx := context.Background()
-			got, err := ResolveHeadersFromOverrides(ctx, fakeClient, tt.overrides, tt.namespace, tt.overrideType)
+			got, err := ResolveHeadersFromOverrides(ctx, fakeClient, tt.overrides, tt.namespace, tt.overrideType, secretscope.RejectPersonal)
 
 			if tt.wantErr {
 				require.Error(t, err)

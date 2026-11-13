@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 
 import { BrokerFallbackNotice } from '@/components/chat/broker-fallback-notice';
+import { ChatMcpCredentialFields } from '@/components/chat/chat-mcp-credential-fields';
 import { ChatMessageList } from '@/components/chat/chat-message-list';
 import { ChatNotice } from '@/components/chat/chat-notice';
 import { MemoryChatNotice } from '@/components/chat/memory-chat-notice';
@@ -21,6 +22,7 @@ import {
 } from '@/components/ui/tooltip';
 import { trackEvent } from '@/lib/analytics/singleton';
 import { useChatSession } from '@/lib/hooks';
+import { useChatMcpCredentials } from '@/lib/hooks/use-chat-mcp-credentials';
 import type { GraphEdge } from '@/lib/types/chat-message';
 import { cn } from '@/lib/utils';
 
@@ -43,6 +45,16 @@ export function ChatPanel({
   graphEdges,
   viewMode,
 }: ChatPanelProps) {
+  const usesMcpCredentials = type !== 'model';
+  const mcpCredentials = useChatMcpCredentials({
+    enabled: usesMcpCredentials,
+  });
+  const mcpBlockedNoticeId = useId();
+  const showMcpCredentials =
+    usesMcpCredentials &&
+    (mcpCredentials.servers.length > 0 || mcpCredentials.rows.length > 0);
+  const mcpCredentialsBlocked = usesMcpCredentials && mcpCredentials.blocked;
+
   const {
     messages,
     isProcessing,
@@ -80,7 +92,12 @@ export function ChatPanel({
     outputSchemaOverride,
     setOutputSchemaOverride,
     isOutputSchemaOverrideValid,
-  } = useChatSession({ name, type });
+  } = useChatSession({
+    name,
+    type,
+    mcpCredentials: usesMcpCredentials ? mcpCredentials.credentials : undefined,
+    mcpCredentialsBlocked,
+  });
 
   const [currentMessage, setCurrentMessage] = useState('');
   const [debugMode, setDebugMode] = useState(true);
@@ -109,7 +126,7 @@ export function ChatPanel({
   }, [isProcessing]);
 
   const handleSendMessage = async () => {
-    if (!currentMessage.trim() || isProcessing) return;
+    if (!currentMessage.trim() || isProcessing || mcpCredentialsBlocked) return;
     if (isOutputSchemaOverrideInvalid) return;
     const userMessage = currentMessage.trim();
     setCurrentMessage('');
@@ -134,6 +151,13 @@ export function ChatPanel({
           {engineToolWarning && (
             <ChatNotice icon={<Info />} iconClassName="text-status-information">
               {engineToolWarning}
+            </ChatNotice>
+          )}
+          {mcpCredentialsBlocked && (
+            <ChatNotice icon={<Info />} iconClassName="text-status-information">
+              <span id={mcpBlockedNoticeId}>
+                Fix or remove the MCP credentials below to send a message.
+              </span>
             </ChatNotice>
           )}
           {missingParameters.length > 0 && (
@@ -176,6 +200,14 @@ export function ChatPanel({
         {memoryNotice && (
           <div className="px-4 pt-4">
             <MemoryChatNotice notice={memoryNotice} />
+          </div>
+        )}
+        {showMcpCredentials && (
+          <div className="px-4 pt-4">
+            <ChatMcpCredentialFields
+              credentials={mcpCredentials}
+              disabled={isProcessing}
+            />
           </div>
         )}
         {hasParameters && (
@@ -394,11 +426,15 @@ export function ChatPanel({
                   disabled={
                     !currentMessage.trim() ||
                     missingParameters.length > 0 ||
+                    mcpCredentialsBlocked ||
                     isOutputSchemaOverrideInvalid
                   }
                   variant="ghost"
                   size="icon-sm"
                   aria-label="Send message"
+                  aria-describedby={
+                    mcpCredentialsBlocked ? mcpBlockedNoticeId : undefined
+                  }
                   className="bg-fill-active text-fg-primary-inverse hover:bg-fill-active/90 disabled:bg-surface-bg-tertiary disabled:text-fg-tertiary">
                   <IconShell size="sm">
                     <Send />

@@ -5,10 +5,13 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query, Request
 from ark_sdk.models.memory_v1alpha1 import MemoryV1alpha1
 from ark_sdk.impersonation import ImpersonationConfig
+from ark_sdk.secret_scope import SecretScope
 
 from ark_sdk.client import with_ark_client
 
 from ...auth.dependencies import get_impersonation_config
+from ...auth.secret_scope import get_secret_scope
+from ...services.personal_secret_refs import enforce_personal_secret_refs
 
 from ...models.memories import (
     MemoryResponse,
@@ -106,7 +109,7 @@ async def get_memory(request: Request, name: str, namespace: Optional[str] = Que
 
 @router.post("", response_model=MemoryDetailResponse)
 @handle_k8s_errors(operation="create", resource_type="memory")
-async def create_memory(request: Request, memory_request: MemoryCreateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> MemoryDetailResponse:
+async def create_memory(request: Request, memory_request: MemoryCreateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config), secret_scope: SecretScope = Depends(get_secret_scope)) -> MemoryDetailResponse:
     """Create a new memory."""
     async with with_ark_client(namespace, VERSION, impersonation=impersonation) as client:
         memory_obj = MemoryV1alpha1(
@@ -117,13 +120,16 @@ async def create_memory(request: Request, memory_request: MemoryCreateRequest, n
             }
         )
         
+        await enforce_personal_secret_refs(
+            memory_obj.to_dict()["spec"], namespace=namespace, caller_scope=secret_scope
+        )
         created_memory = await client.memories.a_create(memory_obj)
         return memory_to_detail_response(created_memory.to_dict())
 
 
 @router.put("/{name}", response_model=MemoryDetailResponse)
 @handle_k8s_errors(operation="update", resource_type="memory")
-async def update_memory(request: Request, name: str, memory_request: MemoryUpdateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> MemoryDetailResponse:
+async def update_memory(request: Request, name: str, memory_request: MemoryUpdateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config), secret_scope: SecretScope = Depends(get_secret_scope)) -> MemoryDetailResponse:
     """Update an existing memory."""
     async with with_ark_client(namespace, VERSION, impersonation=impersonation) as client:
         # Get existing memory
@@ -143,6 +149,9 @@ async def update_memory(request: Request, name: str, memory_request: MemoryUpdat
             spec=spec
         )
         
+        await enforce_personal_secret_refs(
+            memory_obj.to_dict()["spec"], namespace=namespace, caller_scope=secret_scope
+        )
         updated_memory = await client.memories.a_update(memory_obj)
         return memory_to_detail_response(updated_memory.to_dict())
 

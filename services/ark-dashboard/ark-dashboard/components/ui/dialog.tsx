@@ -55,11 +55,15 @@ function useDialogContentElement() {
   return React.useContext(DialogContentElementContext);
 }
 
+const OPEN_POPUP_SELECTOR =
+  '[data-slot="combobox-content"][data-open], [data-slot="select-content"][data-open]';
+
 function DialogContent({
   className,
   children,
   showCloseButton = true,
   ref,
+  onEscapeKeyDown,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean;
@@ -89,6 +93,13 @@ function DialogContent({
           'bg-surface-secondary shadow-elevation-3 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-7 p-10 duration-200 [--dialog-close-inset:2.5rem] sm:max-w-lg',
           className,
         )}
+        onEscapeKeyDown={event => {
+          if (contentElement?.querySelector(OPEN_POPUP_SELECTOR)) {
+            event.preventDefault();
+            return;
+          }
+          onEscapeKeyDown?.(event);
+        }}
         {...props}>
         <DialogContentElementContext.Provider value={contentElement}>
           {children}

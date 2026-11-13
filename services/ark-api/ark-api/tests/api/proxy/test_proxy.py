@@ -1,4 +1,5 @@
 """Tests for Proxy API."""
+import base64
 import json
 import os
 import pathlib
@@ -9,6 +10,7 @@ import yaml
 from ark_api.api.v1.proxy.proxy import (
     DEFAULT_MAX_UPLOAD_BYTES,
     _get_a2a_server_address,
+    _get_mcp_server_address,
     _read_body_capped,
 )
 
@@ -50,6 +52,77 @@ class TestInternalProxy(unittest.TestCase):
         result_url, headers = await _get_a2a_server_address("test-server")
         self.assertEqual(result_url, "http://test-server:8080")
         self.assertEqual(headers, {})
+
+
+PERSONAL_SECRET_VALUE = "personal-mcp-token"
+
+
+class TestProxyRefusesPersonalSecrets(unittest.IsolatedAsyncioTestCase):
+    """The proxy resolves headers through SecretClient.get_secret_value and must
+    inherit its refusal of personal secrets."""
+
+    def setUp(self):
+        for patcher in (patch("ark_sdk.k8s.init_k8s", new=AsyncMock()), patch("ark_sdk.k8s.ApiClient")):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        v1_patcher = patch("ark_sdk.k8s.client.CoreV1Api")
+        self.v1 = v1_patcher.start().return_value
+        self.addCleanup(v1_patcher.stop)
+
+    def _store_secret(self, labels):
+        secret = Mock()
+        secret.metadata.name = "u-0123456789abcdef-github"
+        secret.metadata.uid = "uid"
+        secret.metadata.labels = labels
+        secret.type = "Opaque"
+        secret.data = {"token": base64.b64encode(PERSONAL_SECRET_VALUE.encode()).decode()}
+        self.v1.read_namespaced_secret = AsyncMock(return_value=secret)
+
+    def _server(self, mock_ark_client, kind, status):
+        server = Mock()
+        server.to_dict.return_value = {
+            "metadata": {"name": "github", "namespace": "default"},
+            "status": status,
+            "spec": {"headers": [{
+                "name": "Authorization",
+                "value": {"valueFrom": {"secretKeyRef": {"name": "u-0123456789abcdef-github", "key": "token"}}},
+            }]},
+        }
+        ark = AsyncMock()
+        getattr(ark, kind).a_get = AsyncMock(return_value=server)
+        mock_ark_client.return_value.__aenter__.return_value = ark
+
+    @patch("ark_api.api.v1.proxy.proxy.with_ark_client")
+    async def test_mcp_proxy_refuses_personal_secret_header(self, mock_ark_client):
+        self._store_secret({"ark.mckinsey.com/resource-type": "secret", "ark.mckinsey.com/scope": "user-0123456789abcdef"})
+        self._server(mock_ark_client, "mcpservers", {"resolvedAddress": "http://mcp:8080"})
+
+        with self.assertRaises(HTTPException) as raised:
+            await _get_mcp_server_address("github", "default")
+
+        self.assertEqual(raised.exception.status_code, 400)
+        self.assertNotIn(PERSONAL_SECRET_VALUE, str(raised.exception.detail))
+
+    @patch("ark_api.api.v1.proxy.proxy.with_ark_client")
+    async def test_a2a_proxy_refuses_personal_secret_header(self, mock_ark_client):
+        self._store_secret({"ark.mckinsey.com/resource-type": "secret", "ark.mckinsey.com/scope": "user-0123456789abcdef"})
+        self._server(mock_ark_client, "a2aservers", {"lastResolvedAddress": "http://a2a:8080"})
+
+        with self.assertRaises(HTTPException) as raised:
+            await _get_a2a_server_address("github", "default")
+
+        self.assertEqual(raised.exception.status_code, 400)
+        self.assertNotIn(PERSONAL_SECRET_VALUE, str(raised.exception.detail))
+
+    @patch("ark_api.api.v1.proxy.proxy.with_ark_client")
+    async def test_mcp_proxy_resolves_promoted_secret_header(self, mock_ark_client):
+        self._store_secret({"ark.mckinsey.com/resource-type": "secret", "ark.mckinsey.com/scope": "shared"})
+        self._server(mock_ark_client, "mcpservers", {"resolvedAddress": "http://mcp:8080"})
+
+        address, headers = await _get_mcp_server_address("github", "default")
+
+        self.assertEqual(address, "http://mcp:8080")
+        self.assertEqual(headers, {"Authorization": PERSONAL_SECRET_VALUE.encode()})
 
 
 class TestProxyRequestFunction(unittest.IsolatedAsyncioTestCase):

@@ -1,0 +1,15 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Model
+metadata:
+  name: personal-model
+spec:
+  type: completions
+  provider: openai
+  model:
+    value: gpt-4o-mini
+  config:
+    openai:
+      baseUrl:
+        value: https://model.invalid/v1
+      apiKey:
+        value: not-a-real-key

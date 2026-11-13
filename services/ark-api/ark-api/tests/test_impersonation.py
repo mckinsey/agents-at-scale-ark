@@ -59,6 +59,11 @@ class TestExtractUserIdentity(unittest.TestCase):
         identity = _extract_user_identity({}, self._settings())
         self.assertIsNone(identity)
 
+    def test_non_string_username_returns_none(self):
+        for username in [123, ["jane"], {"name": "jane"}, True]:
+            with self.subTest(username=username):
+                self.assertIsNone(_extract_user_identity({"email": username}, self._settings(prefix="oidc:")))
+
     def test_missing_groups_returns_empty_list(self):
         payload = {"email": "jane@acme.com"}
         identity = _extract_user_identity(payload, self._settings())

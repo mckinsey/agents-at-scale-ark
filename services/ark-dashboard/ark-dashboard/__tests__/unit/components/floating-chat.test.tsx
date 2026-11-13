@@ -10,6 +10,7 @@ import {
 } from '@/atoms/experimental-features';
 import { lastConversationIdAtom } from '@/atoms/internal-states';
 import FloatingChat from '@/components/floating-chat';
+import type * as McpCredentialsModule from '@/lib/hooks/use-chat-mcp-credentials';
 import type { QueryDetailResponse } from '@/lib/services';
 import { chatService } from '@/lib/services';
 
@@ -25,6 +26,23 @@ vi.mock('@/providers/NamespaceProvider', () => ({
     isNamespaceResolved: true,
     isPending: false,
     readOnlyMode: false,
+  }),
+}));
+
+vi.mock('@/lib/hooks/use-chat-mcp-credentials', async importOriginal => ({
+  ...(await importOriginal<typeof McpCredentialsModule>()),
+  useChatMcpCredentials: () => ({
+    rows: [],
+    credentials: [],
+    blocked: false,
+    servers: [],
+    isServersPending: false,
+    secrets: [],
+    isSecretsPending: false,
+    isSecretsError: false,
+    addRow: vi.fn(),
+    updateRow: vi.fn(),
+    removeRow: vi.fn(),
   }),
 }));
 
@@ -372,15 +390,12 @@ describe('FloatingChat', () => {
           _input,
           _targetType,
           _targetName,
-          _sessionId,
-          _conversationId,
-          _timeout,
-          abortSignal,
+          options,
         ) {
           yield { choices: [{ delta: { content: 'partial' } }] };
           await new Promise<void>((_resolve, reject) => {
-            if (abortSignal?.aborted) return reject(makeAbortError());
-            abortSignal?.addEventListener(
+            if (options?.abortSignal?.aborted) return reject(makeAbortError());
+            options?.abortSignal?.addEventListener(
               'abort',
               () => reject(makeAbortError()),
               { once: true },
@@ -444,16 +459,13 @@ describe('FloatingChat', () => {
           _input,
           _targetType,
           _targetName,
-          _sessionId,
-          _conversationId,
-          _timeout,
-          abortSignal,
+          options,
         ) {
           yield { choices: [{ delta: { content: 'part1' } }] };
           const late = new Promise<void>(resolve => setTimeout(resolve, 50));
           const released = new Promise<never>((_resolve, reject) => {
-            if (abortSignal?.aborted) return reject(makeAbortError());
-            abortSignal?.addEventListener(
+            if (options?.abortSignal?.aborted) return reject(makeAbortError());
+            options?.abortSignal?.addEventListener(
               'abort',
               () => reject(makeAbortError()),
               { once: true },
@@ -508,15 +520,12 @@ describe('FloatingChat', () => {
           _input,
           _targetType,
           _targetName,
-          _sessionId,
-          _conversationId,
-          _timeout,
-          abortSignal,
+          options,
         ) {
           yield { choices: [{ delta: { content: 'partial' } }] };
           await new Promise<void>((_resolve, reject) => {
-            if (abortSignal?.aborted) return reject(makeAbortError());
-            abortSignal?.addEventListener(
+            if (options?.abortSignal?.aborted) return reject(makeAbortError());
+            options?.abortSignal?.addEventListener(
               'abort',
               () => reject(makeAbortError()),
               { once: true },
@@ -560,15 +569,12 @@ describe('FloatingChat', () => {
           _input,
           _targetType,
           _targetName,
-          _sessionId,
-          _conversationId,
-          _timeout,
-          abortSignal,
+          options,
         ) {
           yield { choices: [{ delta: { content: 'partial' } }] };
           await new Promise<void>((_resolve, reject) => {
-            if (abortSignal?.aborted) return reject(makeAbortError());
-            abortSignal?.addEventListener(
+            if (options?.abortSignal?.aborted) return reject(makeAbortError());
+            options?.abortSignal?.addEventListener(
               'abort',
               () => reject(makeAbortError()),
               { once: true },
@@ -615,16 +621,13 @@ describe('FloatingChat', () => {
           _input,
           _targetType,
           _targetName,
-          _sessionId,
-          _conversationId,
-          _timeout,
-          abortSignal,
+          options,
         ) {
           yield { choices: [{ delta: { content: 'part1' } }] };
           const late = new Promise<void>(resolve => setTimeout(resolve, 500));
           const released = new Promise<never>((_resolve, reject) => {
-            if (abortSignal?.aborted) return reject(makeAbortError());
-            abortSignal?.addEventListener(
+            if (options?.abortSignal?.aborted) return reject(makeAbortError());
+            options?.abortSignal?.addEventListener(
               'abort',
               () => reject(makeAbortError()),
               { once: true },
@@ -1108,11 +1111,14 @@ describe('FloatingChat', () => {
           'Test message',
           'agent',
           'Test Agent',
-          expect.any(String),
-          undefined, // conversationId
-          '5m', // timeout
-          undefined, // parameters
-          undefined, // annotations
+          {
+            sessionId: expect.any(String),
+            conversationId: undefined,
+            timeout: '5m',
+            parameters: undefined,
+            overrides: [],
+            annotations: undefined,
+          },
         );
       });
 
@@ -1238,11 +1244,14 @@ describe('FloatingChat', () => {
           'Test message',
           'agent',
           'Test Agent',
-          expect.any(String),
-          undefined,
-          '5m',
-          undefined, // parameters
-          undefined, // annotations
+          {
+            sessionId: expect.any(String),
+            conversationId: undefined,
+            timeout: '5m',
+            parameters: undefined,
+            overrides: [],
+            annotations: undefined,
+          },
         );
       });
 

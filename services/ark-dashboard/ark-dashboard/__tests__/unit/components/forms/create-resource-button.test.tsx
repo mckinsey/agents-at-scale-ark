@@ -7,6 +7,7 @@ import { CreateResourceButton } from '@/components/forms/shared/create-resource-
 import { APIError } from '@/lib/api/client';
 
 const createConfiguration = vi.fn();
+const createSecret = vi.fn();
 
 vi.mock('@/lib/services/configurations', () => ({
   configurationsService: {
@@ -17,7 +18,8 @@ vi.mock('@/lib/services/configurations', () => ({
 
 vi.mock('@/lib/services/secrets', () => ({
   secretsService: {
-    create: vi.fn(),
+    create: (namespace: string, request: unknown) =>
+      createSecret(namespace, request),
   },
 }));
 
@@ -52,6 +54,28 @@ function renderButton(
 describe('CreateResourceButton', () => {
   beforeEach(() => {
     createConfiguration.mockReset();
+    createSecret.mockReset();
+  });
+
+  it('creates secrets as shared', async () => {
+    createSecret.mockResolvedValue({ name: 'github-token' });
+    const { onCreated } = renderButton({ kind: 'secret' });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Add New' }));
+    await userEvent.type(screen.getByLabelText('Name'), 'github-token');
+    await userEvent.type(screen.getByLabelText('Value'), 'ghp-token');
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+
+    await waitFor(() =>
+      expect(onCreated).toHaveBeenCalledWith('github-token'),
+    );
+    expect(createSecret).toHaveBeenCalledWith('test-namespace', {
+      name: 'github-token',
+      string_data: { token: 'ghp-token' },
+      labels: [],
+      type: 'Opaque',
+      scope: 'shared',
+    });
   });
 
   it('reports the created name and closes', async () => {

@@ -7,10 +7,12 @@ import (
 	"strings"
 
 	admissionv1 "k8s.io/api/admission/v1"
+	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/annotations"
+	"mckinsey.com/ark/internal/labels"
 	"mckinsey.com/ark/internal/resolution"
 )
 
@@ -186,6 +188,26 @@ func isCreateAdmission(ctx context.Context) bool {
 		return false
 	}
 	return req.Operation == admissionv1.Create
+}
+
+func DefaultMCPServer(server *arkv1alpha1.MCPServer) {
+	name := server.GetName()
+	if name == "" {
+		return
+	}
+	serverLabels := server.GetLabels()
+	if len(k8svalidation.IsValidLabelValue(name)) > 0 {
+		if _, ok := serverLabels[labels.NameLabel]; ok {
+			delete(serverLabels, labels.NameLabel)
+			server.SetLabels(serverLabels)
+		}
+		return
+	}
+	if serverLabels == nil {
+		serverLabels = map[string]string{}
+	}
+	serverLabels[labels.NameLabel] = name
+	server.SetLabels(serverLabels)
 }
 
 func DefaultModel(model *arkv1alpha1.Model) {

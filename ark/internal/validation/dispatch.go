@@ -39,6 +39,8 @@ func ApplyDefaults(ctx context.Context, obj runtime.Object, lookup DefaultsLooku
 		DefaultAgent(o)
 	case *arkv1alpha1.Model:
 		DefaultModel(o)
+	case *arkv1alpha1.MCPServer:
+		DefaultMCPServer(o)
 	case *arkv1alpha1.Query:
 		DefaultQuery(ctx, o, lookup)
 	case *arkv1alpha1.Team:

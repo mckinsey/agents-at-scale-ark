@@ -14,8 +14,6 @@ import (
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/shared"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -23,6 +21,7 @@ import (
 	"mckinsey.com/ark/internal/common"
 	"mckinsey.com/ark/internal/eventing"
 	arkmcp "mckinsey.com/ark/internal/mcp"
+	"mckinsey.com/ark/internal/resolution"
 	"mckinsey.com/ark/internal/telemetry"
 )
 
@@ -669,28 +668,7 @@ func (h *HTTPExecutor) resolveHeaderValue(ctx context.Context, headerValue arkv1
 
 	// If secret reference is provided, resolve it
 	if headerValue.ValueFrom != nil && headerValue.ValueFrom.SecretKeyRef != nil {
-		secretRef := headerValue.ValueFrom.SecretKeyRef
-		secret := &corev1.Secret{}
-
-		namespacedName := types.NamespacedName{
-			Name:      secretRef.Name,
-			Namespace: namespace,
-		}
-
-		if err := h.K8sClient.Get(ctx, namespacedName, secret); err != nil {
-			return "", fmt.Errorf("failed to get secret %s/%s: %w", namespace, secretRef.Name, err)
-		}
-
-		if secret.Data == nil {
-			return "", fmt.Errorf("secret %s/%s has no data", namespace, secretRef.Name)
-		}
-
-		value, exists := secret.Data[secretRef.Key]
-		if !exists {
-			return "", fmt.Errorf("key %s not found in secret %s/%s", secretRef.Key, namespace, secretRef.Name)
-		}
-
-		return string(value), nil
+		return resolution.ResolveFromSecret(ctx, h.K8sClient, headerValue.ValueFrom.SecretKeyRef, namespace)
 	}
 
 	return "", fmt.Errorf("header value must specify either value or valueFrom.secretKeyRef")

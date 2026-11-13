@@ -33,6 +33,9 @@ spec:
               kind: Secret
               metadata:
                 name: default-model-token
+                labels:
+                  ark.mckinsey.com/resource-type: secret
+                  ark.mckinsey.com/scope: shared
               type: Opaque
               data:
                 token: (base64_encode($azure.token))

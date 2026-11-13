@@ -21,6 +21,9 @@ data:
     oauth2:
       # Skip the consent screen — one less click per login when switching users.
       skipApprovalScreen: true
+      {{- with (.Values.oauth2).passwordConnector }}
+      passwordConnector: {{ . | quote }}
+      {{- end }}
 
     expiry:
       refreshTokens:

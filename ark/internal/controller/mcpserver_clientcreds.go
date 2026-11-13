@@ -18,6 +18,7 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkmcp "mckinsey.com/ark/internal/mcp"
+	"mckinsey.com/ark/internal/secretscope"
 )
 
 // tokenRenewalSkew is how long before expiry a token is treated as
@@ -248,6 +249,9 @@ func (r *MCPServerReconciler) readSigningKey(ctx context.Context, mcpServer *ark
 			return nil, fmt.Errorf("signing key Secret %q not found in namespace %q", ref.Name, mcpServer.Namespace)
 		}
 		return nil, fmt.Errorf("reading signing key Secret %q: %w", ref.Name, err)
+	}
+	if err := secretscope.CheckResolvable(secret, secretscope.RejectPersonal); err != nil {
+		return nil, err
 	}
 
 	pem, ok := secret.Data[key]

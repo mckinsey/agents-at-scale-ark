@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { chatHistoryAtom } from '@/atoms/chat-history';
 import { lastConversationIdAtom } from '@/atoms/internal-states';
 import { EmbeddedChatPanel } from '@/components/chat/embedded-chat-panel';
+import type * as McpCredentialsModule from '@/lib/hooks/use-chat-mcp-credentials';
 import { chatService } from '@/lib/services/chat';
 
 vi.mock('@/providers/NamespaceProvider', () => ({
@@ -15,6 +16,23 @@ vi.mock('@/providers/NamespaceProvider', () => ({
     isNamespaceResolved: true,
     isPending: false,
     readOnlyMode: false,
+  }),
+}));
+
+vi.mock('@/lib/hooks/use-chat-mcp-credentials', async importOriginal => ({
+  ...(await importOriginal<typeof McpCredentialsModule>()),
+  useChatMcpCredentials: () => ({
+    rows: [],
+    credentials: [],
+    blocked: false,
+    servers: [],
+    isServersPending: false,
+    secrets: [],
+    isSecretsPending: false,
+    isSecretsError: false,
+    addRow: vi.fn(),
+    updateRow: vi.fn(),
+    removeRow: vi.fn(),
   }),
 }));
 

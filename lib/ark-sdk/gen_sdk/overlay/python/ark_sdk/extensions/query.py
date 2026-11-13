@@ -22,6 +22,7 @@ from ..executor import (
 )
 from ..impersonation import ImpersonationConfig
 from ..k8s import SecretClient, apply_impersonation_headers
+from ..secret_scope import PersonalSecretError
 
 logger = logging.getLogger(__name__)
 
@@ -382,6 +383,8 @@ async def _resolve_secret_ref(
         sc = SecretClient(namespace=namespace, impersonation=impersonation)
         result = await sc.get_secret_value(ref_name, ref_key)
         return base64.b64decode(result["value"]).decode("utf-8")
+    except PersonalSecretError:
+        raise
     except Exception as e:
         logger.warning(f"Failed to resolve secret {ref_name}/{ref_key}: {e}")
         return ""

@@ -6,10 +6,13 @@ from typing import Optional
 from ark_sdk.models.a2_a_server_v1prealpha1 import A2AServerV1prealpha1
 from ark_sdk.models.a2_a_server_v1prealpha1_spec import A2AServerV1prealpha1Spec
 from ark_sdk.impersonation import ImpersonationConfig
+from ark_sdk.secret_scope import SecretScope
 
 from ark_sdk.client import with_ark_client
 
 from ...auth.dependencies import get_impersonation_config
+from ...auth.secret_scope import get_secret_scope
+from ...services.personal_secret_refs import enforce_personal_secret_refs
 
 from ...models.a2a_servers import (
     A2AServerResponse,
@@ -114,7 +117,7 @@ async def list_a2a_servers(request: Request, namespace: Optional[str] = Query(No
 
 @router.post("", response_model=A2AServerDetailResponse, include_in_schema=False)
 @handle_k8s_errors(operation="create", resource_type="a2a server")
-async def create_a2a_server(request: Request, body: A2AServerCreateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> A2AServerDetailResponse:
+async def create_a2a_server(request: Request, body: A2AServerCreateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config), secret_scope: SecretScope = Depends(get_secret_scope)) -> A2AServerDetailResponse:
     """
     Create a new A2AServer CR.
     
@@ -140,6 +143,9 @@ async def create_a2a_server(request: Request, body: A2AServerCreateRequest, name
             spec=A2AServerV1prealpha1Spec(**a2a_server_spec)
         )
         
+        await enforce_personal_secret_refs(
+            a2a_server_resource.to_dict()["spec"], namespace=namespace, caller_scope=secret_scope
+        )
         created_a2a_server = await ark_client.a2aservers.a_create(a2a_server_resource)
         
         return a2a_server_to_detail_response(created_a2a_server.to_dict())
@@ -166,7 +172,7 @@ async def get_a2a_server(request: Request, a2a_server_name: str, namespace: Opti
 
 @router.put("/{a2a_server_name}", response_model=A2AServerDetailResponse, include_in_schema=False)
 @handle_k8s_errors(operation="update", resource_type="a2a server")
-async def update_a2a_server(request: Request, a2a_server_name: str, body: A2AServerUpdateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> A2AServerDetailResponse:
+async def update_a2a_server(request: Request, a2a_server_name: str, body: A2AServerUpdateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config), secret_scope: SecretScope = Depends(get_secret_scope)) -> A2AServerDetailResponse:
     """
     Update a A2AServer CR by name.
     
@@ -196,6 +202,9 @@ async def update_a2a_server(request: Request, a2a_server_name: str, body: A2ASer
         # Update the A2A server
         updated_resource = A2AServerV1prealpha1(**existing_dict)
         
+        await enforce_personal_secret_refs(
+            updated_resource.to_dict()["spec"], namespace=namespace, caller_scope=secret_scope
+        )
         updated_a2a_server = await ark_client.a2aservers.a_update(updated_resource)
         
         return a2a_server_to_detail_response(updated_a2a_server.to_dict())

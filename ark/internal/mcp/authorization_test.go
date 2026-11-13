@@ -18,6 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/secretscope"
 )
 
 const (
@@ -287,4 +288,21 @@ func TestApplyBearer(t *testing.T) {
 			assert.Equal(t, tt.want, tt.headers)
 		})
 	}
+}
+
+func TestResolveAuthorizationMaterialRejectsPersonalSecret(t *testing.T) {
+	secret := newAuthTestSecret(map[string][]byte{arkv1alpha1.DefaultAccessTokenKey: []byte("personal-access-token")})
+	secret.Labels = map[string]string{
+		secretscope.ResourceTypeLabel: secretscope.SecretResourceType,
+		secretscope.ScopeLabel:        "user-0123456789abcdef",
+	}
+	reader := newAuthTestReader(secret)
+
+	material, warnings, err := ResolveAuthorizationMaterial(context.Background(), reader,
+		newAuthTestMCPServer(&arkv1alpha1.TokenSecretReference{Name: testAuthSecretName}))
+
+	require.ErrorIs(t, err, secretscope.ErrPersonalSecret)
+	assert.NotContains(t, err.Error(), "personal-access-token")
+	assert.Nil(t, material)
+	assert.Empty(t, warnings)
 }

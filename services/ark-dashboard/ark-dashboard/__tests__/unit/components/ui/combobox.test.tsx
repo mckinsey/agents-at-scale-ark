@@ -1,7 +1,9 @@
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import userEvent from '@testing-library/user-event';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
+  Autocomplete,
   Combobox,
   ComboboxAnchor,
   ComboboxContent,
@@ -11,6 +13,12 @@ import {
   ComboboxTrigger,
   ComboboxValue,
 } from '@/components/ui/combobox';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { InputGroup } from '@/components/ui/input-group';
 
 describe('Combobox', () => {
@@ -158,6 +166,86 @@ describe('Combobox', () => {
       );
 
       expect(container.querySelector('[data-slot="combobox-anchor"]')).toBeInTheDocument();
+    });
+  });
+
+  describe('Autocomplete', () => {
+    it('renders its items and reports typed text', async () => {
+      const user = userEvent.setup();
+      const onValueChange = vi.fn();
+      render(
+        <Autocomplete
+          items={['alpha', 'beta']}
+          onValueChange={onValueChange}
+          openOnInputClick>
+          <ComboboxAnchor>
+            <InputGroup>
+              <ComboboxInput placeholder="Name" />
+            </InputGroup>
+          </ComboboxAnchor>
+          <ComboboxContent>
+            <ComboboxList>
+              {(item: string) => (
+                <ComboboxItem key={item} value={item}>
+                  {item}
+                </ComboboxItem>
+              )}
+            </ComboboxList>
+          </ComboboxContent>
+        </Autocomplete>,
+      );
+
+      await user.click(screen.getByPlaceholderText('Name'));
+      expect(
+        await screen.findByRole('option', { name: 'alpha' }),
+      ).toBeInTheDocument();
+      expect(screen.getByRole('option', { name: 'beta' })).toBeInTheDocument();
+
+      await user.type(screen.getByPlaceholderText('Name'), 'gamma');
+      expect(onValueChange).toHaveBeenLastCalledWith(
+        'gamma',
+        expect.anything(),
+      );
+    });
+  });
+
+  describe('ComboboxContent stacking', () => {
+    const openCombobox = (
+      <Combobox open>
+        <ComboboxAnchor>
+          <InputGroup>
+            <ComboboxInput />
+          </InputGroup>
+        </ComboboxAnchor>
+        <ComboboxContent>
+          <ComboboxList>
+            <ComboboxItem value="item">Item</ComboboxItem>
+          </ComboboxList>
+        </ComboboxContent>
+      </Combobox>
+    );
+    const positioner = () =>
+      screen.getByText('Item').closest('[data-slot="combobox-content"]')
+        ?.parentElement;
+
+    it('stays at the tooltip layer outside a dialog', () => {
+      render(openCombobox);
+      expect(positioner()).toHaveClass('z-50');
+      expect(positioner()).not.toHaveClass('z-[60]');
+    });
+
+    it('sits above the dialog when portaled into one', () => {
+      render(
+        <Dialog open>
+          <DialogContent>
+            <DialogTitle>Title</DialogTitle>
+            <DialogDescription>Description</DialogDescription>
+            {openCombobox}
+          </DialogContent>
+        </Dialog>,
+      );
+      expect(positioner()).toHaveClass('z-[60]');
+      expect(positioner()?.closest('[role="dialog"]')).not.toBeNull();
     });
   });
 });

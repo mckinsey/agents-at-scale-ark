@@ -77,6 +77,9 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: api-credentials
+  labels:
+    ark.mckinsey.com/resource-type: secret
+    ark.mckinsey.com/scope: shared
 type: Opaque
 data:
   payment-token: cGF5bWVudC10b2tlbi0xMjM0NQ==  # "payment-token-12345"

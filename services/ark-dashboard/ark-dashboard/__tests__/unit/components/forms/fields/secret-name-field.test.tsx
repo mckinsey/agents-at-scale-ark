@@ -1,0 +1,435 @@
+import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { createRef, useState } from 'react';
+import { describe, expect, it, vi } from 'vitest';
+
+import { SecretNameField } from '@/components/forms/fields/secret-name-field';
+
+vi.mock('@/components/forms/shared/create-resource-dialog', () => ({
+  CreateResourceButton: ({
+    onCreated,
+    disabled,
+  }: {
+    onCreated: (name: string) => void;
+    disabled?: boolean;
+  }) => (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={() => onCreated('created-secret')}>
+      Add New
+    </button>
+  ),
+}));
+
+const SECRETS = [{ name: 'openai-token' }, { name: 'github-pat' }];
+
+const HINT = /Not in the list of Ark secrets/;
+const PERSONAL_ERROR =
+  /Personal secrets can be used only in the MCP server overrides/;
+
+type FieldProps = React.ComponentProps<typeof SecretNameField>;
+
+function renderField(props: Partial<FieldProps> = {}) {
+  const onChange = vi.fn();
+  render(
+    <SecretNameField
+      value=""
+      onChange={onChange}
+      secrets={SECRETS}
+      aria-label="Secret name"
+      {...props}
+    />,
+  );
+  return { onChange };
+}
+
+function StatefulField({
+  onChange,
+  secrets = SECRETS,
+}: {
+  onChange: (value: string) => void;
+  secrets?: FieldProps['secrets'];
+}) {
+  const [value, setValue] = useState('');
+  return (
+    <SecretNameField
+      value={value}
+      onChange={next => {
+        setValue(next);
+        onChange(next);
+      }}
+      secrets={secrets}
+      aria-label="Secret name"
+    />
+  );
+}
+
+const input = () => screen.getByRole('combobox', { name: 'Secret name' });
+
+describe('SecretNameField', () => {
+  it('shows a stored name that is not in the list without changing it', async () => {
+    const user = userEvent.setup();
+    const { onChange } = renderField({ value: 'kubectl-made' });
+
+    expect(input()).toHaveValue('kubectl-made');
+    expect(screen.getByText(HINT)).toBeInTheDocument();
+
+    await user.click(input());
+    await user.tab();
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('keeps a stored name when Escape is pressed', async () => {
+    const user = userEvent.setup();
+    const { onChange } = renderField({ value: 'kubectl-made' });
+
+    await user.click(input());
+    await user.keyboard('{Escape}{Escape}');
+
+    expect(onChange).not.toHaveBeenCalled();
+    expect(input()).toHaveValue('kubectl-made');
+  });
+
+  it('hides the hint while the list is loading', () => {
+    renderField({ value: 'kubectl-made', isPending: true });
+    expect(screen.queryByText(HINT)).not.toBeInTheDocument();
+  });
+
+  it('hides the hint when the stored name is in the list', () => {
+    renderField({ value: 'openai-token' });
+    expect(screen.queryByText(HINT)).not.toBeInTheDocument();
+  });
+
+  it('commits a typed name that is not in the list', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<StatefulField onChange={onChange} />);
+
+    await user.type(input(), 'new-secret');
+
+    expect(onChange).toHaveBeenLastCalledWith('new-secret');
+    expect(input()).toHaveValue('new-secret');
+  });
+
+  it('trims whitespace around a pasted name', async () => {
+    const user = userEvent.setup();
+    const { onChange } = renderField();
+
+    await user.click(input());
+    await user.paste('  pasted-secret \n');
+
+    expect(onChange).toHaveBeenLastCalledWith('pasted-secret');
+  });
+
+  it('commits a name picked from the list', async () => {
+    const user = userEvent.setup();
+    const { onChange } = renderField();
+
+    await user.click(input());
+    await user.click(await screen.findByRole('option', { name: 'github-pat' }));
+
+    expect(onChange).toHaveBeenLastCalledWith('github-pat');
+  });
+
+  it('says a name can be typed when the list is empty', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<StatefulField onChange={onChange} secrets={[]} />);
+
+    await user.click(input());
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          /No Ark secrets in this namespace\. Type a secret name\./,
+        ),
+      ).toBeInTheDocument();
+    });
+
+    await user.type(input(), 'kubectl-made');
+
+    expect(onChange).toHaveBeenLastCalledWith('kubectl-made');
+  });
+
+  it('passes the name of a secret created with Add New', async () => {
+    const user = userEvent.setup();
+    const { onChange } = renderField();
+
+    await user.click(screen.getByRole('button', { name: 'Add New' }));
+
+    expect(onChange).toHaveBeenCalledWith('created-secret');
+  });
+
+  it('clears the name', async () => {
+    const user = userEvent.setup();
+    const { onChange } = renderField({ value: 'openai-token' });
+
+    await user.click(screen.getByRole('button', { name: 'Clear secret' }));
+
+    expect(onChange).toHaveBeenLastCalledWith('');
+  });
+
+  it('disables the input when disabled', () => {
+    renderField({ disabled: true });
+    expect(input()).toBeDisabled();
+  });
+
+  it('hides the hint while the field has focus', async () => {
+    const user = userEvent.setup();
+    renderField({ value: 'kubectl-made' });
+
+    await user.click(input());
+    expect(screen.queryByText(HINT)).not.toBeInTheDocument();
+
+    await user.tab();
+    expect(screen.getByText(HINT)).toBeInTheDocument();
+  });
+
+  it('says the list failed to load instead of flagging the stored name', async () => {
+    const user = userEvent.setup();
+    renderField({ value: 'kubectl-made', secrets: undefined, isError: true });
+
+    expect(screen.queryByText(HINT)).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Clear secret' }));
+    await user.click(input());
+    expect(
+      await screen.findByText(/Couldn't load the Ark secrets/),
+    ).toBeInTheDocument();
+  });
+
+  it('does not flag a secret just created with Add New', async () => {
+    const user = userEvent.setup();
+    render(<StatefulField onChange={vi.fn()} />);
+
+    await user.click(screen.getByRole('button', { name: 'Add New' }));
+
+    expect(input()).toHaveValue('created-secret');
+    expect(screen.queryByText(HINT)).not.toBeInTheDocument();
+  });
+
+  function renderInForm() {
+    const onSubmit = vi.fn((event: React.FormEvent) => event.preventDefault());
+    render(
+      <form onSubmit={onSubmit}>
+        <StatefulField onChange={vi.fn()} />
+        <button type="submit">Create</button>
+      </form>,
+    );
+    return { onSubmit };
+  }
+
+  it('closes the list on Enter without submitting the form', async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = renderInForm();
+
+    await user.type(input(), 'no-match');
+    await screen.findByText(/No Ark secret matches/);
+    await user.keyboard('{Enter}');
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(input()).toHaveValue('no-match');
+  });
+
+  it('submits the form on Enter once the list is closed', async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = renderInForm();
+
+    await user.click(input());
+    await user.keyboard('{Escape}{Enter}');
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
+  it('still picks the highlighted item on Enter', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<StatefulField onChange={onChange} />);
+
+    await user.type(input(), 'github');
+    await user.keyboard('{ArrowDown}{Enter}');
+
+    expect(onChange).toHaveBeenLastCalledWith('github-pat');
+  });
+
+  it('links the error to the input', () => {
+    renderField({ invalid: true, error: 'API Key is required' });
+
+    const error = screen.getByRole('alert');
+    expect(error).toHaveTextContent('API Key is required');
+    expect(input()).toHaveAttribute(
+      'aria-describedby',
+      expect.stringContaining(error.id),
+    );
+  });
+
+  it('forwards the ref to the input', () => {
+    const ref = createRef<HTMLInputElement>();
+    renderField({ ref });
+    expect(ref.current).toBe(input());
+  });
+
+  describe('scope', () => {
+    const PERSONAL_NAME = 'u-0123456789abcdef-github-pat';
+    const SCOPED = [
+      {
+        name: 'openai-token',
+        display_name: 'openai-token',
+        scope: 'shared' as const,
+      },
+      {
+        name: PERSONAL_NAME,
+        display_name: 'github-pat',
+        scope: 'personal' as const,
+      },
+    ];
+
+    it('lists a personal secret by its display name with a Personal badge and its real name', async () => {
+      const user = userEvent.setup();
+      renderField({ secrets: SCOPED });
+
+      await user.click(input());
+
+      const personal = await screen.findByRole('option', {
+        name: /github-pat/,
+      });
+      expect(within(personal).getByText('github-pat')).toBeInTheDocument();
+      expect(within(personal).getByText(PERSONAL_NAME)).toBeInTheDocument();
+      expect(within(personal).getByText('Personal')).toBeInTheDocument();
+    });
+
+    it('shows no badge and no second name for a shared secret', async () => {
+      const user = userEvent.setup();
+      renderField({ secrets: SCOPED });
+
+      await user.click(input());
+
+      const shared = await screen.findByRole('option', {
+        name: 'openai-token',
+      });
+      expect(within(shared).queryByText('Personal')).not.toBeInTheDocument();
+      expect(within(shared).getAllByText('openai-token')).toHaveLength(1);
+    });
+
+    it('commits the real name when a personal secret is picked', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(<StatefulField onChange={onChange} secrets={SCOPED} />);
+
+      await user.click(input());
+      await user.click(
+        await screen.findByRole('option', { name: /github-pat/ }),
+      );
+
+      expect(onChange).toHaveBeenLastCalledWith(PERSONAL_NAME);
+      expect(input()).toHaveValue(PERSONAL_NAME);
+    });
+
+    it('does not flag a stored personal name as missing', () => {
+      renderField({
+        secrets: SCOPED,
+        value: PERSONAL_NAME,
+        allowPersonal: true,
+      });
+
+      expect(screen.queryByText(HINT)).not.toBeInTheDocument();
+    });
+
+    it('keeps a promoted secret apart from a shared one with the same display name', async () => {
+      const user = userEvent.setup();
+      const PROMOTED = 'u-fedcba9876543210-openai';
+      const onChange = vi.fn();
+      render(
+        <StatefulField
+          onChange={onChange}
+          secrets={[
+            { name: 'openai', display_name: 'openai', scope: 'shared' },
+            { name: PROMOTED, display_name: 'openai', scope: 'shared' },
+          ]}
+        />,
+      );
+
+      await user.click(input());
+
+      const plain = await screen.findByRole('option', { name: 'openai' });
+      const promoted = screen.getByRole('option', {
+        name: `openai ${PROMOTED}`,
+      });
+      expect(within(plain).queryByText(PROMOTED)).not.toBeInTheDocument();
+      expect(within(promoted).getByText(PROMOTED)).toBeInTheDocument();
+      expect(within(promoted).queryByText('Personal')).not.toBeInTheDocument();
+
+      await user.click(promoted);
+      expect(onChange).toHaveBeenLastCalledWith(PROMOTED);
+    });
+
+    it('flags a typed personal name that is not in the list', () => {
+      renderField({ value: PERSONAL_NAME });
+
+      expect(screen.getByRole('alert')).toHaveTextContent(PERSONAL_ERROR);
+      expect(input()).toHaveAttribute('aria-invalid', 'true');
+      expect(screen.queryByText(HINT)).not.toBeInTheDocument();
+    });
+
+    it('flags a personal secret picked from the list', () => {
+      renderField({ secrets: SCOPED, value: PERSONAL_NAME });
+
+      expect(screen.getByRole('alert')).toHaveTextContent(PERSONAL_ERROR);
+    });
+
+    it('leaves a personal name to the caller where personal secrets are allowed', () => {
+      renderField({ value: PERSONAL_NAME, allowPersonal: true });
+
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(screen.queryByText(HINT)).not.toBeInTheDocument();
+    });
+
+    it('does not flag a promoted secret listed as shared', () => {
+      const PROMOTED = 'u-fedcba9876543210-openai';
+      renderField({
+        secrets: [{ name: PROMOTED, display_name: 'openai', scope: 'shared' }],
+        value: PROMOTED,
+      });
+
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('waits for the list before flagging a personal name', () => {
+      renderField({ value: PERSONAL_NAME, isPending: true });
+
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('does not flag names that only start with u-', () => {
+      renderField({ value: 'u-team-token' });
+
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(screen.getByText(HINT)).toBeInTheDocument();
+    });
+
+    it('keeps an error passed by the form over the personal one', () => {
+      renderField({ value: PERSONAL_NAME, error: 'API Key is required' });
+
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'API Key is required',
+      );
+    });
+
+    it('still renders plain names when the list has no scope details', async () => {
+      const user = userEvent.setup();
+      renderField();
+
+      await user.click(input());
+
+      const option = await screen.findByRole('option', { name: 'github-pat' });
+      expect(within(option).queryByText('Personal')).not.toBeInTheDocument();
+    });
+  });
+
+  it('disables Add New together with the field', () => {
+    renderField({ disabled: true });
+
+    expect(input()).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Add New' })).toBeDisabled();
+  });
+});
