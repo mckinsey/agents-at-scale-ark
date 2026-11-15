@@ -507,6 +507,29 @@ describe('SessionsSection', () => {
       expect(screen.getByPlaceholderText('All templates')).toHaveValue('data');
       expect(Schedule).not.toHaveBeenCalled();
     });
+
+    it('should not re-render the list body while typing in the template filter', () => {
+      const isPending = vi.fn(() => false);
+      vi.mocked(useWorkflowLifecycleActions).mockReturnValue({
+        runAction: mockRunAction,
+        isPending,
+      } as unknown as ReturnType<typeof useWorkflowLifecycleActions>);
+
+      render(<SessionsSection />);
+      expect(isPending).toHaveBeenCalled();
+
+      fireEvent.change(screen.getByPlaceholderText('All templates'), {
+        target: { value: 'd' },
+      });
+      isPending.mockClear();
+
+      fireEvent.change(screen.getByPlaceholderText('All templates'), {
+        target: { value: 'data' },
+      });
+
+      expect(screen.getByPlaceholderText('All templates')).toHaveValue('data');
+      expect(isPending).not.toHaveBeenCalled();
+    });
   });
 
   describe('Session List', () => {

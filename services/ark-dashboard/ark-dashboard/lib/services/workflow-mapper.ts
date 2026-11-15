@@ -666,7 +666,9 @@ function mapArgoWorkflowToSessionCached(
   let session = sessionCache.get(workflow);
   if (!session) {
     session = mapArgoWorkflowToSession(workflow);
-    sessionCache.set(workflow, session);
+    if (isTerminalPhase(workflow.status?.phase)) {
+      sessionCache.set(workflow, session);
+    }
   }
   return session;
 }
