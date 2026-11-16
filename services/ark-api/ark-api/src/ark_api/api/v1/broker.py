@@ -1,6 +1,5 @@
 """Broker API endpoints for real-time streaming of traces, messages, and chunks."""
 import asyncio
-import contextlib
 import json
 import logging
 import os
@@ -23,7 +22,7 @@ from ...constants.query_phases import QUERY_PHASE_ERROR, TERMINAL_QUERY_PHASES
 from ...core.constants import GROUP
 
 from ...utils.memory_client import get_memory_service_address, get_all_memory_resources
-from ...utils.parse_duration import parse_duration_to_seconds
+from ...utils.query_watch import query_error_message
 from ...utils.streaming import StreamingErrorResponse
 from ...utils.url_validation import validate_path_segment, build_safe_url, validate_and_build_url
 from .client_utils import get_impersonating_api_client
@@ -36,9 +35,7 @@ VERSION = "v1alpha1"
 BROKER_CONNECT_TIMEOUT = float(os.getenv('BROKER_CONNECT_TIMEOUT', '10.0'))
 BROKER_CHUNK_IDLE_TIMEOUT_SECONDS = float(os.getenv('BROKER_CHUNK_IDLE_TIMEOUT_SECONDS', '330'))
 CHUNK_TERMINAL_GRACE_SECONDS = 3.0
-CHUNK_ACTIVE_TIMEOUT_MARGIN_SECONDS = 60
 QUERY_WATCH_TIMEOUT_SECONDS = 300
-DEFAULT_QUERY_TIMEOUT = "30m"
 
 SSE_DONE_LINE = "data: [DONE]"
 SSE_DONE_EVENT = f"{SSE_DONE_LINE}\n\n"
@@ -127,17 +124,6 @@ def sse_error_event(message: str, error_type: str, code: str) -> str:
     return f"data: {json.dumps(error)}\n\n"
 
 
-def query_error_message(status: dict) -> str:
-    """Pick the most specific error text from a Query status."""
-    content = (status.get("response") or {}).get("content")
-    if content:
-        return content
-    for condition in reversed(status.get("conditions") or []):
-        if condition.get("message"):
-            return condition["message"]
-    return "Query failed"
-
-
 def terminal_sse_events(status: dict) -> list[str]:
     """Build the closing SSE events for a Query that reached a terminal phase."""
     if status.get("phase") != QUERY_PHASE_ERROR:
@@ -159,51 +145,43 @@ class QueryPhaseTracker:
         self.namespace = namespace
         self.namespace_given = namespace_given
         self.impersonation = impersonation
-        self.active = False
-        self.timeout_seconds: Optional[int] = None
         self.closing_events: list[str] = []
         self.terminal = asyncio.Event()
 
     def observe(self, query: dict) -> bool:
         """Record the Query's state and return True once it is terminal."""
         status = query.get("status") or {}
-        self.timeout_seconds = parse_duration_to_seconds((query.get("spec") or {}).get("timeout") or DEFAULT_QUERY_TIMEOUT)
         if status.get("phase") in TERMINAL_QUERY_PHASES:
             self.finish(terminal_sse_events(status))
             return True
-        self.active = True
         return False
 
     def finish(self, events: list[str]) -> None:
-        self.active = False
         self.closing_events = events
         self.terminal.set()
 
     async def run(self) -> None:
         """Track the phase until it is terminal. Raises when tracking cannot continue."""
-        try:
-            async with get_impersonating_api_client(self.impersonation) as api:
-                custom_api = k8s_client.CustomObjectsApi(api)
-                while True:
-                    try:
-                        query = await custom_api.get_namespaced_custom_object(
-                            GROUP, VERSION, self.namespace, "queries", self.query_name
-                        )
-                    except ApiException as e:
-                        if e.status == 404 and self.namespace_given:
-                            self.finish([sse_error_event("Query not found", "server_error", "query_not_found"), SSE_DONE_EVENT])
-                            return
-                        raise
-                    if self.observe(query):
+        async with get_impersonating_api_client(self.impersonation) as api:
+            custom_api = k8s_client.CustomObjectsApi(api)
+            while True:
+                try:
+                    query = await custom_api.get_namespaced_custom_object(
+                        GROUP, VERSION, self.namespace, "queries", self.query_name
+                    )
+                except ApiException as e:
+                    if e.status == 404 and self.namespace_given:
+                        self.finish([sse_error_event("Query not found", "server_error", "query_not_found"), SSE_DONE_EVENT])
                         return
-                    try:
-                        if await self.watch(custom_api, query["metadata"]["resourceVersion"]):
-                            return
-                    except ApiException as e:
-                        if e.status != 410:
-                            raise
-        finally:
-            self.active = False
+                    raise
+                if self.observe(query):
+                    return
+                try:
+                    if await self.watch(custom_api, query["metadata"]["resourceVersion"]):
+                        return
+                except ApiException as e:
+                    if e.status != 410:
+                        raise
 
     async def watch(self, custom_api, resource_version: str) -> bool:
         """Watch until the Query is terminal (True) or the watch closes (False)."""
@@ -224,12 +202,6 @@ class QueryPhaseTracker:
                 if event["type"] in ("ADDED", "MODIFIED") and self.observe(event["raw_object"]):
                     return True
         return False
-
-    def idle_limit_seconds(self) -> float:
-        """Allow an active Query its own timeout; otherwise use the default idle limit."""
-        if self.active and self.timeout_seconds is not None:
-            return max(BROKER_CHUNK_IDLE_TIMEOUT_SECONDS, self.timeout_seconds + CHUNK_ACTIVE_TIMEOUT_MARGIN_SECONDS)
-        return BROKER_CHUNK_IDLE_TIMEOUT_SECONDS
 
 
 def report_tracker_failure(task: asyncio.Task, query_name: str) -> None:
@@ -266,7 +238,7 @@ async def watch_chunks_until_terminal(
             waiters = {next_line}
             if grace_deadline is None:
                 waiters.add(terminal_wait)
-                deadline = last_line_at + tracker.idle_limit_seconds()
+                deadline = last_line_at + BROKER_CHUNK_IDLE_TIMEOUT_SECONDS
             else:
                 deadline = grace_deadline
             if not tracker_task.done():
@@ -300,19 +272,17 @@ async def watch_chunks_until_terminal(
                     yield event
                 return
 
-            if loop.time() < last_line_at + tracker.idle_limit_seconds():
+            if loop.time() < last_line_at + BROKER_CHUNK_IDLE_TIMEOUT_SECONDS:
                 continue
-            idle_seconds = tracker.idle_limit_seconds()
-            logger.warning(f"No chunks for Query {query_name} in {idle_seconds:.0f}s, closing stream")
-            yield sse_error_event(f"No data from broker for {idle_seconds:.0f}s", "timeout_error", "broker_idle_timeout")
+            logger.warning(f"No chunks for Query {query_name} in {BROKER_CHUNK_IDLE_TIMEOUT_SECONDS:.0f}s, closing stream")
+            yield sse_error_event(f"No data from broker for {BROKER_CHUNK_IDLE_TIMEOUT_SECONDS:.0f}s", "timeout_error", "broker_idle_timeout")
             yield SSE_DONE_EVENT
             return
     finally:
-        for task in (next_line, terminal_wait, tracker_task):
+        tasks = (next_line, terminal_wait, tracker_task)
+        for task in tasks:
             task.cancel()
-        for task in (next_line, terminal_wait, tracker_task):
-            with contextlib.suppress(BaseException):
-                await task
+        await asyncio.gather(*tasks, return_exceptions=True)
         await stream.aclose()
 
 
