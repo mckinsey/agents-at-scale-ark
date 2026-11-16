@@ -35,7 +35,12 @@ class TestBuildHeaders(unittest.TestCase):
         config = ImpersonationConfig(username="jane@acme.com", groups=["team-a", "admins"])
         headers = _build_headers(config)
         self.assertEqual(headers["Impersonate-User"], "jane@acme.com")
-        self.assertEqual(headers["Impersonate-Group"], "team-a,admins")
+        self.assertEqual(headers["Impersonate-Group"], ["team-a", "admins"])
+
+    def test_comma_in_group_stays_one_value(self):
+        config = ImpersonationConfig(username="jane@acme.com", groups=["a,system:masters", "cn=devs,ou=groups,dc=corp"])
+        headers = _build_headers(config)
+        self.assertEqual(headers["Impersonate-Group"], ["a,system:masters", "cn=devs,ou=groups,dc=corp"])
 
 
 class TestGetClientImpersonation(unittest.TestCase):
@@ -51,7 +56,7 @@ class TestGetClientImpersonation(unittest.TestCase):
 
         mock_client_class.assert_called_once_with(
             "default",
-            default_headers={"Impersonate-User": "jane@acme.com", "Impersonate-Group": "team-a"},
+            default_headers={"Impersonate-User": "jane@acme.com", "Impersonate-Group": ["team-a"]},
             user_agent=None,
         )
 

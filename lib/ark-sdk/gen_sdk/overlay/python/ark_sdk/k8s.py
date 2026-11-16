@@ -36,9 +36,9 @@ USER_AGENT = "ArkSDK"
 # Make multi-group impersonation work for every ark_sdk consumer. Every path that
 # builds a Kubernetes client imports this module (the async clients here, the
 # generated sync clients in versions.py, and client.py), so applying the patch on
-# import guarantees a comma-joined Impersonate-Group is split into repeated
-# headers before it reaches the API server. Idempotent and a no-op unless a
-# comma-joined header is actually present.
+# import guarantees the Impersonate-Group list becomes repeated headers before
+# it reaches the API server. Idempotent and a no-op unless a group list is
+# actually present.
 _apply_impersonation_patch()
 
 
@@ -208,14 +208,13 @@ async def init_k8s():
 def apply_impersonation_headers(api: ApiClient, impersonation: Optional['ImpersonationConfig']) -> ApiClient:
     """Set the Impersonate-* default headers on an API client.
 
-    set_default_header stores headers in a plain dict, so groups must be
-    comma-joined here. impersonation_patch splits this back into one
+    Groups are stored as a list; impersonation_patch turns it into one
     Impersonate-Group header per group at the transport layer.
     """
     if impersonation:
         api.set_default_header("Impersonate-User", impersonation.username)
         if impersonation.groups:
-            api.set_default_header("Impersonate-Group", ",".join(impersonation.groups))
+            api.set_default_header("Impersonate-Group", list(impersonation.groups))
     return api
 
 
@@ -480,6 +479,12 @@ class SecretClient:
 
 
 CONFIGURATION_DATA_KEY = "value"
+RESERVED_CONFIGURATION_NAMES = frozenset({"marketplace-sources", "ark-export-metadata"})
+
+
+def _reject_reserved_configuration_name(name: str) -> None:
+    if name in RESERVED_CONFIGURATION_NAMES:
+        raise ValueError(f"Configuration name '{name}' is reserved by Ark")
 
 
 class ConfigurationClient:
@@ -551,6 +556,7 @@ class ConfigurationClient:
         labels: Optional[List[str]] = None,
     ):
         """Create a new configuration."""
+        _reject_reserved_configuration_name(name)
         await init_k8s()
         async with create_api_client() as api:
             self._get_api_client(api)
@@ -591,6 +597,7 @@ class ConfigurationClient:
         alias or labels clears them on the stored configuration; callers must
         send the complete desired state on every call.
         """
+        _reject_reserved_configuration_name(name)
         await init_k8s()
         async with create_api_client() as api:
             self._get_api_client(api)

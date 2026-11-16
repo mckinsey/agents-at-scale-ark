@@ -28,7 +28,6 @@ type BedrockModel struct {
 	Properties      map[string]string
 	client          *bedrockruntime.Client
 	outputSchema    *runtime.RawExtension
-	schemaName      string
 }
 
 func NewBedrockModel(model, region, baseURL, accessKeyID, secretAccessKey, sessionToken, apiKey, modelArn string, properties map[string]string) *BedrockModel {
@@ -79,9 +78,8 @@ func (bm *BedrockModel) initClient(ctx context.Context) error {
 	return nil
 }
 
-func (bm *BedrockModel) SetOutputSchema(schema *runtime.RawExtension, schemaName string) {
+func (bm *BedrockModel) SetOutputSchema(schema *runtime.RawExtension, _ string) {
 	bm.outputSchema = schema
-	bm.schemaName = schemaName
 }
 
 func (bm *BedrockModel) ChatCompletion(ctx context.Context, messages []Message, n int64, tools []openai.ChatCompletionToolParam, toolChoice ToolChoice) (*openai.ChatCompletion, error) {
@@ -93,6 +91,7 @@ func (bm *BedrockModel) ChatCompletion(ctx context.Context, messages []Message, 
 	anthropicTools := convertToolsToAnthropic(tools)
 
 	request := buildAnthropicRequest(anthropicMessages, systemPrompt, anthropicTools, toolChoice, bm.Properties)
+	request.OutputConfig = anthropicOutputConfigFor(bm.outputSchema)
 
 	if strings.Contains(strings.ToLower(bm.Model), "claude") {
 		request.AnthropicVersion = "bedrock-2023-05-31"
@@ -132,10 +131,6 @@ func (bm *BedrockModel) ChatCompletion(ctx context.Context, messages []Message, 
 		"output", response.Usage.OutputTokens)
 
 	return convertAnthropicResponse(response), nil
-}
-
-func (bm *BedrockModel) ChatCompletionWithSchema(ctx context.Context, messages []Message, outputSchema *runtime.RawExtension, schemaName string, tools []openai.ChatCompletionToolParam) (*openai.ChatCompletion, error) {
-	return bm.ChatCompletion(ctx, messages, 1, tools, ToolChoiceUnset)
 }
 
 func (bm *BedrockModel) ChatCompletionStream(ctx context.Context, messages []Message, n int64, streamFunc func(*openai.ChatCompletionChunk) error, tools []openai.ChatCompletionToolParam, toolChoice ToolChoice) (*openai.ChatCompletion, error) {

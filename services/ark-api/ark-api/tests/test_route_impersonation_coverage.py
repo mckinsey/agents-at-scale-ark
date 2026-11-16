@@ -32,7 +32,7 @@ INTENTIONAL_SERVICE_ACCOUNT_ROUTES = {
     # Service-owned state: export history metadata ConfigMap in the pod namespace.
     ("GET", "/v1/export/last-export-time"),
     # Helm release data read via pyhelm3 with ambient credentials; no per-user path.
-    ("GET", "/v1/ark-services/marketplace-items"),
+    ("GET", "/v1/ark-services/helm-releases"),
 }
 
 

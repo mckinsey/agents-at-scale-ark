@@ -2,6 +2,7 @@ package completions
 
 import (
 	"context"
+	"encoding/json"
 	"encoding/pem"
 	"io"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 func TestBedrockInitClient_APIKeyUsesBearerAuth(t *testing.T) {
@@ -81,6 +83,35 @@ func TestBedrockChatCompletion_APIKeySendsBearerOverWire(t *testing.T) {
 	require.Equal(t, "Bearer test-bedrock-key", gotAuth)
 	require.Equal(t, "/model/anthropic.claude-v2/invoke", gotPath)
 	require.Contains(t, string(gotBody), "bedrock-2023-05-31")
+	require.NotContains(t, string(gotBody), "output_config")
 	require.Len(t, completion.Choices, 1)
 	require.Equal(t, "hello from mock bedrock", completion.Choices[0].Message.Content)
+}
+
+func TestBedrockChatCompletion_SendsOutputSchema(t *testing.T) {
+	var gotBody []byte
+
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotBody, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"content":[{"type":"text","text":"{\"ok\":true}"}],"id":"msg_mock","model":"anthropic.claude-v2","stop_reason":"end_turn","usage":{"input_tokens":7,"output_tokens":3}}`))
+	}))
+	defer srv.Close()
+
+	caFile := filepath.Join(t.TempDir(), "ca.pem")
+	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw})
+	require.NoError(t, os.WriteFile(caFile, certPEM, 0o600))
+	t.Setenv("AWS_CA_BUNDLE", caFile)
+
+	bm := NewBedrockModel("anthropic.claude-v2", "us-east-1", srv.URL, "", "", "", "test-bedrock-key", "", nil)
+	bm.SetOutputSchema(&runtime.RawExtension{Raw: []byte(`{"type":"object","properties":{"ok":{"type":"boolean"}},"required":["ok"],"additionalProperties":false}`)}, "test-schema")
+
+	_, err := bm.ChatCompletion(context.Background(), []Message{NewUserMessage("Hello")}, 1, nil, ToolChoiceUnset)
+	require.NoError(t, err)
+
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(gotBody, &body))
+	require.JSONEq(t,
+		`{"format":{"type":"json_schema","schema":{"type":"object","properties":{"ok":{"type":"boolean"}},"required":["ok"],"additionalProperties":false}}}`,
+		mustJSON(t, body["output_config"]))
 }

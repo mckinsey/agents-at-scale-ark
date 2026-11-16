@@ -379,9 +379,35 @@ export function useWorkflow(
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
+  // A terminal workflow's nodes only change through a lifecycle action such
+  // as retry, which sets it back to Running under the same name. Cache it so
+  // switching runs does not re-download its nodes. Keyed by namespace/name;
+  // lives only for this hook instance (cleared on unmount).
+  const cacheRef = useRef<Map<string, ArgoWorkflow>>(new Map());
+
+  // refreshKey is bumped after every lifecycle action except resubmit. The
+  // action may target any row, not only the selected run, so the whole cache
+  // is dropped. A plain selection switch keeps the cache.
+  const prevRefreshKeyRef = useRef(refreshKey);
+
   useEffect(() => {
+    const forceRefresh = prevRefreshKeyRef.current !== refreshKey;
+    prevRefreshKeyRef.current = refreshKey;
+    if (forceRefresh) {
+      cacheRef.current.clear();
+    }
+
     if (!name || !namespace) {
       setWorkflow(null);
+      setLoading(false);
+      return;
+    }
+
+    const cacheKey = `${namespace}/${name}`;
+    const cached = cacheRef.current.get(cacheKey);
+    if (!forceRefresh && cached && isTerminalPhase(cached.status?.phase)) {
+      setWorkflow(cached);
+      setError(null);
       setLoading(false);
       return;
     }
@@ -393,6 +419,7 @@ export function useWorkflow(
       try {
         const data = await workflowsService.get(namespace, name);
         if (mounted) {
+          cacheRef.current.set(cacheKey, data);
           setWorkflow(data);
           setError(null);
           setLoading(false);

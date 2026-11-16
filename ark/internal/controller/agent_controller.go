@@ -20,6 +20,7 @@ import (
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 	arka2a "mckinsey.com/ark/internal/a2a"
+	"mckinsey.com/ark/internal/crossns"
 	"mckinsey.com/ark/internal/eventing"
 	"mckinsey.com/ark/internal/validation"
 )
@@ -183,7 +184,15 @@ func (r *AgentReconciler) checkModelDependency(ctx context.Context, agent *arkv1
 
 	var model arkv1alpha1.Model
 	modelKey := types.NamespacedName{Name: modelName, Namespace: modelNamespace}
-	if err := r.Get(ctx, modelKey, &model); err != nil {
+	err := r.Get(ctx, modelKey, &model)
+	if modelNamespace != agent.Namespace && (err != nil || !crossns.Allowed(&model, agent.Namespace)) {
+		var lookupErr error
+		if err != nil && !errors.IsNotFound(err) {
+			lookupErr = err
+		}
+		return reasonModelNotFound, crossns.DeniedError("Model", modelNamespace, modelName, agent.Namespace).Error(), lookupErr
+	}
+	if err != nil {
 		if errors.IsNotFound(err) {
 			msg := fmt.Sprintf("Model '%s' not found in namespace '%s'", modelName, modelNamespace)
 			return reasonModelNotFound, msg, nil
@@ -327,13 +336,16 @@ func (r *AgentReconciler) updateStatus(ctx context.Context, agent *arkv1alpha1.A
 	return updateStatusIgnoringDeleted(ctx, r.Client, agent, "agent")
 }
 
-// agentModelRefIndexer returns the model reference name for field-based Agent lookups.
+const agentModelRefIndex = ".spec.modelRef.namespacedName"
+
+// agentModelRefIndexer returns the namespace/name of the referenced Model for field-based Agent lookups.
 func agentModelRefIndexer(obj client.Object) []string {
 	agent := obj.(*arkv1alpha1.Agent)
 	if agent.Spec.ModelRef == nil {
 		return nil
 	}
-	return []string{agent.Spec.ModelRef.Name}
+	name, namespace := modelRefKey(agent)
+	return []string{types.NamespacedName{Name: name, Namespace: namespace}.String()}
 }
 
 // agentExecutionEngineIndexer returns the execution engine name for field-based Agent lookups.
@@ -365,7 +377,7 @@ func agentToolNamesIndexer(obj client.Object) []string {
 
 func (r *AgentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if err := mgr.GetFieldIndexer().IndexField(
-		context.Background(), &arkv1alpha1.Agent{}, ".spec.modelRef.name", agentModelRefIndexer,
+		context.Background(), &arkv1alpha1.Agent{}, agentModelRefIndex, agentModelRefIndexer,
 	); err != nil {
 		return err
 	}
@@ -418,11 +430,8 @@ func (r *AgentReconciler) findAgentsForTool(ctx context.Context, obj client.Obje
 
 func (r *AgentReconciler) findAgentsForModel(ctx context.Context, obj client.Object) []reconcile.Request {
 	var agentList arkv1alpha1.AgentList
-	if r.List(
-		ctx, &agentList,
-		client.InNamespace(obj.GetNamespace()),
-		client.MatchingFields{".spec.modelRef.name": obj.GetName()},
-	) != nil {
+	key := types.NamespacedName{Name: obj.GetName(), Namespace: obj.GetNamespace()}.String()
+	if r.List(ctx, &agentList, client.MatchingFields{agentModelRefIndex: key}) != nil {
 		return nil
 	}
 	return agentsToRequests(agentList.Items)

@@ -9,6 +9,7 @@ interface ExecutionEngineK8sResource {
   metadata: {
     name: string;
     namespace: string;
+    annotations?: Record<string, string>;
   };
   spec: {
     description?: string;
@@ -29,6 +30,7 @@ export type ExecutionEnginePhase = 'ready' | 'running' | 'error';
 export interface ExecutionEngine {
   name: string;
   namespace: string;
+  annotations?: Record<string, string>;
   description?: string;
   phase: ExecutionEnginePhase;
   resolvedAddress?: string;
@@ -42,6 +44,7 @@ function toExecutionEngine(resource: ExecutionEngineK8sResource): ExecutionEngin
   return {
     name: resource.metadata.name,
     namespace: resource.metadata.namespace,
+    annotations: resource.metadata.annotations,
     description: resource.spec.description,
     phase: (resource.status.phase as ExecutionEnginePhase) || 'running',
     resolvedAddress: resource.status.lastResolvedAddress,

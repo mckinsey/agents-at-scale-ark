@@ -45,6 +45,7 @@ export interface GitHubMarketplaceManifest {
 export interface MarketplaceItemsGroup {
   source: string;
   displayName: string;
+  url?: string;
   items?: GitHubMarketplaceItem[];
   error?: { message: string; code: string };
 }
@@ -201,7 +202,7 @@ interface InstallInfo {
 async function fetchDeployedReleases(namespace?: string): Promise<HelmRelease[]> {
   try {
     const response = await apiClient.get<{ items?: HelmRelease[] }>(
-      '/api/v1/ark-services/marketplace-items',
+      '/api/v1/ark-services/helm-releases',
       { params: namespace ? { namespace } : undefined },
     );
     return (response.items ?? []).filter(r => r.status === 'deployed');
