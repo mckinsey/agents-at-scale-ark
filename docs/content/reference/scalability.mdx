@@ -76,11 +76,13 @@ The in-memory A2A task manager keeps task state per pod. That matters only for e
 
 The controller exposes Prometheus metrics over a TLS-protected endpoint. A ServiceMonitor template is included in the Helm chart (disabled by default) for integration with the Prometheus Operator. Standard controller-runtime metrics cover reconciliation rates, queue depths, and error counts.
 
-The fair scheduler adds three metrics for cross-tenant starvation visibility:
+The fair scheduler adds five metrics for cross-tenant starvation visibility:
 
 - **`ark_query_inflight{namespace}`** — Query executions currently running, per namespace. Compare across namespaces to see how the pool is shared.
 - **`ark_query_active_tenants`** — number of namespaces competing for the pool (the fair-share divisor). A rising value means each tenant's share is shrinking.
 - **`ark_query_fairness_denied_total{namespace}`** — slot acquire attempts denied because a namespace was at its fair share. A sustained non-zero rate for a namespace indicates it is being held at its share by contention from other tenants; the rate reflects requeue frequency, not the count of distinct starved queries.
+- **`ark_query_fairness_wait_expired_total{namespace}`** — attempts by a namespace that was dropped from the fair-share divisor because it did not retry within the wait window (1s), while it still had work. A non-zero rate means fairness is degrading: other tenants can take that namespace's share. Namespaces that return more than a minute later are not counted.
+- **`ark_query_fairness_retry_gap_seconds`** — time between consecutive slot attempts by a waiting namespace. Gaps approaching the 1s wait window show how close the controller is to dropping waiting tenants.
 
 Ark also integrates with OpenTelemetry for distributed tracing across the query lifecycle — from the controller through A2A dispatch to executors. See the [Monitoring](/operations-guide/monitoring) guide for setup instructions.
 

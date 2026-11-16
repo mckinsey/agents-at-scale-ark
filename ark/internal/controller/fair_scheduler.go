@@ -33,9 +33,12 @@ type fairScheduler struct {
 	inFlight    int
 	perNS       map[string]int
 	waitingSeen map[string]time.Time
+	expiredSeen map[string]time.Time
 
 	now func() time.Time
 }
+
+const waitExpiredHorizon = time.Minute
 
 func newFairScheduler(maxConcurrent int, window time.Duration) *fairScheduler {
 	return &fairScheduler{
@@ -43,6 +46,7 @@ func newFairScheduler(maxConcurrent int, window time.Duration) *fairScheduler {
 		window:      window,
 		perNS:       make(map[string]int),
 		waitingSeen: make(map[string]time.Time),
+		expiredSeen: make(map[string]time.Time),
 		now:         time.Now,
 	}
 }
@@ -55,6 +59,7 @@ func (s *fairScheduler) tryAcquire(ns string) bool {
 	defer s.mu.Unlock()
 
 	now := s.now()
+	s.observeRetryLocked(ns, now)
 
 	if s.inFlight >= s.max {
 		s.markWaitingLocked(ns, now)
@@ -152,8 +157,32 @@ func (s *fairScheduler) pruneWaitingLocked(now time.Time) {
 	for k, seen := range s.waitingSeen {
 		if now.Sub(seen) > s.window {
 			delete(s.waitingSeen, k)
+			s.expiredSeen[k] = seen
 		}
 	}
+	for k, seen := range s.expiredSeen {
+		if now.Sub(seen) > waitExpiredHorizon {
+			delete(s.expiredSeen, k)
+		}
+	}
+}
+
+func (s *fairScheduler) observeRetryLocked(ns string, now time.Time) {
+	s.pruneWaitingLocked(now)
+	if seen, waiting := s.waitingSeen[ns]; waiting {
+		queryFairnessRetryGapSeconds.Observe(now.Sub(seen).Seconds())
+		return
+	}
+	seen, expired := s.expiredSeen[ns]
+	if !expired {
+		return
+	}
+	delete(s.expiredSeen, ns)
+	if now.Sub(seen) > waitExpiredHorizon {
+		return
+	}
+	queryFairnessRetryGapSeconds.Observe(now.Sub(seen).Seconds())
+	queryFairnessWaitExpiredTotal.WithLabelValues(ns).Inc()
 }
 
 func (s *fairScheduler) markWaitingLocked(ns string, now time.Time) {

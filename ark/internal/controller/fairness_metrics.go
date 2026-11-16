@@ -36,6 +36,22 @@ var (
 		},
 		[]string{"namespace"},
 	)
+
+	queryFairnessWaitExpiredTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "ark_query_fairness_wait_expired_total",
+			Help: "Query slot acquire attempts by a namespace whose waiting mark had expired since its previous attempt, by namespace. The namespace was dropped from the fair-share divisor while it still had work, so a non-zero rate means fairness is degrading.",
+		},
+		[]string{"namespace"},
+	)
+
+	queryFairnessRetryGapSeconds = prometheus.NewHistogram(
+		prometheus.HistogramOpts{
+			Name:    "ark_query_fairness_retry_gap_seconds",
+			Help:    "Time between consecutive slot acquire attempts by a waiting namespace. Gaps longer than the fairness wait window drop the namespace from the fair-share divisor.",
+			Buckets: []float64{0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 5, 10},
+		},
+	)
 )
 
 func init() {
@@ -43,5 +59,7 @@ func init() {
 		queryInflightGauge,
 		queryActiveTenantsGauge,
 		queryFairnessDeniedTotal,
+		queryFairnessWaitExpiredTotal,
+		queryFairnessRetryGapSeconds,
 	)
 }

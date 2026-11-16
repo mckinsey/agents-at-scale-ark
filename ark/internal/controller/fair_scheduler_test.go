@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
+	dto "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -165,4 +167,129 @@ func TestFairScheduler_WaitingEntryAgesOut(t *testing.T) {
 	// b goes quiet past the window; a reclaims the free slot.
 	*clock = clock.Add(time.Second)
 	assert.True(t, s.tryAcquire("a"), "a must reclaim capacity once b ages out of the active set")
+}
+
+func retryGapSnapshot(t *testing.T) (uint64, float64) {
+	t.Helper()
+	m := &dto.Metric{}
+	require.NoError(t, queryFairnessRetryGapSeconds.Write(m))
+	return m.GetHistogram().GetSampleCount(), m.GetHistogram().GetSampleSum()
+}
+
+func waitExpired(ns string) float64 {
+	return testutil.ToFloat64(queryFairnessWaitExpiredTotal.WithLabelValues(ns))
+}
+
+func TestFairScheduler_RetryWithinWindowRecordsGapOnly(t *testing.T) {
+	s, clock := newTestScheduler(1)
+
+	require.True(t, s.tryAcquire("gap-busy"))
+	require.False(t, s.tryAcquire("gap-waiting"))
+
+	count, sum := retryGapSnapshot(t)
+	*clock = clock.Add(200 * time.Millisecond)
+	assert.False(t, s.tryAcquire("gap-waiting"))
+
+	newCount, newSum := retryGapSnapshot(t)
+	assert.Equal(t, count+1, newCount)
+	assert.InDelta(t, 0.2, newSum-sum, 1e-9)
+	assert.Zero(t, waitExpired("gap-waiting"))
+}
+
+func TestFairScheduler_RetryAfterWindowCountsExpiry(t *testing.T) {
+	s, clock := newTestScheduler(1)
+
+	require.True(t, s.tryAcquire("exp-busy"))
+	require.False(t, s.tryAcquire("exp-waiting"))
+
+	*clock = clock.Add(time.Second)
+	s.release("exp-busy")
+	require.Contains(t, s.expiredSeen, "exp-waiting")
+
+	count, sum := retryGapSnapshot(t)
+	assert.True(t, s.tryAcquire("exp-waiting"))
+
+	newCount, newSum := retryGapSnapshot(t)
+	assert.Equal(t, float64(1), waitExpired("exp-waiting"))
+	assert.Equal(t, count+1, newCount)
+	assert.InDelta(t, 1.0, newSum-sum, 1e-9)
+	assert.NotContains(t, s.expiredSeen, "exp-waiting")
+}
+
+func TestFairScheduler_GrantedTenantLeavingIsNotCountedAsExpired(t *testing.T) {
+	s, clock := newTestScheduler(1)
+
+	require.True(t, s.tryAcquire("left-busy"))
+	require.False(t, s.tryAcquire("left-tenant"))
+	s.release("left-busy")
+	require.True(t, s.tryAcquire("left-tenant"))
+	s.release("left-tenant")
+
+	*clock = clock.Add(2 * time.Second)
+	require.True(t, s.tryAcquire("left-other"))
+	s.release("left-other")
+	assert.Empty(t, s.expiredSeen)
+
+	require.True(t, s.tryAcquire("left-tenant"))
+	assert.Zero(t, waitExpired("left-tenant"))
+}
+
+func TestFairScheduler_ReturnAfterHorizonIsNotCountedAsExpired(t *testing.T) {
+	s, clock := newTestScheduler(1)
+
+	require.True(t, s.tryAcquire("late-busy"))
+	require.False(t, s.tryAcquire("late-tenant"))
+
+	*clock = clock.Add(time.Second)
+	s.release("late-busy")
+	require.Contains(t, s.expiredSeen, "late-tenant")
+
+	*clock = clock.Add(2 * waitExpiredHorizon)
+	require.True(t, s.tryAcquire("late-tenant"))
+	assert.Zero(t, waitExpired("late-tenant"))
+	assert.NotContains(t, s.expiredSeen, "late-tenant")
+}
+
+func TestFairScheduler_ExpiredEntriesArePrunedAfterHorizon(t *testing.T) {
+	s, clock := newTestScheduler(1)
+
+	require.True(t, s.tryAcquire("prune-busy"))
+	require.False(t, s.tryAcquire("prune-tenant"))
+
+	*clock = clock.Add(time.Second)
+	s.release("prune-busy")
+	require.Contains(t, s.expiredSeen, "prune-tenant")
+
+	*clock = clock.Add(2 * waitExpiredHorizon)
+	require.True(t, s.tryAcquire("prune-other"))
+	s.release("prune-other")
+	assert.Empty(t, s.expiredSeen)
+}
+
+func TestFairScheduler_SlowRetryWithoutInterveningPruneCountsExpiryOnce(t *testing.T) {
+	s, clock := newTestScheduler(2)
+
+	require.True(t, s.tryAcquire("slow-busy"))
+	require.True(t, s.tryAcquire("slow-busy"))
+	require.False(t, s.tryAcquire("slow-waiting"))
+
+	*clock = clock.Add(100 * time.Millisecond)
+	s.release("slow-busy")
+
+	count, sum := retryGapSnapshot(t)
+	*clock = clock.Add(2 * time.Second)
+	require.True(t, s.tryAcquire("slow-waiting"))
+
+	newCount, newSum := retryGapSnapshot(t)
+	assert.Equal(t, float64(1), waitExpired("slow-waiting"))
+	assert.Equal(t, count+1, newCount)
+	assert.InDelta(t, 2.1, newSum-sum, 1e-9)
+	assert.NotContains(t, s.expiredSeen, "slow-waiting")
+
+	s.release("slow-waiting")
+	*clock = clock.Add(30 * time.Second)
+	require.True(t, s.tryAcquire("slow-waiting"))
+	assert.Equal(t, float64(1), waitExpired("slow-waiting"))
+	finalCount, _ := retryGapSnapshot(t)
+	assert.Equal(t, newCount, finalCount)
 }
