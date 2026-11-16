@@ -1,4 +1,4 @@
-replicas: 1
+replicas: 2
 
 image:
   repository: ghcr.io/mckinsey/agents-at-scale-ark/ark-controller
@@ -34,11 +34,17 @@ postgresql:
 
 resources:
   limits:
-    cpu: 500m
-    memory: 256Mi
+    cpu: 1000m
+    memory: 1Gi
   requests:
-    cpu: 10m
-    memory: 128Mi
+    cpu: 100m
+    memory: 256Mi
+
+topologySpread:
+  enabled: true
+  maxSkew: 1
+  topologyKey: kubernetes.io/hostname
+  whenUnsatisfiable: ScheduleAnyway
 
 livenessProbe:
   initialDelaySeconds: 60
@@ -148,5 +154,5 @@ networkPolicy:
   extraIngressFrom: []
 
 podDisruptionBudget:
-  enabled: false
+  enabled: true
   minAvailable: 1

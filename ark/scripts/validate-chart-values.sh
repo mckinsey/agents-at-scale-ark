@@ -200,6 +200,16 @@ check_contains "apiserver servicemonitor renders when enabled" 'kind: ServiceMon
 check_contains "apiserver servicemonitor scrapes https"        'scheme: https'            "$as_sm"
 check_contains "apiserver servicemonitor skips verify"         'insecureSkipVerify: true' "$as_sm"
 
+check_contains "apiserver defaults to 2 replicas"              'replicas: 2'                     "$as_default"
+check_contains "apiserver pdb renders by default"              'kind: PodDisruptionBudget'       "$as_default"
+check_contains "apiserver spread prefers other nodes"          'whenUnsatisfiable: ScheduleAnyway' "$as_default"
+check_contains "apiserver spread keys on hostname"             'topologyKey: kubernetes.io/hostname' "$as_default"
+check_contains "apiserver memory limit is 1Gi"                 'memory: 1Gi'                     "$as_default"
+
+as_optout="$(render_apiserver --set podDisruptionBudget.enabled=false --set topologySpread.enabled=false)"
+check_absent   "apiserver pdb can be disabled"                 'kind: PodDisruptionBudget'       "$as_optout"
+check_absent   "apiserver spread can be disabled"              'topologySpreadConstraints'       "$as_optout"
+
 echo ""
 if [[ "$FAILED" -eq 0 ]]; then
     echo -e "${GREEN}All chart value checks passed${NC}"
