@@ -12,6 +12,8 @@ The same rules run in three places, each time on the resolved value of `baseUrl`
 
 Changing a ConfigMap or Secret that a Model reads its `baseUrl` from does not go through admission, so the runtime checks are what apply to the new value.
 
+The executor check covers only the built-in completions executor. Executors built on the Python `ark-sdk` (for example the marketplace executors selected with an Agent's `spec.executionEngine`) receive the resolved `baseUrl` and credentials without checking them again. For a Model with `ModelAvailable=False` and reason `BaseURLNotAllowed`, queries routed to those executors can still reach the URL.
+
 ## Always-On Security Checks
 
 The following validations are always active and cannot be disabled:
