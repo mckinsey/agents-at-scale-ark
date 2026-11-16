@@ -44,7 +44,7 @@ async def get_argo_server_version(base_url: str) -> Optional[str]:
             response = await http_client.get(url)
         response.raise_for_status()
         data = response.json()
-    except (httpx.HTTPError, ValueError) as e:
+    except (httpx.HTTPError, httpx.InvalidURL, ValueError) as e:
         logger.warning(f"Argo Server version check failed: {e}")
         return None
     version = data.get("version") if isinstance(data, dict) else None

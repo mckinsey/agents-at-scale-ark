@@ -50,6 +50,11 @@ class TestGetArgoServerVersion(unittest.IsolatedAsyncioTestCase):
 
         self.assertIsNone(version)
 
+    async def test_returns_none_when_url_is_malformed(self):
+        version = await argo_server.get_argo_server_version("http://argo-server.test:abc")
+
+        self.assertIsNone(version)
+
     async def test_returns_none_on_http_error_status(self):
         with patch("ark_api.api.v1.argo_server.httpx.AsyncClient", argo_client_factory(version_handler("", status_code=503))):
             version = await argo_server.get_argo_server_version(ARGO_URL)
