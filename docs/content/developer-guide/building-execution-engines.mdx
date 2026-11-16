@@ -194,6 +194,25 @@ class StatefulExecutor(BaseExecutor):
 
 If `conversationId` is empty, the query is a single-turn interaction. The conversation ID returned via A2A response is stored in `status.conversationId` for clients to use in follow-up queries.
 
+## Token Usage
+
+Call `report_usage()` with the token counts your framework returns. The SDK sends them to the controller and the broker, which store them in `status.tokenUsage`.
+
+```python
+async def execute_agent(self, request):
+    result = await self.client.run(request.userInput.content)
+    self.report_usage(
+        prompt_tokens=result.usage.input_tokens,
+        completion_tokens=result.usage.output_tokens,
+        cached_tokens=result.usage.cached_tokens,
+    )
+    return [Message(role="assistant", content=result.text)]
+```
+
+Calls accumulate, so report each model call if your engine makes several. `prompt_tokens` must include cached tokens; `cached_tokens` is the subset served from the prompt cache. If `report_usage()` is never called, `status.tokenUsage` stays empty.
+
+The messages returned by `execute_agent()` are stored in `status.response.raw`. Return the full message list, including tool calls and tool results, so `raw` reflects what the agent did.
+
 ## Key Types
 
 Import from `ark_sdk.executor`:
@@ -206,6 +225,7 @@ Import from `ark_sdk.executor`:
 | `Message` | Conversation message (role + content) |
 | `MCPServerConfig` | MCP server connection info (name, url, transport, timeout, headers, tools allowlist) |
 | `Model` | Model name, provider type, config |
+| `TokenUsage` | Token counts accumulated by `report_usage()` |
 
 Import from `ark_sdk.executor_app`:
 

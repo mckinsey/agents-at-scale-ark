@@ -4,6 +4,7 @@ import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from google.protobuf.json_format import MessageToDict
 
 from ark_sdk.executor import (
     AgentConfig,
@@ -11,9 +12,16 @@ from ark_sdk.executor import (
     ExecutionEngineRequest,
     Message,
     Model,
+    TokenUsage,
+    begin_request_state,
 )
 from ark_sdk.executor_app import A2AExecutorAdapter, ExecutorApp
-from ark_sdk.extensions.query import QUERY_EXTENSION_URI, QueryRef, QueryTargetRef
+from ark_sdk.extensions.query import (
+    QUERY_EXTENSION_METADATA_KEY,
+    QUERY_EXTENSION_URI,
+    QueryRef,
+    QueryTargetRef,
+)
 
 
 class StubExecutor(BaseExecutor):
@@ -414,6 +422,130 @@ class TestAdapterConversationScope:
             await adapter._do_execute(context, event_queue)
 
         assert broker_cls.call_args.kwargs["session_id"] == "conv-1"
+
+
+class UsageReportingExecutor(BaseExecutor):
+    async def execute_agent(self, request: ExecutionEngineRequest) -> list[Message]:
+        self.report_usage(prompt_tokens=100, completion_tokens=20, cached_tokens=40)
+        self.report_usage(prompt_tokens=50, completion_tokens=10)
+        return [Message(role="assistant", content="stub")]
+
+
+class TestReportUsage:
+    @pytest.mark.anyio
+    async def test_accumulates_across_calls(self):
+        begin_request_state()
+        executor = StubExecutor("test")
+
+        executor.report_usage(prompt_tokens=100, completion_tokens=20, cached_tokens=40)
+        executor.report_usage(prompt_tokens=50, completion_tokens=10)
+
+        assert executor._token_usage == TokenUsage(
+            promptTokens=150, completionTokens=30, totalTokens=180, cachedTokens=40
+        )
+
+    @pytest.mark.anyio
+    async def test_unset_by_default(self):
+        begin_request_state()
+        assert StubExecutor("test")._token_usage is None
+
+    def test_engine_metadata_uses_snake_case_keys(self):
+        usage = TokenUsage(promptTokens=3, completionTokens=2, totalTokens=5, cachedTokens=1)
+        assert usage.to_engine_metadata() == {
+            "prompt_tokens": 3,
+            "completion_tokens": 2,
+            "total_tokens": 5,
+            "cached_tokens": 1,
+        }
+
+
+async def _run_adapter(executor: BaseExecutor, conversation_id: str = "conv-1"):
+    adapter = A2AExecutorAdapter(executor)
+
+    context = MagicMock()
+    context.get_user_input.return_value = "hi"
+    context.message.context_id = conversation_id
+    context.message.message_id = "msg-1"
+    event_queue = AsyncMock()
+
+    broker = AsyncMock()
+
+    with patch(
+        "ark_sdk.executor_app.extract_query_ref",
+        return_value=QueryRef(name="q", namespace="ns"),
+    ), patch(
+        "ark_sdk.executor_app.resolve_query",
+        new=AsyncMock(return_value=_make_request(conversation_id=conversation_id)),
+    ), patch(
+        "ark_sdk.executor_app.discover_broker_url",
+        new=AsyncMock(return_value="http://broker"),
+    ), patch(
+        "ark_sdk.executor_app.BrokerClient",
+        return_value=broker,
+    ), patch(
+        "ark_sdk.executor_app.QueryStatusUpdater",
+        return_value=MagicMock(),
+    ):
+        await adapter._do_execute(context, event_queue)
+
+    response_msg = event_queue.enqueue_event.await_args.args[0]
+    return broker, MessageToDict(response_msg.metadata)[QUERY_EXTENSION_METADATA_KEY]
+
+
+class TestAdapterResponseMetadata:
+    @pytest.mark.anyio
+    async def test_reports_token_usage_to_controller(self):
+        _, meta = await _run_adapter(UsageReportingExecutor("test"))
+
+        assert meta["tokenUsage"] == {
+            "prompt_tokens": 150,
+            "completion_tokens": 30,
+            "total_tokens": 180,
+            "cached_tokens": 40,
+        }
+
+    @pytest.mark.anyio
+    async def test_reports_response_messages_and_conversation_id(self):
+        _, meta = await _run_adapter(StubExecutor("test"))
+
+        assert meta["messages"] == [{"role": "assistant", "content": "stub"}]
+        assert meta["conversationId"] == "conv-1"
+
+    @pytest.mark.anyio
+    async def test_omits_token_usage_when_not_reported(self):
+        _, meta = await _run_adapter(StubExecutor("test"))
+
+        assert "tokenUsage" not in meta
+
+    @pytest.mark.anyio
+    async def test_omits_conversation_id_when_unthreaded(self):
+        _, meta = await _run_adapter(StubExecutor("test"), conversation_id="")
+
+        assert "conversationId" not in meta
+
+    @pytest.mark.anyio
+    async def test_reports_token_usage_to_broker(self):
+        broker, _ = await _run_adapter(UsageReportingExecutor("test"))
+
+        assert broker.send_final_chunk.await_args.kwargs["token_usage"] == {
+            "promptTokens": 150,
+            "completionTokens": 30,
+            "totalTokens": 180,
+            "cachedTokens": 40,
+        }
+
+    @pytest.mark.anyio
+    async def test_broker_token_usage_none_when_not_reported(self):
+        broker, _ = await _run_adapter(StubExecutor("test"))
+
+        assert broker.send_final_chunk.await_args.kwargs["token_usage"] is None
+
+    @pytest.mark.anyio
+    async def test_usage_does_not_leak_into_next_request(self):
+        executor = UsageReportingExecutor("test")
+        await _run_adapter(executor)
+
+        assert executor._token_usage is None
 
 
 if __name__ == "__main__":

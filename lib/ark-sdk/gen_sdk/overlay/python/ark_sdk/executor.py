@@ -18,13 +18,14 @@ logger = logging.getLogger(__name__)
 class _RequestState:
     """Per-request streaming state, shared by reference with child tasks."""
 
-    __slots__ = ("broker_client", "query_status_updater", "streamed", "tool_call_index")
+    __slots__ = ("broker_client", "query_status_updater", "streamed", "tool_call_index", "token_usage")
 
     def __init__(self) -> None:
         self.broker_client: Optional["BrokerClient"] = None
         self.query_status_updater: Optional["QueryStatusUpdater"] = None
         self.streamed: bool = False
         self.tool_call_index: int = 0
+        self.token_usage: Optional["TokenUsage"] = None
 
 
 _request_state_var: ContextVar[_RequestState] = ContextVar("ark_request_state")
@@ -100,6 +101,23 @@ class ExecutionEngineRequest(BaseModel):
     message_ttl_seconds: int | None = None
 
 
+class TokenUsage(BaseModel):
+    """Token usage accumulated over an agent execution, shaped like Query.status.tokenUsage."""
+    promptTokens: int = 0
+    completionTokens: int = 0
+    totalTokens: int = 0
+    cachedTokens: int = 0
+
+    def to_engine_metadata(self) -> dict[str, int]:
+        """Serialize with the snake_case keys the controller reads from A2A response metadata."""
+        return {
+            "prompt_tokens": self.promptTokens,
+            "completion_tokens": self.completionTokens,
+            "total_tokens": self.totalTokens,
+            "cached_tokens": self.cachedTokens,
+        }
+
+
 class ExecutionEngineResponse(BaseModel):
     """Response from agent execution."""
     messages: list[Message]
@@ -144,6 +162,33 @@ class BaseExecutor(ABC):
     @_tool_call_index.setter
     def _tool_call_index(self, value: int) -> None:
         _request_state().tool_call_index = value
+
+    @property
+    def _token_usage(self) -> Optional[TokenUsage]:
+        return _request_state().token_usage
+
+    @_token_usage.setter
+    def _token_usage(self, value: Optional[TokenUsage]) -> None:
+        _request_state().token_usage = value
+
+    def report_usage(
+        self,
+        prompt_tokens: int,
+        completion_tokens: int,
+        cached_tokens: int = 0,
+    ) -> None:
+        """Add token usage for the current request.
+
+        Calls accumulate, so an executor that makes several model calls can
+        report each one. prompt_tokens must include cached tokens; cached_tokens
+        is the subset of them served from the provider's prompt cache.
+        """
+        usage = self._token_usage or TokenUsage()
+        usage.promptTokens += prompt_tokens
+        usage.completionTokens += completion_tokens
+        usage.totalTokens += prompt_tokens + completion_tokens
+        usage.cachedTokens += cached_tokens
+        self._token_usage = usage
 
     async def stream_chunk(self, chunk: str) -> None:
         if self._broker_client:
