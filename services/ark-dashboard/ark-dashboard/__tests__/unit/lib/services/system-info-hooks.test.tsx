@@ -27,7 +27,7 @@ describe('useGetSystemInfo', () => {
   it('returns the system info reported by ark-api', async () => {
     const info = {
       kubernetes_version: 'v1.31.2',
-      system_version: 'v0.1.72',
+      system_version: 'v0.1.73',
       argo_server_configured: false,
     };
     vi.mocked(systemInfoService.get).mockResolvedValue(info);

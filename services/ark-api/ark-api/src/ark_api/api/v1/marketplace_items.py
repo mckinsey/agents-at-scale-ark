@@ -90,8 +90,12 @@ async def _resolve_auth_header(
     read the referenced credential.
     """
     display_name = source.displayName or source.name
-    if not source.secretRef or not source.scheme:
+    if not source.scheme:
         return None, None
+    if not source.secretRef:
+        return None, _error_result(
+            source.name, display_name, "credential is not accessible", "auth_error"
+        )
     try:
         secret = await core.read_namespaced_secret(source.secretRef, namespace)
     except ApiException:

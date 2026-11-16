@@ -281,7 +281,7 @@ wheels = [
 
 [[package]]
 name = "ark-sdk"
-version = "0.1.72"
+version = "0.1.73"
 source = { editable = "." }
 dependencies = [
     { name = "a2a-sdk", extra = ["http-server"] },

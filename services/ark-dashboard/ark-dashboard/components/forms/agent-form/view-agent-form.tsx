@@ -38,6 +38,7 @@ import {
   AgentStreamingField,
   SkillsDisplaySection,
 } from './sections';
+import { ToolApprovalsSection } from './sections/tool-approvals-section';
 import { ToolsMultiSelect } from './sections/tools-multi-select';
 import { AgentFormMode, type AgentFormProps } from './types';
 import { useAgentForm } from './use-agent-form';
@@ -80,6 +81,7 @@ export function ViewAgentForm({
     availableTools,
     toolsLoading,
     unavailableTools,
+    selectedTools,
     parameters,
     headerRows,
     isExperimentalExecutionEngineEnabled,
@@ -91,6 +93,8 @@ export function ViewAgentForm({
     handleToolToggle,
     handleDeleteTool,
     isToolSelected,
+    getToolApproval,
+    setToolApproval,
     isOutputSchemaSupported,
     onSubmit,
     onInvalid,
@@ -314,6 +318,12 @@ export function ViewAgentForm({
                     Remove them before saving.
                   </FieldDescription>
                 )}
+                <ToolApprovalsSection
+                  selectedTools={selectedTools}
+                  getToolApproval={getToolApproval}
+                  onApprovalChange={setToolApproval}
+                  disabled={isDisabled}
+                />
               </FieldSet>
             )}
 

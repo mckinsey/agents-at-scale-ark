@@ -73,11 +73,26 @@ class AgentLabelSelector(BaseModel):
     matchExpressions: Optional[List[AgentLabelSelectorRequirement]] = None
 
 
+class ArgumentMatch(BaseModel):
+    """Narrows approval to tool calls whose arguments match a pattern."""
+    argument: str
+    pattern: str
+
+
+class ToolApprovalConfig(BaseModel):
+    """Approval configuration for human-in-the-loop tool execution."""
+    required: Optional[bool] = None
+    timeout: Optional[str] = None
+    onTimeout: Optional[str] = None
+    argumentMatches: Optional[List[ArgumentMatch]] = None
+
+
 class AgentTool(BaseModel):
     """Tool configuration for an agent."""
     type: str  # "built-in", "mcp", "http", "agent", "team", "builtin" (or deprecated "custom")
     name: Optional[str] = None
     labelSelector: Optional[AgentLabelSelector] = None
+    approval: Optional[ToolApprovalConfig] = None
 
 
 class AgentHeaderValue(BaseModel):

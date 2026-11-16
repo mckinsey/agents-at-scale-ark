@@ -1,0 +1,40 @@
+ark:
+  model:
+    enabled: false
+
+config:
+  rules:
+  - path: "/v1/models"
+    method: "GET"
+    response:
+      status: 200
+      content: '{"object":"list","data":[{"id":"claude-mock","object":"model","owned_by":"anthropic"}]}'
+
+  - path: "/v1/messages"
+    response:
+      status: 200
+      content: |
+        {
+          "id": "msg-mock-{{timestamp}}",
+          "type": "message",
+          "role": "assistant",
+          "model": "{{jmes request body.model}}",
+          "content": [{"type": "text", "text": "no-output-config"}],
+          "stop_reason": "end_turn",
+          "usage": {"input_tokens": 10, "output_tokens": 5}
+        }
+
+  - path: "/v1/messages"
+    match: "body.output_config.format.type == 'json_schema' && body.output_config.format.name == null && body.output_config.format.schema.properties.sentiment != null"
+    response:
+      status: 200
+      content: |
+        {
+          "id": "msg-mock-{{timestamp}}",
+          "type": "message",
+          "role": "assistant",
+          "model": "{{jmes request body.model}}",
+          "content": [{"type": "text", "text": "{\"summary\":\"schema applied\",\"sentiment\":\"positive\"}"}],
+          "stop_reason": "end_turn",
+          "usage": {"input_tokens": 10, "output_tokens": 5}
+        }

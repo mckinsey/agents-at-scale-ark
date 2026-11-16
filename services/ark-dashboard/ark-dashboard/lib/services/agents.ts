@@ -12,10 +12,14 @@ export type AgentUpdateRequest = components['schemas']['AgentUpdateRequest'];
 export type AgentHeader = components['schemas']['AgentHeader'];
 export type AgentOverride = components['schemas']['AgentOverride'];
 
+// Approval configuration for human-in-the-loop tool execution
+export type ToolApprovalConfig = components['schemas']['ToolApprovalConfig'];
+
 // AgentTool interface to match the API response structure
 export interface AgentTool {
   type: string;
   name?: string | null;
+  approval?: ToolApprovalConfig | null;
   labelSelector?: {
     matchLabels?: Record<string, string> | null;
     matchExpressions?: Array<{
