@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   isTerminalPhase,
@@ -692,6 +692,75 @@ describe('mapArgoWorkflowsToSessions', () => {
     expect(sessions[1].status).toBe('pending');
     expect(sessions[1].startedAt).toBe('2024-01-02T00:00:00Z');
   });
+
+  it('reuses the session of a terminal workflow object it already mapped', () => {
+    const unchanged = makeWorkflow({
+      metadata: {
+        name: 'unchanged',
+        namespace: 'default',
+        creationTimestamp: '2024-01-01T00:00:00Z',
+        uid: 'uid-unchanged',
+      },
+      status: {
+        phase: 'Succeeded',
+        startedAt: '2024-01-01T00:00:00Z',
+        finishedAt: '2024-01-01T00:01:00Z',
+        nodes: {},
+      },
+    });
+    const before = makeWorkflow({
+      metadata: {
+        name: 'polled',
+        namespace: 'default',
+        creationTimestamp: '2024-01-01T00:00:00Z',
+        uid: 'uid-polled',
+      },
+      status: { phase: 'Running', nodes: {} },
+    });
+    const after = makeWorkflow({
+      ...before,
+      status: { phase: 'Succeeded', nodes: {} },
+    });
+
+    const first = mapArgoWorkflowsToSessions([unchanged, before]);
+    const second = mapArgoWorkflowsToSessions([unchanged, after]);
+
+    expect(second[0]).toBe(first[0]);
+    expect(second[1]).not.toBe(first[1]);
+    expect(second[1].status).toBe('succeeded');
+  });
+
+  it.each(['Running', 'Pending'])(
+    'recomputes the duration of a %s workflow on every mapping',
+    phase => {
+      vi.useFakeTimers();
+      try {
+        vi.setSystemTime(new Date('2024-01-01T00:00:10Z'));
+        const active = makeWorkflow({
+          metadata: {
+            name: 'active',
+            namespace: 'default',
+            creationTimestamp: '2024-01-01T00:00:00Z',
+            uid: 'uid-active',
+          },
+          status: {
+            phase,
+            startedAt: '2024-01-01T00:00:00Z',
+            nodes: {},
+          },
+        });
+
+        const first = mapArgoWorkflowsToSessions([active]);
+        vi.setSystemTime(new Date('2024-01-01T00:00:25Z'));
+        const second = mapArgoWorkflowsToSessions([active]);
+
+        expect(first[0].duration).toBe('10s');
+        expect(second[0].duration).toBe('25s');
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
 });
 
 describe('pod step namespace', () => {
