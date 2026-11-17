@@ -9,7 +9,9 @@ spec:
     ValidatingAdmissionPolicy API, that an install with the flag on creates
     the installer service account, and that the admission policy of the
     namespace stops tenant users and cluster admins from running workloads
-    or minting tokens as that service account, with no gap during upgrades,
+    or minting tokens as that service account, that the service account is
+    admin of its namespace without control of the Namespace object, that a
+    Job created by impersonating it runs and is garbage collected, with no gap during upgrades,
     after a rollback or on a reinstall over the bootstrap copy left by an
     uninstall.
   timeouts:
@@ -151,6 +153,64 @@ spec:
         - name: NAMESPACE
           value: ($namespace)
 
+  - name: installer-permissions
+    try:
+    - script:
+        content: |
+          set -eu
+          . manifests/ssar.sh
+          I="system:serviceaccount:$NAMESPACE:ark-marketplace-installer"
+          expect_can false "$I" "$NAMESPACE" "" namespaces patch "$NAMESPACE"
+          expect_can false "$I" "$NAMESPACE" "" namespaces delete "$NAMESPACE"
+          expect_can false "$I" "$NAMESPACE" "" resourcequotas create
+          expect_can true "$I" "$NAMESPACE" apps deployments create
+          expect_can true "$I" "$NAMESPACE" rbac.authorization.k8s.io rolebindings create
+          expect_can true "$I" "$NAMESPACE" ark.mckinsey.com agents create
+          expect_can true "$I" "$NAMESPACE" "" events create
+          expect_can true "$I" "$NAMESPACE" gateway.networking.k8s.io httproutes create
+          expect_can false "$I" "$NAMESPACE-b" apps deployments create
+          if out=$(kubectl label namespace "$NAMESPACE" pod-security.kubernetes.io/enforce=privileged --as "$I" 2>&1); then
+            echo "the installer must not label its namespace"; exit 1
+          fi
+          echo "$out" | grep -q forbidden
+          echo ok
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: impersonated-install-job
+    try:
+    - script:
+        timeout: 240s
+        content: |
+          set -eu
+          I="system:serviceaccount:$NAMESPACE:ark-marketplace-installer"
+          for j in install-ok install-orphan install-background; do
+            sed "s/{name: uses-installer}/{name: $j}/" manifests/installer-workloads/job.yaml \
+              | kubectl -n "$NAMESPACE" --as "$I" create -f -
+          done
+          for j in install-ok install-orphan install-background; do
+            kubectl -n "$NAMESPACE" wait "job/$j" --for=condition=Complete --timeout=120s
+          done
+          sed -e 's/{name: uses-installer}/{name: installer-running}/' -e 's/replicas: 0/replicas: 1/' \
+            manifests/installer-workloads/deployment.yaml | kubectl -n "$NAMESPACE" --as "$I" create -f -
+          kubectl -n "$NAMESPACE" rollout status deployment/installer-running --timeout=120s
+          kubectl -n "$NAMESPACE" delete deployment installer-running --wait --timeout=60s
+          kubectl -n "$NAMESPACE" delete job install-orphan --cascade=orphan --wait --timeout=60s
+          kubectl -n "$NAMESPACE" delete job install-background --cascade=background --wait --timeout=60s
+          for _ in $(seq 1 60); do
+            refs=$(kubectl -n "$NAMESPACE" get pods -l job-name=install-orphan -o jsonpath='{.items[*].metadata.ownerReferences}')
+            left=$(kubectl -n "$NAMESPACE" get pods -l job-name=install-background -o name)
+            if [ -z "$refs" ] && [ -z "$left" ]; then echo ok; exit 0; fi
+            sleep 2
+          done
+          echo "garbage collection of the installer pods did not finish"
+          kubectl -n "$NAMESPACE" get pods -o yaml
+          exit 1
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
   - name: upgrade-keeps-policy
     try:
     - script:
@@ -171,6 +231,8 @@ spec:
           ) > "$LOG" &
           helm upgrade ark-tenant "$C" --namespace "$NAMESPACE" --reuse-values \
             --set-json 'marketplaceInstall.extraRules=[]' --wait --timeout=120s
+          . manifests/ssar.sh
+          expect_can false "system:serviceaccount:$NAMESPACE:ark-marketplace-installer" "$NAMESPACE" gateway.networking.k8s.io httproutes create
           helm upgrade ark-tenant "$C" --namespace "$NAMESPACE" --values manifests/tenant-values.yaml \
             --set marketplaceInstall.arkApiServiceAccount.namespace="$NAMESPACE" --wait --timeout=120s
           touch "$STOP"
@@ -179,8 +241,8 @@ spec:
           rm -f "$STOP"
           if grep -q LEAK "$LOG"; then echo "a Job with the installer service account got through"; rm -f "$LOG"; exit 1; fi
           if [ "$(sed -n 's/^attempts=//p' "$LOG")" -lt 5 ]; then echo "the create loop did not overlap the upgrades"; exit 1; fi
-          if kubectl -n "$NAMESPACE" get jobs -o jsonpath='{.items[*].spec.template.spec.serviceAccountName}' | grep -q ark-marketplace-installer; then
-            echo "found a Job with the installer service account"; exit 1
+          if kubectl -n "$NAMESPACE" get jobs -o name | grep -q '/race-'; then
+            echo "found a Job from the create loop"; exit 1
           fi
           echo ok
         env:

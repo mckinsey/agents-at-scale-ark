@@ -14,4 +14,54 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "ark-tenant.labels" . | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "ark-tenant.fullname" . }}-marketplace-installer-admin
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ark-tenant.labels" . | nindent 4 }}
+subjects:
+- kind: ServiceAccount
+  name: {{ include "ark-tenant.marketplaceInstaller.serviceAccount" . }}
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: admin
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "ark-tenant.fullname" . }}-marketplace-installer-extra
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ark-tenant.labels" . | nindent 4 }}
+rules:
+- apiGroups: [ark.mckinsey.com]
+  resources: ["*"]
+  verbs: ["*"]
+- apiGroups: [""]
+  resources: [events]
+  verbs: [create, patch]
+{{- with $mi.extraRules }}
+{{ toYaml . }}
+{{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "ark-tenant.fullname" . }}-marketplace-installer-extra
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ark-tenant.labels" . | nindent 4 }}
+subjects:
+- kind: ServiceAccount
+  name: {{ include "ark-tenant.marketplaceInstaller.serviceAccount" . }}
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "ark-tenant.fullname" . }}-marketplace-installer-extra
 {{- end }}
