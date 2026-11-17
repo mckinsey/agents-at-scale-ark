@@ -5,7 +5,7 @@
 {{- end }}
 {{ include "ark-tenant.marketplaceInstall.policy" (dict "root" . "suffix" "") }}
 ---
-{{ include "ark-tenant.marketplaceInstall.policy" (dict "root" . "suffix" "-bootstrap" "policyAnnotations" (dict "helm.sh/hook" "pre-install" "helm.sh/hook-weight" "-10") "bindingAnnotations" (dict "helm.sh/hook" "pre-install" "helm.sh/hook-weight" "-9")) }}
+{{ include "ark-tenant.marketplaceInstall.policy" (dict "root" . "suffix" "-bootstrap" "policyAnnotations" (dict "helm.sh/hook" "pre-install,pre-upgrade" "helm.sh/hook-weight" "-10") "bindingAnnotations" (dict "helm.sh/hook" "pre-install,pre-upgrade" "helm.sh/hook-weight" "-9")) }}
 ---
 apiVersion: v1
 kind: ServiceAccount

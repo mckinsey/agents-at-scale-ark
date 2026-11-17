@@ -322,6 +322,48 @@ spec:
         - name: NAMESPACE
           value: ($namespace)
 
+  - name: bootstrap-follows-upgrades
+    try:
+    - script:
+        timeout: 300s
+        content: |
+          set -eu
+          . manifests/expect.sh
+          C=../../charts/ark-tenant
+          NC="$NAMESPACE-c"
+          kubectl create namespace "$NC"
+          helm install ark-tenant "$C" --namespace "$NC" --values manifests/tenant-values.yaml \
+            --set marketplaceInstall.enabled=false --wait --timeout=120s
+          helm upgrade ark-tenant "$C" --namespace "$NC" --values manifests/tenant-values.yaml --wait --timeout=120s
+          kubectl get validatingadmissionpolicy "ark-marketplace-installer-sa-$NC-bootstrap"
+          kubectl get validatingadmissionpolicy "ark-marketplace-installer-sa-$NC"
+          wait_enforced "$NC"
+          helm uninstall ark-tenant --namespace "$NC" --wait --timeout=120s
+          A2="system:serviceaccount:$NAMESPACE:ark-api-sa-2"
+          helm upgrade ark-tenant "$C" --namespace "$NAMESPACE" --reuse-values \
+            --set marketplaceInstall.arkApiServiceAccount.name=ark-api-sa-2 --wait --timeout=120s
+          for _ in $(seq 1 30); do
+            if kubectl -n "$NAMESPACE" --as "$A2" create -f manifests/lock-lease.yaml >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+          kubectl -n "$NAMESPACE" --as "$A2" delete lease marketplace-install-lock
+          helm upgrade ark-tenant "$C" --namespace "$NAMESPACE" --reuse-values \
+            --set marketplaceInstall.arkApiServiceAccount.name=ark-api-sa --wait --timeout=120s
+          echo ok
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    cleanup:
+    - script:
+        content: |
+          helm uninstall ark-tenant --namespace "$NAMESPACE-c" --wait --timeout=120s || true
+          kubectl delete validatingadmissionpolicybinding,validatingadmissionpolicy \
+            "ark-marketplace-installer-sa-$NAMESPACE-c-bootstrap" --ignore-not-found
+          kubectl delete namespace "$NAMESPACE-c" --ignore-not-found --wait=false
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
   - name: upgrade-keeps-policy
     try:
     - script:
