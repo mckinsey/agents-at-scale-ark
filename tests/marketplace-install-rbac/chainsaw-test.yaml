@@ -315,6 +315,21 @@ spec:
             pod create -f "$B/secret-$f.yaml"
           done
           denied "$P" pod create -f manifests/lock-lease.yaml
+          kubectl -n "$NAMESPACE" create secret generic u-0123456789abcdef-victim --from-literal=k=v
+          kubectl -n "$NAMESPACE" create secret generic victim-user-scope --from-literal=k=v
+          kubectl -n "$NAMESPACE" label secret victim-user-scope ark.mckinsey.com/scope=user-0123456789abcdef
+          for b in rolebinding marketplace-installer-admin marketplace-impersonate; do
+            denied "$P" pod delete rolebinding "ark-tenant-$b"
+          done
+          denied "$P" pod delete role ark-tenant-marketplace-lock
+          denied "$P" pod delete --raw "/apis/rbac.authorization.k8s.io/v1/namespaces/$NAMESPACE/rolebindings"
+          denied "$P" pod delete secret u-0123456789abcdef-victim
+          denied "$P" pod delete secret victim-user-scope
+          denied "$P" pod delete --raw "/api/v1/namespaces/$NAMESPACE/secrets"
+          pod delete rolebinding probe-ok
+          pod delete secret probe-plain
+          kubectl -n "$NAMESPACE" get secret u-0123456789abcdef-victim victim-user-scope
+          kubectl -n "$NAMESPACE" delete secret victim-user-scope
           sed 's/{name: uses-installer}/{name: impersonated-installer}/' manifests/installer-workloads/deployment.yaml \
             | kubectl -n "$NAMESPACE" --as "$I" create -f -
           echo ok

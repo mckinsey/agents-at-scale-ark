@@ -46,8 +46,12 @@ spec:
       resources: [deployments, statefulsets, daemonsets, replicasets]
     - apiGroups: [rbac.authorization.k8s.io]
       apiVersions: ["v1"]
-      operations: [CREATE, UPDATE]
+      operations: [CREATE, UPDATE, DELETE]
       resources: [roles, rolebindings]
+    - apiGroups: [""]
+      apiVersions: ["v1"]
+      operations: [DELETE]
+      resources: [secrets]
     - apiGroups: [coordination.k8s.io]
       apiVersions: ["v1"]
       operations: [CREATE, UPDATE, DELETE]
@@ -69,6 +73,9 @@ spec:
   */}}
   - name: isWorkload
     expression: "request.resource.group in ['', 'batch', 'apps']"
+  {{- /* DELETE requests carry no object, so the rules that read object skip them. */}}
+  - name: isDelete
+    expression: "request.operation == 'DELETE'"
   {{- /* ark-api's own service account, the only holder of the install lock. */}}
   - name: arkApiUser
     expression: {{ include "ark-tenant.marketplaceInstall.arkApiUsername" $root | squote | quote }}
@@ -152,6 +159,12 @@ spec:
        {{ printf "%s-marketplace-installer-extra" $fullname | squote }},
        {{ printf "%s-marketplace-impersonate" $fullname | squote }},
        {{ printf "%s-marketplace-lock" $fullname | squote }}]
+  {{- /* RoleBindings of this tenant chart, which the install pod may not delete. */}}
+  - name: tenantBindings
+    expression: >-
+      variables.tenantRoles +
+      [{{ printf "%s-rolebinding" $fullname | squote }},
+       {{ printf "%s-marketplace-installer-admin" $fullname | squote }}]
   {{- /*
      RoleBinding subjects a chart may use: service accounts of this namespace and users
      outside system:. Groups are refused.
@@ -188,12 +201,19 @@ spec:
       ((has(object.metadata.name) && object.metadata.name.matches('^u-[0-9a-f]{16}-')) ||
        (has(object.metadata.labels) && 'ark.mckinsey.com/scope' in object.metadata.labels &&
         object.metadata.labels['ark.mckinsey.com/scope'] != 'shared'))
+  {{- /* The same test on the stored Secret of a DELETE. */}}
+  - name: reservedOldSecret
+    expression: >-
+      request.resource.resource == 'secrets' && oldObject != null &&
+      (oldObject.metadata.name.matches('^u-[0-9a-f]{16}-') ||
+       (has(oldObject.metadata.labels) && 'ark.mckinsey.com/scope' in oldObject.metadata.labels &&
+        oldObject.metadata.labels['ark.mckinsey.com/scope'] != 'shared'))
   validations:
   {{- /*
      Tenant users and cluster admins may not run workloads or create token Secrets as the
      installer. Only the installer itself and the controllers may.
   */}}
-  - expression: "!variables.isWorkload || !variables.usesInstaller || variables.trusted"
+  - expression: "!variables.isWorkload || variables.isDelete || !variables.usesInstaller || variables.trusted"
     message: {{ printf "only the marketplace installer may run workloads or mint tokens as %s" (include "ark-tenant.marketplaceInstaller.serviceAccount" $root) | quote }}
   {{- /*
      Only ark-api may create, update or delete the install lock. The namespace controller
@@ -210,22 +230,32 @@ spec:
      Helm in the install pod may not start workloads or create token Secrets as the
      installer: a chart would keep its permissions for good.
   */}}
-  - expression: "!variables.fromInstallPod || !variables.isWorkload || !variables.usesInstaller"
+  - expression: "!variables.fromInstallPod || !variables.isWorkload || variables.isDelete || !variables.usesInstaller"
     message: {{ printf "a chart may not run workloads or mint tokens as %s" (include "ark-tenant.marketplaceInstaller.serviceAccount" $root) | quote }}
   {{- /*
      Helm in the install pod may bind only Roles the chart creates itself, and only to
      service accounts of this namespace or to users outside system:.
   */}}
   - expression: >-
-      !variables.fromInstallPod || object.kind != 'RoleBinding' ||
+      !variables.fromInstallPod || variables.isDelete || object.kind != 'RoleBinding' ||
       (object.roleRef.kind == 'Role' && !(object.roleRef.name in variables.tenantRoles) && variables.safeSubjects)
     message: "a chart may bind only its own Roles, and only to service accounts of this namespace or to users outside system:"
   {{- /* Helm in the install pod may not create Roles with the rules safeRules refuses. */}}
-  - expression: "!variables.fromInstallPod || variables.safeRules"
+  - expression: "!variables.fromInstallPod || variables.isDelete || variables.safeRules"
     message: "a chart may not create Roles over RBAC, wildcards, Secret writes, pods/exec, pods/attach, pods/ephemeralcontainers, serviceaccounts/token or impersonate"
   {{- /* Helm in the install pod may not create Secrets that pass for personal secrets. */}}
-  - expression: "!variables.fromInstallPod || !variables.reservedSecret"
+  - expression: "!variables.fromInstallPod || variables.isDelete || !variables.reservedSecret"
     message: "a chart may not create Secrets with a personal secret name or a non-shared ark.mckinsey.com/scope label"
+  {{- /*
+     Helm in the install pod may not delete the tenant chart's RBAC or personal secrets,
+     nor whole collections, whose members it cannot see.
+  */}}
+  - expression: >-
+      !variables.fromInstallPod || !variables.isDelete || variables.isLock ||
+      (request.name != '' &&
+       !(request.resource.group == 'rbac.authorization.k8s.io' && request.name in variables.tenantBindings) &&
+       !variables.reservedOldSecret)
+    message: "a chart may not delete the tenant chart's RBAC, personal secrets or whole collections"
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding
