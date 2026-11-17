@@ -16,6 +16,7 @@ Who sends the requests it looks at:
 {{- define "ark-tenant.marketplaceInstall.policy" -}}
 {{- $root := .root }}
 {{- $name := printf "%s%s" (include "ark-tenant.marketplaceInstall.policyName" $root) .suffix }}
+{{- $fullname := include "ark-tenant.fullname" $root }}
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicy
 metadata:
@@ -43,6 +44,10 @@ spec:
       apiVersions: ["v1"]
       operations: [CREATE, UPDATE]
       resources: [deployments, statefulsets, daemonsets, replicasets]
+    - apiGroups: [rbac.authorization.k8s.io]
+      apiVersions: ["v1"]
+      operations: [CREATE, UPDATE]
+      resources: [roles, rolebindings]
     - apiGroups: [coordination.k8s.io]
       apiVersions: ["v1"]
       operations: [CREATE, UPDATE, DELETE]
@@ -125,6 +130,63 @@ spec:
     expression: >-
       request.userInfo.username == variables.installerUser ||
       (object.kind != 'Secret' && request.userInfo.username in variables.controllers)
+  {{- /*
+     The request comes from helm inside the install pod: the installer account with a
+     token bound to a pod, which carries the pod-name extra. ark-api's impersonated
+     requests have no extra. has() is required: without extras the field is missing,
+     reading it errors and, with failurePolicy Fail, every such request would be denied.
+  */}}
+  - name: fromInstallPod
+    expression: >-
+      request.userInfo.username == variables.installerUser &&
+      has(request.userInfo.extra) &&
+      'authentication.kubernetes.io/pod-name' in request.userInfo.extra
+  {{- /*
+     Roles of this tenant chart. Binding one is as good as holding its rules: the
+     impersonate Role, for one, makes the subject an admin of the namespace.
+  */}}
+  - name: tenantRoles
+    expression: >-
+      [{{ printf "%s-role" $fullname | squote }},
+       {{ printf "%s-marketplace-installer-extra" $fullname | squote }},
+       {{ printf "%s-marketplace-impersonate" $fullname | squote }},
+       {{ printf "%s-marketplace-lock" $fullname | squote }}]
+  {{- /*
+     RoleBinding subjects a chart may use: service accounts of this namespace and users
+     outside system:. Groups are refused.
+  */}}
+  - name: safeSubjects
+    expression: >-
+      object.kind != 'RoleBinding' || !has(object.subjects) ||
+      object.subjects.all(s,
+        (s.kind == 'ServiceAccount' && (!has(s.namespace) || s.namespace == request.namespace)) ||
+        (s.kind == 'User' && !s.name.startsWith('system:')))
+  {{- /*
+     Role rules a chart may create: nothing on RBAC, no wildcards, no Secret writes,
+     nothing that runs code in another pod or mints tokens, no impersonation. RBAC
+     escalation checks already refuse rules the installer does not hold; these cover
+     what admin grants.
+  */}}
+  - name: safeRules
+    expression: >-
+      object.kind != 'Role' || !has(object.rules) ||
+      object.rules.all(r,
+        !(has(r.apiGroups) && r.apiGroups.exists(g, g == 'rbac.authorization.k8s.io' || g == '*')) &&
+        !(has(r.resources) && r.resources.exists(x, x == '*' || x.startsWith('*/') ||
+          x in ['pods/exec', 'pods/attach', 'pods/ephemeralcontainers', 'serviceaccounts/token'])) &&
+        !r.verbs.exists(v, v == '*' || v == 'impersonate') &&
+        !(has(r.resources) && r.resources.exists(x, x == 'secrets') &&
+          r.verbs.exists(v, v in ['create', 'update', 'patch', 'delete', 'deletecollection'])))
+  {{- /*
+     Secrets that pass for personal ones: the u-<16 hex>- name of a personal secret, or
+     an ark.mckinsey.com/scope label other than shared.
+  */}}
+  - name: reservedSecret
+    expression: >-
+      object.kind == 'Secret' &&
+      ((has(object.metadata.name) && object.metadata.name.matches('^u-[0-9a-f]{16}-')) ||
+       (has(object.metadata.labels) && 'ark.mckinsey.com/scope' in object.metadata.labels &&
+        object.metadata.labels['ark.mckinsey.com/scope'] != 'shared'))
   validations:
   {{- /*
      Tenant users and cluster admins may not run workloads or create token Secrets as the
@@ -143,6 +205,26 @@ spec:
       (request.operation == 'DELETE' &&
        request.userInfo.username in ['system:serviceaccount:kube-system:namespace-controller', 'system:kube-controller-manager'])
     message: "only ark-api may hold or release the marketplace install lock"
+  {{- /*
+     Helm in the install pod may not start workloads or create token Secrets as the
+     installer: a chart would keep its permissions for good.
+  */}}
+  - expression: "!variables.fromInstallPod || !variables.isWorkload || !variables.usesInstaller"
+    message: {{ printf "a chart may not run workloads or mint tokens as %s" (include "ark-tenant.marketplaceInstaller.serviceAccount" $root) | quote }}
+  {{- /*
+     Helm in the install pod may bind only Roles the chart creates itself, and only to
+     service accounts of this namespace or to users outside system:.
+  */}}
+  - expression: >-
+      !variables.fromInstallPod || object.kind != 'RoleBinding' ||
+      (object.roleRef.kind == 'Role' && !(object.roleRef.name in variables.tenantRoles) && variables.safeSubjects)
+    message: "a chart may bind only its own Roles, and only to service accounts of this namespace or to users outside system:"
+  {{- /* Helm in the install pod may not create Roles with the rules safeRules refuses. */}}
+  - expression: "!variables.fromInstallPod || variables.safeRules"
+    message: "a chart may not create Roles over RBAC, wildcards, Secret writes, pods/exec, pods/attach, pods/ephemeralcontainers, serviceaccounts/token or impersonate"
+  {{- /* Helm in the install pod may not create Secrets that pass for personal secrets. */}}
+  - expression: "!variables.fromInstallPod || !variables.reservedSecret"
+    message: "a chart may not create Secrets with a personal secret name or a non-shared ark.mckinsey.com/scope label"
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding

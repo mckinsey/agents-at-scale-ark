@@ -1,0 +1,5 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata: {name: probe-ok}
+rules:
+- {"apiGroups": [""], "resources": [configmaps, secrets], "verbs": [get, list]}

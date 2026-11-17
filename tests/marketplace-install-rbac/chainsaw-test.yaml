@@ -12,7 +12,9 @@ spec:
     or minting tokens as that service account, that the service account is
     admin of its namespace without control of the Namespace object, that a
     Job created by impersonating it runs and is garbage collected, that only
-    ark-api can impersonate it and hold the install lock, with no gap during upgrades,
+    ark-api can impersonate it and hold the install lock, that helm inside
+    the install pod cannot grant RBAC beyond the chart's own Roles, reuse the
+    installer service account or create reserved Secrets, with no gap during upgrades,
     after a rollback or on a reinstall over the bootstrap copy left by an
     uninstall.
   timeouts:
@@ -246,6 +248,58 @@ spec:
             | kubectl -n "$NAMESPACE" --as "$I" create -f -
           kubectl -n "$NAMESPACE" --as "$I" annotate lease other-lease x=y
           kubectl -n "$NAMESPACE" --as "$I" delete lease other-lease
+          echo ok
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: install-pod-rules
+    try:
+    - script:
+        timeout: 240s
+        content: |
+          set -eu
+          . manifests/expect.sh
+          if ! kubectl options | grep -q -- '--as-user-extra'; then
+            echo "this step needs kubectl 1.35 or later for --as-user-extra"
+            kubectl version --client
+            exit 1
+          fi
+          P="ark-marketplace-installer-sa-$NAMESPACE"
+          I="system:serviceaccount:$NAMESPACE:ark-marketplace-installer"
+          B=manifests/install-pod
+          pod() { kubectl -n "$NAMESPACE" --as "$I" --as-user-extra authentication.kubernetes.io/pod-name=install-pod "$@"; }
+          refused() { if pod "$@" >/dev/null 2>&1; then echo "expected a refusal: $*"; exit 1; fi; }
+          kubectl -n "$NAMESPACE" apply -f manifests/install-pod-probe.yaml --as "$I"
+          kubectl -n "$NAMESPACE" wait job/install-pod-probe --for=condition=Complete --timeout=180s
+          pod create -f "$B/role-ok.yaml"
+          pod create rolebinding probe-ok --role=probe-ok --serviceaccount="$NAMESPACE:default"
+          pod create rolebinding probe-user --role=probe-ok --user=dave
+          denied "$P" pod create rolebinding probe-admin --clusterrole=admin --serviceaccount="$NAMESPACE:default"
+          denied "$P" pod create rolebinding probe-group --role=probe-ok --group=devs
+          denied "$P" pod create rolebinding probe-foreign --role=probe-ok --serviceaccount=kube-system:default
+          denied "$P" pod create rolebinding probe-system --role=probe-ok --user=system:kube-proxy
+          for r in role marketplace-installer-extra marketplace-impersonate marketplace-lock; do
+            denied "$P" pod create rolebinding "probe-$r" --role="ark-tenant-$r" --user=carol
+          done
+          for f in wildcard rbac secret-create secret-patch secret-delete exec attach token impersonate; do
+            denied "$P" pod create -f "$B/role-$f.yaml"
+          done
+          for f in ephemeral any-group any-resource any-verb any-subresource; do
+            refused create -f "$B/role-$f.yaml"
+          done
+          denied "$P" pod create -f "$B/deployment-installer.yaml"
+          pod create -f "$B/deployment-default.yaml"
+          denied "$P" pod create -f manifests/installer-workloads/token-secret.yaml
+          for f in reserved-name user-scope; do
+            denied "$P" pod create -f "$B/secret-$f.yaml"
+          done
+          for f in unanchored-name shared plain; do
+            pod create -f "$B/secret-$f.yaml"
+          done
+          denied "$P" pod create -f manifests/lock-lease.yaml
+          sed 's/{name: uses-installer}/{name: impersonated-installer}/' manifests/installer-workloads/deployment.yaml \
+            | kubectl -n "$NAMESPACE" --as "$I" create -f -
           echo ok
         env:
         - name: NAMESPACE
