@@ -58,3 +58,11 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+{{/*
+Name of the marketplace installer service account. ark-api impersonates it by
+this name, so it must match the constants of ark-api's marketplace_install module.
+*/}}
+{{- define "ark-tenant.marketplaceInstaller.serviceAccount" -}}
+ark-marketplace-installer
+{{- end }}

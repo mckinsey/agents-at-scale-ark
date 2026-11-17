@@ -1,0 +1,13 @@
+memory:
+  requireBroker: false
+marketplaceInstall:
+  enabled: true
+  installers:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: User
+    name: alice
+rbac:
+  additionalSubjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: User
+    name: carol

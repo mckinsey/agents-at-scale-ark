@@ -1,0 +1,13 @@
+{{- $mi := .Values.marketplaceInstall | default dict }}
+{{- if $mi.enabled }}
+{{- if not (or $mi.assumeAdmissionPolicyApi (.Capabilities.APIVersions.Has "admissionregistration.k8s.io/v1/ValidatingAdmissionPolicy")) }}
+{{- fail "marketplaceInstall.enabled needs the admissionregistration.k8s.io/v1 ValidatingAdmissionPolicy API (Kubernetes 1.31+). For offline renders pass --api-versions admissionregistration.k8s.io/v1/ValidatingAdmissionPolicy or set marketplaceInstall.assumeAdmissionPolicyApi=true" }}
+{{- end }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "ark-tenant.marketplaceInstaller.serviceAccount" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ark-tenant.labels" . | nindent 4 }}
+{{- end }}
