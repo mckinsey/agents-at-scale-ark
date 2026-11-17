@@ -1,8 +1,8 @@
 {{/*
 ValidatingAdmissionPolicy that protects the marketplace installer service account of
 one tenant namespace. marketplace-install.yaml renders it twice: as a resource of the
-release and as a -bootstrap copy in a pre-install hook, so a copy exists before the
-installer account on the first install.
+release and as a -bootstrap copy in a pre-install and pre-upgrade hook, so a copy exists
+before the installer account whenever the account is first created.
 
 Who sends the requests it looks at:
 - the installer service account: ark-api impersonates it to create the install Job
