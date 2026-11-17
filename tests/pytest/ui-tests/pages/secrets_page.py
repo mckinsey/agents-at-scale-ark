@@ -84,6 +84,8 @@ class SecretsPage(BasePage):
         value_input = self.page.get_by_placeholder("Enter the secret value")
         value_input.fill(secret_value)
 
+        personal_option_visible = self.page.get_by_role("radio", name="Personal").count() > 0
+
         save_button = self.page.get_by_role("button", name="Create")
         save_button.wait_for(state="visible", timeout=5000)
         save_button.click()
@@ -93,14 +95,22 @@ class SecretsPage(BasePage):
 
         self.navigate_to_secrets_tab()
         in_table = self.is_secret_in_table(secret_name)
+        scope = self.get_secret_scope(secret_name) if in_table else None
 
         return {
             "name": secret_name,
             "expected_name": secret_name,
             "popup_visible": popup_visible,
             "in_table": in_table,
+            "personal_option_visible": personal_option_visible,
+            "scope": scope,
             "prefix": prefix
         }
+
+    def get_secret_scope(self, secret_name: str) -> str:
+        link = self.page.get_by_role("link", name=secret_name, exact=True)
+        row = self.page.get_by_role("row").filter(has=link).first
+        return row.get_by_role("cell").nth(1).inner_text().strip()
 
     def delete_secret_with_verification(self, secret_name: str) -> dict:
         if not self.is_secret_in_table(secret_name):

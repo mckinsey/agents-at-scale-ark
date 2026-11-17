@@ -1559,7 +1559,9 @@ describe('useChatSession', () => {
       });
 
       const lastCall = mockStartStreamChatResponse.mock.calls.at(-1);
-      expect(lastCall?.[8]).toEqual([{ name: 'muting', value: 'BANANAPHONE' }]);
+      expect(lastCall?.[4]).toMatchObject({
+        parameters: [{ name: 'muting', value: 'BANANAPHONE' }],
+      });
     });
   });
 
@@ -1600,7 +1602,7 @@ describe('useChatSession', () => {
       });
 
       const lastCall = mockStartStreamChatResponse.mock.calls.at(-1);
-      expect(lastCall?.[9]).toEqual({
+      expect(lastCall?.[4]?.annotations).toEqual({
         'executor-openai-responses.ark.mckinsey.com/output-schema': SCHEMA,
       });
     });
@@ -1625,7 +1627,7 @@ describe('useChatSession', () => {
       });
 
       const lastCall = mockStartStreamChatResponse.mock.calls.at(-1);
-      expect(lastCall?.[9]).toBeUndefined();
+      expect(lastCall?.[4]?.annotations).toBeUndefined();
     });
 
     it('does not support the override for other engines', async () => {
@@ -1719,7 +1721,7 @@ describe('useChatSession', () => {
       });
 
       const lastCall = mockStartStreamChatResponse.mock.calls.at(-1);
-      expect(lastCall?.[9]).toBeUndefined();
+      expect(lastCall?.[4]?.annotations).toBeUndefined();
     });
 
     it('treats an engine-level schema as the agent own schema', async () => {
@@ -1898,6 +1900,185 @@ describe('useChatSession', () => {
       });
 
       expect(mockInvalidateQueriesList).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('MCP credentials', () => {
+    const githubToken = {
+      id: 'c1',
+      server: 'github',
+      header: 'Authorization',
+      secret: 'u-0123456789abcdef-github',
+      key: 'token',
+    };
+    const githubOverride = {
+      resourceType: 'mcpserver',
+      labelSelector: {
+        matchLabels: { 'ark.mckinsey.com/name': 'github' },
+      },
+      headers: [
+        {
+          name: 'Authorization',
+          value: {
+            valueFrom: {
+              secretKeyRef: { name: 'u-0123456789abcdef-github', key: 'token' },
+            },
+          },
+        },
+      ],
+    };
+
+    function streamOnce() {
+      mockStreamChatResponse.mockReturnValue(
+        asyncIterableFrom([
+          createContentChunk('Hi'),
+          createStopChunk(),
+          createArkFinalChunk({}),
+        ]),
+      );
+    }
+
+    it('sends the credentials as mcpserver overrides on a streamed turn', async () => {
+      streamOnce();
+      const { result } = renderHook(
+        () =>
+          useChatSession({
+            name: 'test-agent',
+            type: 'agent',
+            mcpCredentials: [githubToken],
+          }),
+        { wrapper },
+      );
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+
+      expect(mockStartStreamChatResponse).toHaveBeenCalledWith(
+        'default',
+        'Hello',
+        'agent',
+        'test-agent',
+        expect.objectContaining({ overrides: [githubOverride] }),
+      );
+    });
+
+    it('sends the credentials on a polled turn', async () => {
+      store.set(storedIsChatStreamingEnabledAtom, false);
+      mockGetQueryResult.mockResolvedValue({
+        status: 'done',
+        terminal: true,
+        response: 'Polled response',
+      });
+      const { result } = renderHook(
+        () =>
+          useChatSession({
+            name: 'test-agent',
+            type: 'agent',
+            mcpCredentials: [githubToken],
+          }),
+        { wrapper },
+      );
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+
+      expect(mockSubmitChatQuery).toHaveBeenCalledWith(
+        'default',
+        'Hello',
+        'agent',
+        'test-agent',
+        expect.objectContaining({ overrides: [githubOverride] }),
+      );
+    });
+
+    it('resubmits with the credentials when the broker fallback has no query yet', async () => {
+      mockStartStreamChatResponse.mockRejectedValue(
+        new BrokerUnavailableError('down', 503, 'broker_unavailable'),
+      );
+      mockGetQueryResult.mockResolvedValue({
+        status: 'done',
+        terminal: true,
+        response: 'Polled response',
+      });
+      const { result } = renderHook(
+        () =>
+          useChatSession({
+            name: 'test-agent',
+            type: 'agent',
+            mcpCredentials: [githubToken],
+          }),
+        { wrapper },
+      );
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+
+      expect(mockSubmitChatQuery).toHaveBeenCalledWith(
+        'default',
+        'Hello',
+        'agent',
+        'test-agent',
+        expect.objectContaining({ overrides: [githubOverride] }),
+      );
+    });
+
+    it('does not send while the credentials are blocked', async () => {
+      streamOnce();
+      const { result } = renderHook(
+        () =>
+          useChatSession({
+            name: 'test-agent',
+            type: 'agent',
+            mcpCredentials: [githubToken],
+            mcpCredentialsBlocked: true,
+          }),
+        { wrapper },
+      );
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+
+      expect(mockStartStreamChatResponse).not.toHaveBeenCalled();
+      expect(mockSubmitChatQuery).not.toHaveBeenCalled();
+      expect(result.current.messages).toEqual([]);
+    });
+
+    it('sends no overrides when there are no credentials', async () => {
+      streamOnce();
+      const { result } = renderHook(
+        () => useChatSession({ name: 'test-agent', type: 'agent' }),
+        { wrapper },
+      );
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+
+      expect(mockStartStreamChatResponse.mock.calls[0][4]).toMatchObject({
+        overrides: [],
+      });
+    });
+
+    it('uses the credentials current at send time', async () => {
+      streamOnce();
+      const { result, rerender } = renderHook(
+        ({ mcpCredentials }) =>
+          useChatSession({ name: 'test-agent', type: 'agent', mcpCredentials }),
+        { wrapper, initialProps: { mcpCredentials: [githubToken] } },
+      );
+      rerender({ mcpCredentials: [] });
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+
+      expect(mockStartStreamChatResponse.mock.calls[0][4]).toMatchObject({
+        overrides: [],
+      });
     });
   });
 });
