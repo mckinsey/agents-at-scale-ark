@@ -217,13 +217,17 @@ spec:
           sed -e 's/{name: uses-installer}/{name: installer-running}/' -e 's/replicas: 0/replicas: 1/' \
             manifests/installer-workloads/deployment.yaml | kubectl -n "$NAMESPACE" --as "$I" create -f -
           kubectl -n "$NAMESPACE" rollout status deployment/installer-running --timeout=120s
-          kubectl -n "$NAMESPACE" delete deployment installer-running --wait --timeout=60s
+          kubectl -n "$NAMESPACE" delete deployment installer-running --cascade=foreground --wait --timeout=60s
           kubectl -n "$NAMESPACE" delete job install-orphan --cascade=orphan --wait --timeout=60s
           kubectl -n "$NAMESPACE" delete job install-background --cascade=background --wait --timeout=60s
           for _ in $(seq 1 60); do
             refs=$(kubectl -n "$NAMESPACE" get pods -l job-name=install-orphan -o jsonpath='{.items[*].metadata.ownerReferences}')
             left=$(kubectl -n "$NAMESPACE" get pods -l job-name=install-background -o name)
-            if [ -z "$refs" ] && [ -z "$left" ]; then echo ok; exit 0; fi
+            if [ -z "$refs" ] && [ -z "$left" ]; then
+              kubectl -n "$NAMESPACE" delete pods -l job-name=install-orphan --wait --timeout=60s
+              echo ok
+              exit 0
+            fi
             sleep 2
           done
           echo "garbage collection of the installer pods did not finish"
@@ -379,6 +383,44 @@ spec:
         - name: NAMESPACE
           value: ($namespace)
 
+  - name: refuses-existing-installer-workloads
+    try:
+    - script:
+        timeout: 300s
+        content: |
+          set -eu
+          C=../../charts/ark-tenant
+          ND="$NAMESPACE-d"
+          kubectl create namespace "$ND"
+          helm install ark-tenant "$C" --namespace "$ND" --values manifests/tenant-values.yaml \
+            --set marketplaceInstall.enabled=false --wait --timeout=120s
+          kubectl -n "$ND" --as carol create -f manifests/installer-workloads/deployment.yaml
+          if out=$(helm upgrade ark-tenant "$C" --namespace "$ND" --values manifests/tenant-values.yaml 2>&1); then
+            echo "turning the flag on over a workload that uses the installer service account must fail"; exit 1
+          fi
+          echo "$out" | grep -q "Deployment/uses-installer"
+          echo "$out" | grep -q "ReplicaSet/uses-installer-"
+          if kubectl -n "$ND" get serviceaccount ark-marketplace-installer >/dev/null 2>&1; then
+            echo "a refused upgrade must not create the installer service account"; exit 1
+          fi
+          kubectl -n "$ND" delete deployment uses-installer --cascade=foreground --wait --timeout=60s
+          helm upgrade ark-tenant "$C" --namespace "$ND" --values manifests/tenant-values.yaml --wait --timeout=120s
+          kubectl -n "$ND" get serviceaccount ark-marketplace-installer
+          echo ok
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    cleanup:
+    - script:
+        content: |
+          helm uninstall ark-tenant --namespace "$NAMESPACE-d" --wait --timeout=120s || true
+          kubectl delete validatingadmissionpolicybinding,validatingadmissionpolicy \
+            "ark-marketplace-installer-sa-$NAMESPACE-d-bootstrap" --ignore-not-found
+          kubectl delete namespace "$NAMESPACE-d" --ignore-not-found --wait=false
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
   - name: upgrade-keeps-policy
     try:
     - script:
@@ -432,6 +474,8 @@ spec:
           kubectl -n "$NAMESPACE" create serviceaccount ark-marketplace-installer
           eventually_denied_by "$P-bootstrap" kubectl -n "$NAMESPACE" create -f manifests/installer-workloads/pod.yaml
           kubectl -n "$NAMESPACE" delete serviceaccount ark-marketplace-installer
+          kubectl -n "$NAMESPACE" delete job install-ok install-pod-probe --cascade=foreground --wait --timeout=90s
+          kubectl -n "$NAMESPACE" delete deployment impersonated-installer --cascade=foreground --wait --timeout=90s
           helm install ark-tenant ../../charts/ark-tenant --namespace "$NAMESPACE" \
             --values manifests/tenant-values.yaml \
             --set marketplaceInstall.arkApiServiceAccount.namespace="$NAMESPACE" --wait --timeout=120s

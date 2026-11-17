@@ -146,6 +146,13 @@ Requirements:
 - Kubernetes 1.31 or later. With the flag on, the chart fails when the ValidatingAdmissionPolicy API is missing, so it never creates the installer account without its policy.
 - Installing `ark-tenant` with the flag needs rights on cluster-scoped objects for the policy and its binding. With Argo CD, add both kinds to the cluster resource whitelist of the AppProject.
 - `marketplaceInstall.arkApiServiceAccount` must name the service account ark-api runs as. The default is `ark-api-sa` in `default`. When ark-api runs in the tenant namespace, as in the setup above, set the namespace to the tenant namespace.
+- No workload in the namespace may already use `ark-marketplace-installer` when you turn the flag on. The policy only checks objects as they are created or updated, so a Deployment created earlier with that service account, which could not run while the account was missing, would start with its permissions. `helm install` and `helm upgrade` refuse to turn the flag on while such objects exist and list them; reinstalling over a namespace where earlier install Jobs remain refuses too. Offline renders and Argo CD cannot run that check, so run it yourself first:
+
+  ```bash
+  kubectl get pods,replicationcontrollers,jobs,cronjobs,deployments,replicasets,statefulsets,daemonsets -n tenant-a -o json \
+    | jq -r '.items[] | select([.spec | .. | objects | (.serviceAccountName, .serviceAccount) | strings] | index("ark-marketplace-installer")) | .kind + "/" + .metadata.name'
+  ```
+
 - Offline renders (`helm template`, kustomize `helmCharts`) cannot see the cluster API. Pass `--api-versions admissionregistration.k8s.io/v1/ValidatingAdmissionPolicy` or set `marketplaceInstall.assumeAdmissionPolicyApi=true`. Argo CD passes the cluster's API versions and needs neither.
 
 ```bash
