@@ -6,6 +6,7 @@ Checks the opt-in marketplace install objects of `charts/ark-tenant` (`marketpla
 
 - With the flag off the chart renders no marketplace install objects.
 - With the flag on, `helm template` fails without the ValidatingAdmissionPolicy API, and renders with `--api-versions admissionregistration.k8s.io/v1/ValidatingAdmissionPolicy` or `marketplaceInstall.assumeAdmissionPolicyApi=true`.
+- An `arkApiServiceAccount` in the tenant namespace makes the render fail.
 - With no `installers`, the chart renders no installer RoleBinding.
 - Installs the chart in the test namespace with the flag on and `memory.requireBroker=false`, and checks the `ark-marketplace-installer` service account exists.
 - SelfSubjectAccessReviews: alice, listed in `installers`, can `create` `marketplaceinstalls` in group `ark.mckinsey.com` and nothing more; bob and carol, who has the tenant Role, cannot.

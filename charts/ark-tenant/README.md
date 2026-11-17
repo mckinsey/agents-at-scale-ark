@@ -29,6 +29,6 @@ See `values.yaml` for all configuration options including service accounts, buil
 |---|---|---|
 | `marketplaceInstall.enabled` | `false` | Create the marketplace install objects |
 | `marketplaceInstall.installers` | `[]` | RBAC subjects allowed to install from the dashboard |
-| `marketplaceInstall.arkApiServiceAccount` | `{name: ark-api-sa, namespace: default}` | Service account ark-api runs as |
+| `marketplaceInstall.arkApiServiceAccount` | `{name: ark-api-sa, namespace: default}` | Service account ark-api runs as; must be outside the tenant namespace |
 | `marketplaceInstall.extraRules` | `httproutes`, all verbs | Extra Role rules for the installer service account |
 | `marketplaceInstall.assumeAdmissionPolicyApi` | `false` | Render without checking for the ValidatingAdmissionPolicy API, for offline renders |

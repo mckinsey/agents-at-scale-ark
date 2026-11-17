@@ -37,6 +37,11 @@ spec:
           helm template t "$C" -n x --set marketplaceInstall.enabled=true \
             --set marketplaceInstall.assumeAdmissionPolicyApi=true \
             | grep -q "name: ark-marketplace-installer$"
+          if out=$(helm template t "$C" -n x --set marketplaceInstall.enabled=true --api-versions "$VAP" \
+            --set marketplaceInstall.arkApiServiceAccount.namespace=x 2>&1); then
+            echo "an ark-api service account in the tenant namespace must fail"; exit 1
+          fi
+          echo "$out" | grep -q "must live outside the tenant namespace"
           if helm template t "$C" -n x --set marketplaceInstall.enabled=true --api-versions "$VAP" \
             -s templates/marketplace-install.yaml | grep -A3 "kind: RoleBinding" | grep -q "name: t-ark-tenant-marketplace-installer$"; then
             echo "no installers must render no installer RoleBinding"; exit 1
@@ -51,7 +56,6 @@ spec:
           helm install ark-tenant ../../charts/ark-tenant \
             --namespace "$NAMESPACE" \
             --values manifests/tenant-values.yaml \
-            --set marketplaceInstall.arkApiServiceAccount.namespace="$NAMESPACE" \
             --wait --timeout=120s
         env:
         - name: NAMESPACE
@@ -245,7 +249,7 @@ spec:
           . manifests/ssar.sh
           . manifests/expect.sh
           P="ark-marketplace-installer-sa-$NAMESPACE"
-          A="system:serviceaccount:$NAMESPACE:ark-api-sa"
+          A="system:serviceaccount:default:ark-api-sa"
           I="system:serviceaccount:$NAMESPACE:ark-marketplace-installer"
           expect_can true "$A" "$NAMESPACE" "" serviceaccounts impersonate ark-marketplace-installer
           expect_can false "$A" "$NAMESPACE" "" serviceaccounts impersonate default
@@ -358,7 +362,7 @@ spec:
           kubectl get validatingadmissionpolicy "ark-marketplace-installer-sa-$NC"
           wait_enforced "$NC"
           helm uninstall ark-tenant --namespace "$NC" --wait --timeout=120s
-          A2="system:serviceaccount:$NAMESPACE:ark-api-sa-2"
+          A2="system:serviceaccount:default:ark-api-sa-2"
           helm upgrade ark-tenant "$C" --namespace "$NAMESPACE" --reuse-values \
             --set marketplaceInstall.arkApiServiceAccount.name=ark-api-sa-2 --wait --timeout=120s
           for _ in $(seq 1 30); do
@@ -443,8 +447,7 @@ spec:
             --set-json 'marketplaceInstall.extraRules=[]' --wait --timeout=120s
           . manifests/ssar.sh
           expect_can false "system:serviceaccount:$NAMESPACE:ark-marketplace-installer" "$NAMESPACE" gateway.networking.k8s.io httproutes create
-          helm upgrade ark-tenant "$C" --namespace "$NAMESPACE" --values manifests/tenant-values.yaml \
-            --set marketplaceInstall.arkApiServiceAccount.namespace="$NAMESPACE" --wait --timeout=120s
+          helm upgrade ark-tenant "$C" --namespace "$NAMESPACE" --values manifests/tenant-values.yaml --wait --timeout=120s
           touch "$STOP"
           wait
           cat "$LOG"
@@ -477,8 +480,7 @@ spec:
           kubectl -n "$NAMESPACE" delete job install-ok install-pod-probe --cascade=foreground --wait --timeout=90s
           kubectl -n "$NAMESPACE" delete deployment impersonated-installer --cascade=foreground --wait --timeout=90s
           helm install ark-tenant ../../charts/ark-tenant --namespace "$NAMESPACE" \
-            --values manifests/tenant-values.yaml \
-            --set marketplaceInstall.arkApiServiceAccount.namespace="$NAMESPACE" --wait --timeout=120s
+            --values manifests/tenant-values.yaml --wait --timeout=120s
           wait_enforced "$NAMESPACE"
           kubectl get validatingadmissionpolicy "$P"
           echo ok

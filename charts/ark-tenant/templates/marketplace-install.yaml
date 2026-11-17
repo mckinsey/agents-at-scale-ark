@@ -3,6 +3,9 @@
 {{- if not (or $mi.assumeAdmissionPolicyApi (.Capabilities.APIVersions.Has "admissionregistration.k8s.io/v1/ValidatingAdmissionPolicy")) }}
 {{- fail "marketplaceInstall.enabled needs the admissionregistration.k8s.io/v1 ValidatingAdmissionPolicy API (Kubernetes 1.31+). For offline renders pass --api-versions admissionregistration.k8s.io/v1/ValidatingAdmissionPolicy or set marketplaceInstall.assumeAdmissionPolicyApi=true" }}
 {{- end }}
+{{- if eq (toString $mi.arkApiServiceAccount.namespace) .Release.Namespace }}
+{{- fail (printf "marketplaceInstall.arkApiServiceAccount must live outside the tenant namespace %q: tenant users can run pods as any service account of their namespace, and this one may impersonate the installer" .Release.Namespace) }}
+{{- end }}
 {{- if not (lookup "admissionregistration.k8s.io/v1" "ValidatingAdmissionPolicy" "" (include "ark-tenant.marketplaceInstall.policyName" .)) }}
 {{- $sa := include "ark-tenant.marketplaceInstaller.serviceAccount" . }}
 {{- $found := list }}
