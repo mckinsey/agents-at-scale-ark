@@ -82,3 +82,19 @@ copy appends -bootstrap. ark-api looks both pairs up by name before it enables i
 {{- define "ark-tenant.marketplaceInstall.policyName" -}}
 ark-marketplace-installer-sa-{{ .Release.Namespace }}
 {{- end }}
+
+{{/*
+Name of the Lease that ark-api takes as the per-namespace install lock.
+*/}}
+{{- define "ark-tenant.marketplaceInstall.lockName" -}}
+marketplace-install-lock
+{{- end }}
+
+{{/*
+Username of ark-api's service account, from marketplaceInstall.arkApiServiceAccount.
+The policy lets only this identity hold the install lock.
+*/}}
+{{- define "ark-tenant.marketplaceInstall.arkApiUsername" -}}
+{{- $sa := .Values.marketplaceInstall.arkApiServiceAccount -}}
+system:serviceaccount:{{ $sa.namespace }}:{{ $sa.name }}
+{{- end }}

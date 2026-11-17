@@ -43,7 +43,30 @@ spec:
       apiVersions: ["v1"]
       operations: [CREATE, UPDATE]
       resources: [deployments, statefulsets, daemonsets, replicasets]
+    - apiGroups: [coordination.k8s.io]
+      apiVersions: ["v1"]
+      operations: [CREATE, UPDATE, DELETE]
+      resources: [leases]
   variables:
+  {{- /*
+     Writes to the install lock Lease. A DELETE without a name is a collection delete,
+     which would remove the lock too.
+  */}}
+  - name: isLock
+    expression: >-
+      request.resource.group == 'coordination.k8s.io' &&
+      (request.operation == 'DELETE'
+        ? (request.name == '' || request.name == {{ include "ark-tenant.marketplaceInstall.lockName" $root | squote }})
+        : object.metadata.name == {{ include "ark-tenant.marketplaceInstall.lockName" $root | squote }})
+  {{- /*
+     Requests on workload kinds and Secrets: the only objects here that can run code
+     or carry a token as a service account.
+  */}}
+  - name: isWorkload
+    expression: "request.resource.group in ['', 'batch', 'apps']"
+  {{- /* ark-api's own service account, the only holder of the install lock. */}}
+  - name: arkApiUser
+    expression: {{ include "ark-tenant.marketplaceInstall.arkApiUsername" $root | squote | quote }}
   {{- /*
      The installer service account. Helm runs as it inside the install pod, and ark-api
      impersonates it to create the install Job.
@@ -107,8 +130,19 @@ spec:
      Tenant users and cluster admins may not run workloads or create token Secrets as the
      installer. Only the installer itself and the controllers may.
   */}}
-  - expression: "!variables.usesInstaller || variables.trusted"
+  - expression: "!variables.isWorkload || !variables.usesInstaller || variables.trusted"
     message: {{ printf "only the marketplace installer may run workloads or mint tokens as %s" (include "ark-tenant.marketplaceInstaller.serviceAccount" $root) | quote }}
+  {{- /*
+     Only ark-api may create, update or delete the install lock. The namespace controller
+     may delete it when the namespace goes away, and kube-controller-manager covers
+     distributions that run every controller under that one identity.
+  */}}
+  - expression: >-
+      !variables.isLock ||
+      request.userInfo.username == variables.arkApiUser ||
+      (request.operation == 'DELETE' &&
+       request.userInfo.username in ['system:serviceaccount:kube-system:namespace-controller', 'system:kube-controller-manager'])
+    message: "only ark-api may hold or release the marketplace install lock"
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding
