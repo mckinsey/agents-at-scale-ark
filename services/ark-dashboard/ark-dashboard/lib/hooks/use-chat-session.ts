@@ -48,8 +48,10 @@ import type {
 } from '@/lib/types/chat-message';
 import {
   type StreamTurnEffects,
+  type StreamTurnState,
   createStreamTurnState,
   finishStreamTurn,
+  isTurnWithoutAnswer,
   processStreamChunk,
 } from '@/lib/utils/chat-stream-turn';
 import {
@@ -518,6 +520,20 @@ export function useChatSession({
 
   const pendingApprovalQueryRef = useRef<PendingApprovalQuery | null>(null);
 
+  const recoverTurnFromQueryResult = useCallback(
+    async (turn: StreamTurnState, queryName: string) => {
+      try {
+        const result = await chatService.getQueryResult(namespace, queryName);
+        if (result.status === 'done' && result.messages?.length) {
+          turn.completedQueryMessages = result.messages;
+        }
+      } catch (err) {
+        console.error('Failed to recover the query result:', err);
+      }
+    },
+    [namespace],
+  );
+
   const handleStreamChatResponse = useCallback(
     async (
       userMessage: string,
@@ -624,6 +640,10 @@ export function useChatSession({
         });
       }
 
+      if (!leavingRef.current && isTurnWithoutAnswer(turn)) {
+        await recoverTurnFromQueryResult(turn, streamQueryName);
+      }
+
       return finishStreamTurn(turn, effects);
     },
     [
@@ -634,6 +654,7 @@ export function useChatSession({
       namespace,
       queryTimeout,
       outputSchemaAnnotations,
+      recoverTurnFromQueryResult,
       sessionId,
       setActiveQueryName,
       type,
