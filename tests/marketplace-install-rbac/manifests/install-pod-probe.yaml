@@ -1,0 +1,22 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: install-pod-probe
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      serviceAccountName: ark-marketplace-installer
+      restartPolicy: Never
+      containers:
+      - name: probe
+        image: curlimages/curl:8.11.1
+        command: ["sh", "-c"]
+        args:
+        - |
+          S=/var/run/secrets/kubernetes.io/serviceaccount
+          curl -sS --cacert "$S/ca.crt" -H "Authorization: Bearer $(cat "$S/token")" \
+            -H 'Content-Type: application/json' -X POST \
+            https://kubernetes.default.svc/apis/authentication.k8s.io/v1/selfsubjectreviews \
+            -d '{"apiVersion":"authentication.k8s.io/v1","kind":"SelfSubjectReview"}' \
+            | grep -q '"authentication.kubernetes.io/pod-name"'
