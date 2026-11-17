@@ -45,9 +45,11 @@ var _ = Describe("Query Controller per-namespace fairness", func() {
 		}
 		r.initSemaphore()
 
+		busyKey := types.NamespacedName{Namespace: busyNS, Name: "busy-query"}
+
 		// Busy tenant already holds the whole pool.
-		Expect(r.sched.tryAcquire(busyNS)).To(BeTrue())
-		Expect(r.sched.tryAcquire(busyNS)).To(BeTrue())
+		Expect(r.sched.tryAcquire(busyKey)).To(BeTrue())
+		Expect(r.sched.tryAcquire(busyKey)).To(BeTrue())
 
 		quiet := &arkv1alpha1.Query{
 			ObjectMeta: metav1.ObjectMeta{Name: "quiet-query", Namespace: quietNS},
@@ -73,7 +75,7 @@ var _ = Describe("Query Controller per-namespace fairness", func() {
 		// the busy tenant is already at it and must NOT reclaim the free slot even
 		// though the global pool has room.
 		r.sched.release(busyNS)
-		Expect(r.sched.tryAcquire(busyNS)).To(BeFalse(),
+		Expect(r.sched.tryAcquire(busyKey)).To(BeFalse(),
 			"saturating tenant must not reclaim a slot reserved for the starved tenant while capacity remains")
 
 		// The starved tenant takes the reserved slot and transitions to running.
