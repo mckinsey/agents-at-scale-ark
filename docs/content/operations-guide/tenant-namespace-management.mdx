@@ -145,7 +145,7 @@ Requirements:
 
 - Kubernetes 1.31 or later. With the flag on, the chart fails when the ValidatingAdmissionPolicy API is missing, so it never creates the installer account without its policy.
 - Installing `ark-tenant` with the flag needs rights on cluster-scoped objects for the policy and its binding. With Argo CD, add both kinds to the cluster resource whitelist of the AppProject.
-- `marketplaceInstall.arkApiServiceAccount` must name the service account ark-api runs as. The default is `ark-api-sa` in `default`. When ark-api runs in the tenant namespace, as in the setup above, set the namespace to the tenant namespace.
+- `marketplaceInstall.arkApiServiceAccount` must name the service account ark-api runs as, and ark-api must run outside the tenant namespace. The default is `ark-api-sa` in `default`. The chart refuses a service account in the tenant namespace: tenant users can run pods as any service account of their namespace, and this one may impersonate the installer. A tenant that runs its own ark-api, as in the setup above, cannot turn on dashboard installs.
 - No workload in the namespace may already use `ark-marketplace-installer` when you turn the flag on. The policy only checks objects as they are created or updated, so a Deployment created earlier with that service account, which could not run while the account was missing, would start with its permissions. `helm install` and `helm upgrade` refuse to turn the flag on while such objects exist and list them; reinstalling over a namespace where earlier install Jobs remain refuses too. Offline renders and Argo CD cannot run that check, so run it yourself first:
 
   ```bash
@@ -159,7 +159,6 @@ Requirements:
 helm upgrade --install ark-tenant oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-tenant \
   -n tenant-a \
   --set marketplaceInstall.enabled=true \
-  --set marketplaceInstall.arkApiServiceAccount.namespace=tenant-a \
   --set 'marketplaceInstall.installers[0].kind=User' \
   --set 'marketplaceInstall.installers[0].apiGroup=rbac.authorization.k8s.io' \
   --set 'marketplaceInstall.installers[0].name=alice@example.com'
