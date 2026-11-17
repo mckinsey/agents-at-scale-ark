@@ -11,7 +11,8 @@ spec:
     namespace stops tenant users and cluster admins from running workloads
     or minting tokens as that service account, that the service account is
     admin of its namespace without control of the Namespace object, that a
-    Job created by impersonating it runs and is garbage collected, with no gap during upgrades,
+    Job created by impersonating it runs and is garbage collected, that only
+    ark-api can impersonate it and hold the install lock, with no gap during upgrades,
     after a rollback or on a reinstall over the bootstrap copy left by an
     uninstall.
   timeouts:
@@ -136,8 +137,10 @@ spec:
             --values manifests/tenant-values.yaml --wait --timeout=120s
           wait_enforced "$NB"
           denied "ark-marketplace-installer-sa-$NB" kubectl -n "$NB" create -f manifests/installer-workloads/pod.yaml
+          kubectl -n "$NB" --as system:serviceaccount:default:ark-api-sa create -f manifests/lock-lease.yaml
           helm uninstall ark-tenant --namespace "$NB" --wait --timeout=120s
           denied "ark-marketplace-installer-sa-$NAMESPACE" kubectl -n "$NAMESPACE" create -f manifests/installer-workloads/pod.yaml
+          kubectl delete namespace "$NB" --wait --timeout=120s
           echo ok
         env:
         - name: NAMESPACE
@@ -207,6 +210,43 @@ spec:
           echo "garbage collection of the installer pods did not finish"
           kubectl -n "$NAMESPACE" get pods -o yaml
           exit 1
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: ark-api-permissions
+    try:
+    - script:
+        content: |
+          set -eu
+          . manifests/ssar.sh
+          . manifests/expect.sh
+          P="ark-marketplace-installer-sa-$NAMESPACE"
+          A="system:serviceaccount:$NAMESPACE:ark-api-sa"
+          I="system:serviceaccount:$NAMESPACE:ark-marketplace-installer"
+          expect_can true "$A" "$NAMESPACE" "" serviceaccounts impersonate ark-marketplace-installer
+          expect_can false "$A" "$NAMESPACE" "" serviceaccounts impersonate default
+          expect_can false "$A" "$NAMESPACE" "" serviceaccounts impersonate ark-tenant
+          expect_can true "$A" "$NAMESPACE" coordination.k8s.io leases create
+          expect_can true "$A" "$NAMESPACE" coordination.k8s.io leases get marketplace-install-lock
+          expect_can true "$A" "$NAMESPACE" coordination.k8s.io leases update marketplace-install-lock
+          expect_can true "$A" "$NAMESPACE" coordination.k8s.io leases delete marketplace-install-lock
+          expect_can false "$A" "$NAMESPACE" coordination.k8s.io leases delete other-lease
+          expect_can false "$A" "$NAMESPACE" apps deployments create
+          denied "$P" kubectl -n "$NAMESPACE" --as "$I" create -f manifests/lock-lease.yaml
+          denied "$P" kubectl -n "$NAMESPACE" create -f manifests/lock-lease.yaml
+          kubectl -n "$NAMESPACE" --as "$A" create -f manifests/lock-lease.yaml
+          denied "$P" kubectl -n "$NAMESPACE" --as "$I" annotate lease marketplace-install-lock x=y
+          denied "$P" kubectl -n "$NAMESPACE" --as "$I" delete lease marketplace-install-lock
+          denied "$P" kubectl -n "$NAMESPACE" --as "$I" delete --raw "/apis/coordination.k8s.io/v1/namespaces/$NAMESPACE/leases"
+          kubectl -n "$NAMESPACE" --as "$A" get lease marketplace-install-lock -o json \
+            | jq '.spec.holderIdentity = "ark-api"' | kubectl -n "$NAMESPACE" --as "$A" replace -f -
+          kubectl -n "$NAMESPACE" --as "$A" delete lease marketplace-install-lock
+          sed 's/name: marketplace-install-lock/name: other-lease/' manifests/lock-lease.yaml \
+            | kubectl -n "$NAMESPACE" --as "$I" create -f -
+          kubectl -n "$NAMESPACE" --as "$I" annotate lease other-lease x=y
+          kubectl -n "$NAMESPACE" --as "$I" delete lease other-lease
+          echo ok
         env:
         - name: NAMESPACE
           value: ($namespace)
