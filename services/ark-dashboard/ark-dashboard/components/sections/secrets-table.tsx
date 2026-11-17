@@ -2,11 +2,13 @@
 
 import { useState } from 'react';
 
+import { SecretScopeBadge } from '@/components/common/secret-scope-badge';
 import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
-import { Trash } from '@/components/icons';
+import { Info, Trash } from '@/components/icons';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { LabelsCell, TagOverflowList } from '@/components/sections/labels-cell';
 import { IconActionButton } from '@/components/ui/icon-action-button';
+import { IconShell } from '@/components/ui/icon-shell';
 import {
   StatusIndicator,
   UNKNOWN_STATUS,
@@ -20,6 +22,11 @@ import {
   TableRow,
   rowHoverOverlayClass,
 } from '@/components/ui/table';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { TruncatedTooltip } from '@/components/ui/truncated-tooltip';
 import type { ModelListItem } from '@/lib/services/models';
 import type { Secret } from '@/lib/services/secrets';
@@ -36,22 +43,61 @@ const MAX_VISIBLE_MODELS = 3;
 
 const COL = {
   name: 'w-[280px]',
+  scope: 'w-[100px]',
   usedBy: 'w-[120px]',
   labels: 'w-[220px]',
   status: 'w-[140px]',
   action: 'w-[100px]',
 };
 
+const SCOPE_TOOLTIP =
+  'Shared secrets are visible in Ark to everyone with access to this namespace. Personal secrets are visible in Ark only to you and can be used only in the MCP server overrides of a query.';
+
+function ScopeColumnHeader() {
+  return (
+    <TableHead size="small" className={COL.scope}>
+      <span className="flex items-center gap-1">
+        Scope
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              aria-label="About Scope"
+              className="inline-flex">
+              <IconShell size="sm" className="opacity-100">
+                <Info />
+              </IconShell>
+            </button>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-xs">{SCOPE_TOOLTIP}</TooltipContent>
+        </Tooltip>
+      </span>
+    </TableHead>
+  );
+}
+
 function NameCell({ secret }: Readonly<{ secret: Secret }>) {
+  const showRealName = secret.display_name !== secret.name;
   return (
     <div className="flex min-w-0 flex-col gap-0.5">
-      <TruncatedTooltip label={secret.name}>
+      <TruncatedTooltip label={secret.display_name}>
         <NamespacedLink
           href={`/secrets/${encodeURIComponent(secret.name)}`}
+          aria-label={
+            showRealName ? `${secret.display_name} (${secret.name})` : undefined
+          }
           className="text-fg-primary block truncate after:absolute after:inset-0 after:content-['']">
-          {secret.name}
+          {secret.display_name}
         </NamespacedLink>
       </TruncatedTooltip>
+      {showRealName && (
+        <TruncatedTooltip label={secret.name}>
+          <span className="text-fg-secondary label-small-primary relative z-10 block truncate font-mono">
+            <span className="sr-only">Kubernetes name: </span>
+            {secret.name}
+          </span>
+        </TruncatedTooltip>
+      )}
       {secret.alias && (
         <TruncatedTooltip label={secret.alias}>
           <span className="text-fg-secondary label-small-primary relative z-10 block truncate">
@@ -61,6 +107,12 @@ function NameCell({ secret }: Readonly<{ secret: Secret }>) {
       )}
     </div>
   );
+}
+
+function secretLabel(secret: Secret): string {
+  return secret.display_name === secret.name
+    ? secret.name
+    : `${secret.display_name} (${secret.name})`;
 }
 
 function modelUsesSecret(model: ModelListItem, secretName: string): boolean {
@@ -117,6 +169,9 @@ function SecretTableRow({
           <span aria-hidden className={rowHoverOverlayClass} />
           <NameCell secret={secret} />
         </TableCell>
+        <TableCell size="small" className={COL.scope}>
+          <SecretScopeBadge scope={secret.scope} />
+        </TableCell>
         <TableCell size="small" className={COL.usedBy}>
           <span className="text-fg-secondary block truncate">
             {usageCount} model{usageCount === 1 ? '' : 's'}
@@ -148,7 +203,7 @@ function SecretTableRow({
         open={deleteConfirmOpen}
         onOpenChange={setDeleteConfirmOpen}
         title="Delete Secret"
-        description={`Do you want to delete "${secret.name}" secret? This action cannot be undone.`}
+        description={`Do you want to delete "${secretLabel(secret)}" secret? This action cannot be undone.`}
         confirmText="Delete"
         cancelText="Cancel"
         onConfirm={() => onDelete(secret.id)}
@@ -166,12 +221,13 @@ export function SecretsTable({
   return (
     <Table
       aria-label="Secrets"
-      className="min-w-[1136px] table-fixed border-separate border-spacing-x-4 border-spacing-y-0">
+      className="min-w-[1252px] table-fixed border-separate border-spacing-x-4 border-spacing-y-0">
       <TableHeader>
         <TableRow>
           <TableHead size="small" className={COL.name}>
             Name
           </TableHead>
+          <ScopeColumnHeader />
           <TableHead size="small" className={COL.usedBy}>
             Used by
           </TableHead>

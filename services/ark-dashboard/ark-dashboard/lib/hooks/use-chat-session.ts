@@ -9,6 +9,7 @@ import {
   chatHistoryAtom,
   createNewSessionId,
 } from '@/atoms/chat-history';
+import type { StoredMcpCredential } from '@/atoms/chat-mcp-credentials';
 import {
   isChatStreamingEnabledAtom,
   queryTimeoutSettingAtom,
@@ -24,6 +25,7 @@ import {
   useAgentQueryParameters,
 } from '@/lib/hooks/use-agent-query-parameters';
 import { useBrokerFallbackNotice } from '@/lib/hooks/use-broker-fallback-notice';
+import { buildMcpCredentialOverrides } from '@/lib/hooks/use-chat-mcp-credentials';
 import {
   type PendingApprovalQuery,
   useResumePendingApproval,
@@ -36,6 +38,7 @@ import {
   type ChatResponse,
   type MemoryNotice,
   type MemoryNoticeLookup,
+  type QueryOverride,
   isBrokerUnavailableError,
 } from '@/lib/services/chat';
 import { useInvalidateQueriesList } from '@/lib/services/queries-hooks';
@@ -110,6 +113,13 @@ async function* streamUntilForceClose<T>(
 interface UseChatSessionParams {
   name: string;
   type: ChatType;
+  mcpCredentials?: readonly StoredMcpCredential[];
+  mcpCredentialsBlocked?: boolean;
+}
+
+interface ChatTurnRequest {
+  parameters?: ApiQueryParameter[];
+  overrides?: QueryOverride[];
 }
 
 interface UseChatSessionReturn {
@@ -153,9 +163,13 @@ interface UseChatSessionReturn {
   isOutputSchemaOverrideValid: boolean;
 }
 
+const NO_MCP_CREDENTIALS: readonly StoredMcpCredential[] = [];
+
 export function useChatSession({
   name,
   type,
+  mcpCredentials = NO_MCP_CREDENTIALS,
+  mcpCredentialsBlocked = false,
 }: UseChatSessionParams): UseChatSessionReturn {
   const { namespace } = useNamespace();
   const invalidateQueriesList = useInvalidateQueriesList();
@@ -410,6 +424,7 @@ export function useChatSession({
   );
   const isSendBlocked =
     missingParameters.length > 0 ||
+    mcpCredentialsBlocked ||
     (canOverrideOutputSchema && !isOutputSchemaOverrideValid);
 
   useEffect(() => {
@@ -506,7 +521,7 @@ export function useChatSession({
   const handleStreamChatResponse = useCallback(
     async (
       userMessage: string,
-      apiParameters?: ApiQueryParameter[],
+      turnRequest: ChatTurnRequest,
     ): Promise<boolean> => {
       chatStreamAbortControllerRef.current = new AbortController();
 
@@ -523,12 +538,15 @@ export function useChatSession({
           userMessage,
           type,
           name,
-          sessionId,
-          conversationId,
-          queryTimeout,
-          chatStreamAbortControllerRef.current.signal,
-          apiParameters,
-          outputSchemaAnnotations,
+          {
+            sessionId,
+            conversationId,
+            timeout: queryTimeout,
+            abortSignal: chatStreamAbortControllerRef.current.signal,
+            parameters: turnRequest.parameters,
+            overrides: turnRequest.overrides,
+            annotations: outputSchemaAnnotations,
+          },
         );
 
       lastQueryName.current = streamQueryName;
@@ -629,7 +647,7 @@ export function useChatSession({
   const handlePollChatResponse = useCallback(
     async (
       userMessage: string,
-      apiParameters?: ApiQueryParameter[],
+      turnRequest: ChatTurnRequest,
       existingQueryName?: string,
     ): Promise<boolean> => {
       let queryName = existingQueryName;
@@ -639,11 +657,14 @@ export function useChatSession({
           userMessage,
           type,
           name,
-          sessionId,
-          conversationId,
-          queryTimeout,
-          apiParameters,
-          outputSchemaAnnotations,
+          {
+            sessionId,
+            conversationId,
+            timeout: queryTimeout,
+            parameters: turnRequest.parameters,
+            overrides: turnRequest.overrides,
+            annotations: outputSchemaAnnotations,
+          },
         );
         queryName = query.name;
         invalidateQueriesList();
@@ -733,7 +754,7 @@ export function useChatSession({
     async (
       err: BrokerUnavailableError,
       userMessage: string,
-      apiParameters: ApiQueryParameter[] | undefined,
+      turnRequest: ChatTurnRequest,
     ): Promise<boolean> => {
       if (err.code === 'broker_unavailable') {
         notifyBrokerFallback();
@@ -742,7 +763,7 @@ export function useChatSession({
       try {
         return await handlePollChatResponse(
           userMessage,
-          apiParameters,
+          turnRequest,
           err.queryName || lastQueryName.current || undefined,
         );
       } catch (error_) {
@@ -770,7 +791,10 @@ export function useChatSession({
         return;
       }
 
-      const apiParameters = toApiParameters();
+      const turnRequest: ChatTurnRequest = {
+        parameters: toApiParameters(),
+        overrides: buildMcpCredentialOverrides(mcpCredentials),
+      };
       clearActiveQuery();
 
       trackEvent({
@@ -796,13 +820,10 @@ export function useChatSession({
 
       try {
         if (isChatStreamingEnabled) {
-          settled = !(await handleStreamChatResponse(
-            userMessage,
-            apiParameters,
-          ));
+          settled = !(await handleStreamChatResponse(userMessage, turnRequest));
           await ensureConversationId();
         } else {
-          settled = await handlePollChatResponse(userMessage, apiParameters);
+          settled = await handlePollChatResponse(userMessage, turnRequest);
         }
       } catch (err) {
         if (leavingRef.current || isAbortError(err)) {
@@ -813,7 +834,7 @@ export function useChatSession({
         console.error('Error sending message:', err);
 
         if (isBrokerUnavailableError(err)) {
-          settled = await recoverViaPolling(err, userMessage, apiParameters);
+          settled = await recoverViaPolling(err, userMessage, turnRequest);
           return;
         }
 
@@ -857,6 +878,7 @@ export function useChatSession({
       handleStreamChatResponse,
       isChatStreamingEnabled,
       isSendBlocked,
+      mcpCredentials,
       name,
       recoverViaPolling,
       refreshMemoryNotice,

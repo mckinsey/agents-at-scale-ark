@@ -12,6 +12,7 @@ export default {
   tools: 'Creating Tools and MCP Servers',
   'tool-approvals': 'Human-in-the-loop tool approvals',
   configurations: 'Configurations',
+  secrets: 'Secrets',
   files: 'Managing Files',
   'ark-cli': 'The Ark CLI',
 

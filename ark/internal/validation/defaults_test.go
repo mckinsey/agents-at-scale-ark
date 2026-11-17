@@ -3,12 +3,14 @@ package validation
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/annotations"
+	"mckinsey.com/ark/internal/labels"
 )
 
 //nolint:gocognit
@@ -342,6 +344,64 @@ func TestDefaultQuery(t *testing.T) {
 		}
 		if query.Spec.TTL == nil {
 			t.Fatal("expected TTL to be populated from fallback")
+		}
+	})
+}
+
+func TestDefaultMCPServer(t *testing.T) {
+	newServer := func(name string, serverLabels map[string]string) *arkv1alpha1.MCPServer {
+		return &arkv1alpha1.MCPServer{ObjectMeta: metav1.ObjectMeta{Name: name, Labels: serverLabels}}
+	}
+
+	t.Run("adds the name label", func(t *testing.T) {
+		server := newServer("github", nil)
+		DefaultMCPServer(server)
+		if server.Labels[labels.NameLabel] != "github" {
+			t.Fatalf("expected name label github, got %v", server.Labels)
+		}
+	})
+
+	t.Run("replaces a name label copied from another server and keeps other labels", func(t *testing.T) {
+		server := newServer("echo", map[string]string{labels.NameLabel: "github", "team": "a"})
+		DefaultMCPServer(server)
+		if server.Labels[labels.NameLabel] != "echo" || server.Labels["team"] != "a" {
+			t.Fatalf("unexpected labels %v", server.Labels)
+		}
+	})
+
+	t.Run("accepts a 63 character name", func(t *testing.T) {
+		name := strings.Repeat("a", 63)
+		server := newServer(name, nil)
+		DefaultMCPServer(server)
+		if server.Labels[labels.NameLabel] != name {
+			t.Fatalf("expected the name label, got %v", server.Labels)
+		}
+	})
+
+	t.Run("removes the name label when the name cannot be a label value", func(t *testing.T) {
+		server := newServer(strings.Repeat("a", 64), map[string]string{labels.NameLabel: "github", "team": "a"})
+		DefaultMCPServer(server)
+		if _, ok := server.Labels[labels.NameLabel]; ok {
+			t.Fatalf("expected no name label, got %v", server.Labels)
+		}
+		if server.Labels["team"] != "a" {
+			t.Fatalf("expected other labels kept, got %v", server.Labels)
+		}
+	})
+
+	t.Run("leaves a server without a name alone", func(t *testing.T) {
+		server := newServer("", nil)
+		DefaultMCPServer(server)
+		if server.Labels != nil {
+			t.Fatalf("expected no labels, got %v", server.Labels)
+		}
+	})
+
+	t.Run("is applied through ApplyDefaults", func(t *testing.T) {
+		server := newServer("github", nil)
+		ApplyDefaults(context.Background(), server, nil)
+		if server.Labels[labels.NameLabel] != "github" {
+			t.Fatalf("expected name label from ApplyDefaults, got %v", server.Labels)
 		}
 	})
 }

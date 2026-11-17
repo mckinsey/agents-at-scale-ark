@@ -33,7 +33,8 @@ export function SecretsSection() {
   const [models, setModels] = useState<ModelListItem[]>([]);
   const [filters, setFilters] = useUrlState(URL_STATE_SPEC);
 
-  const { data: secrets = [], isLoading: secretsLoading } = useGetAllSecrets();
+  const { data: secrets = [], isLoading: secretsLoading } =
+    useGetAllSecrets('all');
   const deleteSecretMutation = useDeleteSecret();
   const showLoading = useDelayedLoading(secretsLoading);
 
