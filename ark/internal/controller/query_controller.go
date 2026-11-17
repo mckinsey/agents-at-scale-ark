@@ -89,12 +89,8 @@ const (
 	// queryCapacityRequeueDelay is how long Reconcile waits before retrying
 	// when MaxConcurrentQueries is reached. Short enough to be responsive,
 	// long enough to avoid a busy-loop while in-flight queries drain.
-	queryCapacityRequeueDelay = 250 * time.Millisecond
-	// queryFairnessWaitWindow is how long a namespace denied a slot stays in
-	// the fair-share divisor after its last attempt. A few requeue cycles, so
-	// a still-competing tenant keeps its share while one that stops requeuing
-	// ages out and lets the remaining tenants expand.
-	queryFairnessWaitWindow = 4 * queryCapacityRequeueDelay
+	queryCapacityRequeueDelay    = 250 * time.Millisecond
+	queryFairnessQueuedKeyExpiry = 5 * time.Minute
 	// queryRunningSafetyRequeue re-reconciles a running Query whose execution
 	// goroutine died so it converges to a terminal phase instead of stranding.
 	// Delayed, not immediate, to avoid the requeue storm of #2198/#2362.
@@ -182,6 +178,8 @@ func (r *QueryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	if err != nil {
 		if client.IgnoreNotFound(err) != nil {
 			log.Error(err, "unable to fetch Query")
+		} else {
+			r.forgetQueued(req.NamespacedName)
 		}
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
@@ -261,6 +259,8 @@ func (r *QueryReconciler) handleFinalizer(ctx context.Context, obj *arkv1alpha1.
 		return nil, nil
 	}
 
+	r.forgetQueued(types.NamespacedName{Name: obj.Name, Namespace: obj.Namespace})
+
 	if controllerutil.ContainsFinalizer(obj, finalizer) {
 		if err := r.finalize(ctx, obj); err != nil {
 			log := logf.FromContext(ctx)
@@ -300,6 +300,7 @@ func (r *QueryReconciler) patchFinalizers(ctx context.Context, obj *arkv1alpha1.
 func (r *QueryReconciler) handleQueryExecution(ctx context.Context, req ctrl.Request, obj arkv1alpha1.Query) (ctrl.Result, error) {
 	if obj.Spec.Cancel && !isTerminalPhase(obj.Status.Phase) {
 		r.cleanupExistingOperation(req.NamespacedName)
+		r.forgetQueued(req.NamespacedName)
 		if err := r.updateStatus(ctx, &obj, statusCanceled); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -312,6 +313,7 @@ func (r *QueryReconciler) handleQueryExecution(ctx context.Context, req ctrl.Req
 	// Enforces per-round pre-execution wall-SLO.
 	if isPreExecutionPhase(obj.Status.Phase) && remainingBudget(&obj) <= 0 {
 		r.cleanupExistingOperation(req.NamespacedName)
+		r.forgetQueued(req.NamespacedName)
 		if err := r.failQueryOnTimeout(ctx, &obj, reasonTimedOutInQueue, preExecutionTimeoutMessage(obj.Status.Phase)); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -321,6 +323,7 @@ func (r *QueryReconciler) handleQueryExecution(ctx context.Context, req ctrl.Req
 
 	switch obj.Status.Phase {
 	case statusDone, statusError, statusCanceled:
+		r.forgetQueued(req.NamespacedName)
 		remaining := ttlRemaining(&obj)
 		if remaining == 0 {
 			return ctrl.Result{}, nil
@@ -403,7 +406,7 @@ func (r *QueryReconciler) handleRunningPhase(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{RequeueAfter: queryRunningSafetyRequeue}, nil
 	}
 
-	if r.sched != nil && !r.sched.tryAcquire(req.Namespace) {
+	if r.sched != nil && !r.sched.tryAcquire(req.NamespacedName) {
 		log.V(1).Info("query execution capacity reached, requeuing", "query", req.String(), "cap", r.MaxConcurrentQueries)
 		if obj.Status.Phase != statusQueued {
 			if err := r.updateStatus(ctx, &obj, statusQueued); err != nil {
@@ -1629,6 +1632,12 @@ func (r *QueryReconciler) removeApprovalCascadeAnnotation(ctx context.Context, q
 	return nil
 }
 
+func (r *QueryReconciler) forgetQueued(namespacedName types.NamespacedName) {
+	if r.sched != nil {
+		r.sched.forget(namespacedName)
+	}
+}
+
 func (r *QueryReconciler) cleanupExistingOperation(namespacedName types.NamespacedName) {
 	if existingOp, exists := r.operations.Load(namespacedName); exists {
 		logf.Log.Info("Found existing operation, clearing due to cancel", "query", namespacedName.String())
@@ -1820,7 +1829,7 @@ func (r *QueryReconciler) handleQueryDispatch(
 
 func (r *QueryReconciler) initSemaphore() {
 	if r.MaxConcurrentQueries > 0 {
-		r.sched = newFairScheduler(r.MaxConcurrentQueries, queryFairnessWaitWindow)
+		r.sched = newFairScheduler(r.MaxConcurrentQueries, queryFairnessQueuedKeyExpiry)
 	}
 	r.requeueCh = make(chan event.GenericEvent, requeueChannelBufferSize)
 }
