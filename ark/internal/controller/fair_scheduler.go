@@ -74,7 +74,7 @@ func (s *fairScheduler) tryAcquire(key types.NamespacedName) bool {
 	}
 
 	share := s.shareLocked(ns)
-	if s.perNS[ns] >= share && s.anyOtherWaitingBelowShareLocked(ns, share) {
+	if s.perNS[ns] >= share && s.freeSlotsReservedForOthersLocked(ns, share) {
 		s.markQueuedLocked(key, now)
 		queryFairnessDeniedTotal.WithLabelValues(ns).Inc()
 		s.publishLocked(ns)
@@ -125,15 +125,23 @@ func (s *fairScheduler) shareLocked(ns string) int {
 	return share
 }
 
-// anyOtherWaitingBelowShareLocked reports whether some namespace other than ns
-// has queued Query keys and is still below its share, and is therefore
-// entitled to the next freed slot. A tenant already at its share may exceed it
-// only when this returns false, so the floor-division remainder (max mod
-// active) is handed out on demand instead of being stranded, while a slot is
-// still reserved for a tenant that actually has work waiting.
-func (s *fairScheduler) anyOtherWaitingBelowShareLocked(ns string, share int) bool {
-	for k := range s.queued {
-		if k != ns && s.perNS[k] < share {
+// freeSlotsReservedForOthersLocked reports whether every free slot is needed by
+// namespaces other than ns that are below their share: each reserves as many
+// slots as it has queued Query keys, up to its remaining share. A tenant
+// already at its share may exceed it only when this returns false, so the
+// floor-division remainder (max mod active) and slots a waiting tenant has no
+// queued Query for are handed out on demand instead of being stranded.
+func (s *fairScheduler) freeSlotsReservedForOthersLocked(ns string, share int) bool {
+	free := s.max - s.inFlight
+	reserved := 0
+	for k, keys := range s.queued {
+		if k == ns {
+			continue
+		}
+		if room := share - s.perNS[k]; room > 0 {
+			reserved += min(room, len(keys))
+		}
+		if reserved >= free {
 			return true
 		}
 	}

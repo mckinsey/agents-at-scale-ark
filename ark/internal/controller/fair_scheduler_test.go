@@ -3,6 +3,7 @@
 package controller
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -200,6 +201,24 @@ func TestFairScheduler_NamespaceWaitsWhileAnyKeyIsQueued(t *testing.T) {
 	assert.True(t, s.tryAcquire(nsKey("busy")))
 }
 
+func TestFairScheduler_HoldsOnlyAsManySlotsAsQueuedQueries(t *testing.T) {
+	s, clock := newTestScheduler(4)
+
+	for i := 0; i < 4; i++ {
+		require.True(t, s.tryAcquire(nsKey("held-busy")))
+	}
+	require.False(t, s.tryAcquire(nsKey("held-quiet")))
+	s.release("held-busy")
+	s.release("held-busy")
+
+	*clock = clock.Add(250 * time.Millisecond)
+	assert.True(t, s.tryAcquire(nsKey("held-busy")), "busy must get the free slot that quiet has no queued Query for")
+	assert.False(t, s.tryAcquire(nsKey("held-busy")), "the last free slot stays reserved for quiet's one queued Query")
+
+	*clock = clock.Add(8 * time.Second)
+	assert.True(t, s.tryAcquire(nsKey("held-quiet")))
+}
+
 func TestFairScheduler_ForgetUnknownKeyIsNoop(t *testing.T) {
 	s, _ := newTestScheduler(1)
 
@@ -301,4 +320,47 @@ func TestFairScheduler_PruneRunsAtMostOncePerInterval(t *testing.T) {
 	*clock = clock.Add(queuedKeyPruneInterval)
 	s.forget(nsKey("unrelated"))
 	assert.NotContains(t, s.queued, "rate-tenant", "the next prune after the interval drops the expired key")
+}
+
+func TestFairScheduler_LargeBacklogWithSlowRetriesKeepsQuietShare(t *testing.T) {
+	s, clock := newTestScheduler(4)
+
+	for i := 0; i < 4; i++ {
+		require.True(t, s.tryAcquire(nsKey("backlog-busy")))
+	}
+	for i := 0; i < 10000; i++ {
+		require.False(t, s.tryAcquire(types.NamespacedName{Namespace: "backlog-busy", Name: fmt.Sprintf("queued-%05d", i)}))
+	}
+	require.False(t, s.tryAcquire(nsKey("backlog-quiet")))
+	s.release("backlog-busy")
+
+	for i := 0; i < 20; i++ {
+		*clock = clock.Add(250 * time.Millisecond)
+		key := types.NamespacedName{Namespace: "backlog-busy", Name: fmt.Sprintf("queued-%05d", i)}
+		assert.False(t, s.tryAcquire(key), "busy retry %d must not take the slot reserved for quiet", i)
+	}
+
+	assert.Len(t, s.queued["backlog-busy"], 10000)
+	assert.True(t, s.tryAcquire(nsKey("backlog-quiet")), "quiet gets its slot after a 5s retry gap")
+}
+
+func BenchmarkFairScheduler_DeniedRetry(b *testing.B) {
+	for _, queuedKeys := range []int{10, 10000} {
+		b.Run(fmt.Sprintf("queued=%d", queuedKeys), func(b *testing.B) {
+			s := newFairScheduler(4, time.Minute)
+			for i := 0; i < 4; i++ {
+				s.tryAcquire(types.NamespacedName{Namespace: "bench-busy", Name: "held"})
+			}
+			keys := make([]types.NamespacedName, queuedKeys)
+			for i := range keys {
+				keys[i] = types.NamespacedName{Namespace: "bench-busy", Name: fmt.Sprintf("queued-%05d", i)}
+				s.tryAcquire(keys[i])
+			}
+			s.tryAcquire(types.NamespacedName{Namespace: "bench-quiet", Name: "q"})
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				s.tryAcquire(keys[i%queuedKeys])
+			}
+		})
+	}
 }

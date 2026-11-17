@@ -88,4 +88,78 @@ var _ = Describe("Query Controller per-namespace fairness", func() {
 		Expect(exists).To(BeTrue(), "quiet tenant should have been granted a slot and spawned execution")
 		r.cleanupExistingOperation(quietReq.NamespacedName)
 	})
+
+	It("keeps a slot reserved for a tenant whose retries are slower than one second", func() {
+		ctx := context.Background()
+
+		const busyNS, quietNS = "fairness-slow-busy", "fairness-slow-quiet"
+		for _, ns := range []string{busyNS, quietNS} {
+			Expect(client.IgnoreAlreadyExists(k8sClient.Create(ctx, &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{Name: ns},
+			}))).To(Succeed())
+		}
+
+		r := &QueryReconciler{
+			Client:               k8sClient,
+			Scheme:               k8sClient.Scheme(),
+			Telemetry:            telemetryconfig.NewProvider(ctx, nil),
+			Eventing:             eventingconfig.NewProviderWithClient(ctx, nil),
+			MaxConcurrentQueries: 2,
+		}
+		r.initSemaphore()
+		clock := time.Unix(0, 0)
+		r.sched.now = func() time.Time { return clock }
+
+		holdBusySlot(r, busyNS)
+		holdBusySlot(r, busyNS)
+
+		newQuery := func(name, ns string) (*arkv1alpha1.Query, ctrl.Request) {
+			q := &arkv1alpha1.Query{
+				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+				Spec: arkv1alpha1.QuerySpec{
+					Target: &arkv1alpha1.QueryTarget{Type: "agent", Name: "test-agent"},
+					TTL:    &metav1.Duration{Duration: time.Hour},
+				},
+			}
+			Expect(q.Spec.SetInputString("slow retry fairness test")).To(Succeed())
+			Expect(k8sClient.Create(ctx, q)).To(Succeed())
+			DeferCleanup(func() { _ = k8sClient.Delete(ctx, q) })
+			return q, ctrl.Request{NamespacedName: types.NamespacedName{Name: q.Name, Namespace: q.Namespace}}
+		}
+		phaseOf := func(req ctrl.Request) string {
+			current := &arkv1alpha1.Query{}
+			Expect(k8sClient.Get(ctx, req.NamespacedName, current)).To(Succeed())
+			return current.Status.Phase
+		}
+
+		quiet, quietReq := newQuery("slow-quiet-query", quietNS)
+		_, err := r.handleRunningPhase(ctx, quietReq, *quiet)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(phaseOf(quietReq)).To(Equal(statusQueued))
+
+		clock = clock.Add(100 * time.Millisecond)
+		r.sched.release(busyNS)
+
+		_, busyReq := newQuery("slow-busy-query", busyNS)
+		for i := 0; i < 8; i++ {
+			clock = clock.Add(queryCapacityRequeueDelay)
+			current := &arkv1alpha1.Query{}
+			Expect(k8sClient.Get(ctx, busyReq.NamespacedName, current)).To(Succeed())
+			_, err := r.handleRunningPhase(ctx, busyReq, *current)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(phaseOf(busyReq)).To(Equal(statusQueued),
+				"busy tenant must not take the slot reserved for the quiet tenant (retry %d, %v after the quiet tenant's last attempt)", i+1, clock.Sub(time.Unix(0, 0)))
+		}
+
+		current := &arkv1alpha1.Query{}
+		Expect(k8sClient.Get(ctx, quietReq.NamespacedName, current)).To(Succeed())
+		_, err = r.handleRunningPhase(ctx, quietReq, *current)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(phaseOf(quietReq)).To(Equal(statusRunning))
+		r.cleanupExistingOperation(quietReq.NamespacedName)
+	})
 })
+
+func holdBusySlot(r *QueryReconciler, ns string) {
+	Expect(r.sched.tryAcquire(types.NamespacedName{Namespace: ns, Name: "held-slot"})).To(BeTrue())
+}
