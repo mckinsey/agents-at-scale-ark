@@ -34,6 +34,8 @@ interface FloatingChatProps {
   graphEdges?: GraphEdge[];
   minimized?: boolean;
   onMinimizedChange?: (id: string, minimized: boolean) => void;
+  maximized?: boolean;
+  onMaximizedChange?: (id: string, maximized: boolean) => void;
   onClose: (id: string) => void;
 }
 
@@ -52,15 +54,20 @@ function FloatingChat({
   graphEdges,
   minimized,
   onMinimizedChange,
+  maximized,
+  onMaximizedChange,
   onClose,
 }: FloatingChatProps) {
   const [localMinimized, setLocalMinimized] = useState(false);
-  const [isMaximized, setIsMaximized] = useState(false);
+  const [localMaximized, setLocalMaximized] = useState(false);
   const [viewMode, setViewMode] = useState<'text' | 'markdown'>('markdown');
 
   const isMinimized = minimized ?? localMinimized;
   const setMinimized = (value: boolean) =>
     onMinimizedChange ? onMinimizedChange(id, value) : setLocalMinimized(value);
+  const isMaximized = maximized ?? localMaximized;
+  const setMaximized = (value: boolean) =>
+    onMaximizedChange ? onMaximizedChange(id, value) : setLocalMaximized(value);
   const handleClose = () => onClose(id);
   const TypeIcon = CHAT_TYPE_ICONS[type];
 
@@ -128,7 +135,7 @@ function FloatingChat({
               variant="ghost"
               size="icon"
               onClick={() => {
-                setIsMaximized(false);
+                setMaximized(false);
                 setMinimized(true);
               }}
               aria-label="Minimize chat">
@@ -139,7 +146,7 @@ function FloatingChat({
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => setIsMaximized(!isMaximized)}
+              onClick={() => setMaximized(!isMaximized)}
               aria-label={isMaximized ? 'Restore size' : 'Maximize chat'}>
               <IconShell size="sm">
                 {isMaximized ? <CollapseContent /> : <ExpandContent />}

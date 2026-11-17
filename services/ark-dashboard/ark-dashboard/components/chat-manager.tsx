@@ -32,6 +32,7 @@ interface ChatWindow {
   strategy?: string;
   graphEdges?: GraphEdge[];
   minimized: boolean;
+  maximized: boolean;
 }
 
 interface ChatBarLayout {
@@ -80,6 +81,7 @@ export default function ChatManager() {
         strategy,
         graphEdges,
         minimized: minimized ?? false,
+        maximized: false,
       }),
     ),
   );
@@ -130,7 +132,15 @@ export default function ChatManager() {
 
         return [
           ...prev,
-          { id, name, type, strategy, graphEdges, minimized: false },
+          {
+            id,
+            name,
+            type,
+            strategy,
+            graphEdges,
+            minimized: false,
+            maximized: false,
+          },
         ];
       });
       setRevealName(name);
@@ -157,7 +167,15 @@ export default function ChatManager() {
         const id = `${name}-${Date.now()}`;
         return [
           ...prev,
-          { id, name, type, strategy, graphEdges, minimized: false },
+          {
+            id,
+            name,
+            type,
+            strategy,
+            graphEdges,
+            minimized: false,
+            maximized: false,
+          },
         ];
       });
       setRevealName(name);
@@ -237,6 +255,15 @@ export default function ChatManager() {
     [],
   );
 
+  const handleMaximizedChange = useCallback(
+    (id: string, maximized: boolean) => {
+      setChatWindows(prev =>
+        prev.map(chat => (chat.id === id ? { ...chat, maximized } : chat)),
+      );
+    },
+    [],
+  );
+
   const trackWidth =
     visibleCount * slotWidth + Math.max(0, visibleCount - 1) * SLOT_GAP;
 
@@ -260,7 +287,9 @@ export default function ChatManager() {
                   else slotRefs.current.delete(chat.id);
                 }}
                 inert={
-                  index < currentOffset || index >= currentOffset + visibleCount
+                  !chat.maximized &&
+                  (index < currentOffset ||
+                    index >= currentOffset + visibleCount)
                 }
                 className="pointer-events-auto shrink-0"
                 style={{ width: slotWidth }}>
@@ -272,6 +301,8 @@ export default function ChatManager() {
                   graphEdges={chat.graphEdges}
                   minimized={chat.minimized}
                   onMinimizedChange={handleMinimizedChange}
+                  maximized={chat.maximized}
+                  onMaximizedChange={handleMaximizedChange}
                   onClose={handleCloseChat}
                 />
               </div>
