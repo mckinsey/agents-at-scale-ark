@@ -125,4 +125,32 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
   name: {{ include "ark-tenant.fullname" . }}-marketplace-lock
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "ark-tenant.fullname" . }}-marketplace-installer
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ark-tenant.labels" . | nindent 4 }}
+rules:
+- apiGroups: [ark.mckinsey.com]
+  resources: [marketplaceinstalls]
+  verbs: [create]
+{{- with $mi.installers }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "ark-tenant.fullname" $ }}-marketplace-installer
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "ark-tenant.labels" $ | nindent 4 }}
+subjects:
+{{- toYaml . | nindent 0 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "ark-tenant.fullname" $ }}-marketplace-installer
+{{- end }}
 {{- end }}
