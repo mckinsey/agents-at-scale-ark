@@ -1,0 +1,61 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: marketplace-install-rbac
+spec:
+  description: >
+    #3968: the opt-in marketplace install objects of the ark-tenant chart.
+    Checks that the chart refuses to render them without the
+    ValidatingAdmissionPolicy API, and that an install with the flag on
+    creates the installer service account.
+  timeouts:
+    exec: 180s
+
+  steps:
+  - name: render-guard
+    try:
+    - script:
+        content: |
+          set -eu
+          C=../../charts/ark-tenant
+          VAP=admissionregistration.k8s.io/v1/ValidatingAdmissionPolicy
+          if helm template t "$C" -n x | grep -q ark-marketplace-installer; then
+            echo "flag off must render no marketplace install objects"; exit 1
+          fi
+          if out=$(helm template t "$C" -n x --set marketplaceInstall.enabled=true 2>&1); then
+            echo "flag on without the VAP API must fail"; exit 1
+          fi
+          echo "$out" | grep -q "ValidatingAdmissionPolicy API"
+          helm template t "$C" -n x --set marketplaceInstall.enabled=true --api-versions "$VAP" \
+            | grep -q "name: ark-marketplace-installer$"
+          helm template t "$C" -n x --set marketplaceInstall.enabled=true \
+            --set marketplaceInstall.assumeAdmissionPolicyApi=true \
+            | grep -q "name: ark-marketplace-installer$"
+          echo ok
+
+  - name: install-tenant
+    try:
+    - script:
+        timeout: 180s
+        content: |
+          helm install ark-tenant ../../charts/ark-tenant \
+            --namespace "$NAMESPACE" \
+            --values manifests/tenant-values.yaml \
+            --set marketplaceInstall.arkApiServiceAccount.namespace="$NAMESPACE" \
+            --wait --timeout=120s
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: ServiceAccount
+          metadata:
+            name: ark-marketplace-installer
+    cleanup:
+    - script:
+        content: |
+          helm uninstall ark-tenant --namespace "$NAMESPACE" --wait --timeout=120s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
