@@ -1,0 +1,15 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: {name: uses-installer}
+spec:
+  replicas: 0
+  serviceName: uses-installer
+  selector: {matchLabels: {app: uses-installer-sts}}
+  template:
+    metadata: {labels: {app: uses-installer-sts}}
+    spec:
+      serviceAccountName: ark-marketplace-installer
+      containers:
+      - name: c
+        image: curlimages/curl:8.11.1
+        command: ["sleep", "3600"]
