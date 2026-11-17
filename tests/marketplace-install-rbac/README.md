@@ -6,7 +6,9 @@ Checks the opt-in marketplace install objects of `charts/ark-tenant` (`marketpla
 
 - With the flag off the chart renders no marketplace install objects.
 - With the flag on, `helm template` fails without the ValidatingAdmissionPolicy API, and renders with `--api-versions admissionregistration.k8s.io/v1/ValidatingAdmissionPolicy` or `marketplaceInstall.assumeAdmissionPolicyApi=true`.
+- With no `installers`, the chart renders no installer RoleBinding.
 - Installs the chart in the test namespace with the flag on and `memory.requireBroker=false`, and checks the `ark-marketplace-installer` service account exists.
+- SelfSubjectAccessReviews: alice, listed in `installers`, can `create` `marketplaceinstalls` in group `ark.mckinsey.com` and nothing more; bob and carol, who has the tenant Role, cannot.
 - Both the release policy and the `-bootstrap` copy, with their bindings, pass the structural checks of the ark-api capability: binding named after its policy, with `Deny`, no `resourceRules`, `excludeResourceRules` or `objectSelector`, and a `namespaceSelector` on this namespace; policy with `failurePolicy: Fail`, no `excludeResourceRules` or `objectSelector`, and no `namespaceSelector` that misses this namespace.
 - carol, bound only to the tenant Role, cannot create a Job, CronJob, Deployment or token Secret that uses the installer service account, nor patch a Deployment or CronJob to use it. The cluster admin is refused too, including for a bare Pod (also through the legacy `serviceAccount` field), a StatefulSet and a ReplicationController. Every refusal must come from the namespace's admission policy, not from RBAC.
 - carol can still create a Job with the `default` service account, and it completes.

@@ -148,6 +148,7 @@ spec:
   - name: tenantRoles
     expression: >-
       [{{ printf "%s-role" $fullname | squote }},
+       {{ printf "%s-marketplace-installer" $fullname | squote }},
        {{ printf "%s-marketplace-installer-extra" $fullname | squote }},
        {{ printf "%s-marketplace-impersonate" $fullname | squote }},
        {{ printf "%s-marketplace-lock" $fullname | squote }}]
