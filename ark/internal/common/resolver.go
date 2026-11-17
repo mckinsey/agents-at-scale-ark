@@ -11,6 +11,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/secretscope"
 )
 
 type ValueSourceResolver struct {
@@ -57,6 +58,10 @@ func (r *ValueSourceResolver) resolveFromSecret(ctx context.Context, namespace s
 	}, secret)
 	if err != nil {
 		return "", fmt.Errorf("failed to get secret %s/%s: %w", namespace, secretRef.Name, err)
+	}
+
+	if err := secretscope.CheckResolvable(secret, secretscope.RejectPersonal); err != nil {
+		return "", err
 	}
 
 	value, exists := secret.Data[secretRef.Key]

@@ -1,3 +1,4 @@
+import asyncio
 import importlib.metadata
 
 from fastapi import APIRouter
@@ -17,15 +18,20 @@ router = APIRouter()
 async def get_system_info() -> SystemInfo:
     async with create_api_client() as api_client:
         v1 = client.VersionApi(api_client)
-        version_info = await v1.get_code()
-        
+        argo_server_url = argo_server.get_argo_server_url()
+
+        version_info, argo_version = await asyncio.gather(
+            v1.get_code(), argo_server.get_argo_server_version(argo_server_url)
+        )
+
         try:
             ark_api_version = importlib.metadata.version("ark-api")
         except importlib.metadata.PackageNotFoundError:
             ark_api_version = "unknown"
-        
+
         return SystemInfo(
             kubernetes_version=version_info.git_version,
             system_version=f"v{ark_api_version}", # the k8s version has a leading v, add here for consistency
-            argo_server_configured=bool(argo_server.get_argo_server_url()),
+            argo_server_configured=bool(argo_server_url),
+            argo_server_version_supported=argo_server.is_version_supported(argo_version),
         )

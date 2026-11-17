@@ -109,7 +109,10 @@ function getCancelComponent(
 }
 
 const Toast = memo(function Toast({ id, message, type, options }: ToastProps) {
-  const { action, cancel, className, icon, ...restOptions } = options || {};
+  const { action, cancel, className, description, icon, ...restOptions } =
+    options || {};
+  const descriptionContent =
+    typeof description === 'function' ? description() : description;
 
   const config = getToastConfig(type);
   const defaultIcon = getDefaultIcon(config);
@@ -132,6 +135,11 @@ const Toast = memo(function Toast({ id, message, type, options }: ToastProps) {
           <p className="paragraph-regular-primary text-fg-secondary">
             {message}
           </p>
+          {descriptionContent && (
+            <p className="paragraph-small-primary text-fg-secondary break-words">
+              {descriptionContent}
+            </p>
+          )}
           {action}
         </div>
       </div>

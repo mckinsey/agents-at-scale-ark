@@ -9,7 +9,7 @@ import type {Query, QueryTarget, QueryParameter} from './types.js';
 import {ExitCodes} from './errors.js';
 import {ArkApiProxy} from './arkApiProxy.js';
 import {ChatClient, ToolCall, ArkMetadata} from './chatClient.js';
-import {watchEventsLive} from './kubectl.js';
+import {watchQueryEvents} from './brokerEvents.js';
 import {loadConfig} from './config.js';
 
 export interface QueryOptions {
@@ -182,7 +182,7 @@ async function executeQueryWithFormat(options: QueryOptions): Promise<void> {
   };
 
   try {
-    await execa('kubectl', ['apply', '-f', '-'], {
+    const applied = await execa('kubectl', ['apply', '-f', '-', '-o', 'json'], {
       input: JSON.stringify(queryManifest),
       stdio: ['pipe', 'pipe', 'pipe'],
     });
@@ -190,13 +190,15 @@ async function executeQueryWithFormat(options: QueryOptions): Promise<void> {
     // Give Kubernetes a moment to process the resource before watching
     await new Promise((resolve) => setTimeout(resolve, 100));
 
-    if (options.outputFormat === 'events') {
-      await watchEventsLive(queryName);
-      return;
-    }
-
-    if (options.outputFormat === 'events-pretty') {
-      await watchEventsLive(queryName, true);
+    if (
+      options.outputFormat === 'events' ||
+      options.outputFormat === 'events-pretty'
+    ) {
+      await watchQueryEvents({
+        queryName,
+        queryUid: appliedUid(applied?.stdout),
+        pretty: options.outputFormat === 'events-pretty',
+      });
       return;
     }
 
@@ -269,4 +271,17 @@ export function parseParameters(parameters: string[]): QueryParameter[] {
     }
     return {name, value};
   });
+}
+
+function appliedUid(stdout: unknown): string | undefined {
+  if (typeof stdout !== 'string' || !stdout) {
+    return undefined;
+  }
+  try {
+    const uid = (JSON.parse(stdout) as {metadata?: {uid?: unknown}}).metadata
+      ?.uid;
+    return typeof uid === 'string' && uid ? uid : undefined;
+  } catch {
+    return undefined;
+  }
 }

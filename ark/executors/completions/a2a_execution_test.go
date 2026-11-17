@@ -269,7 +269,7 @@ func TestConsumeA2AStreamEventsFinalStatusOnly(t *testing.T) {
 	assert.Equal(t, "done", result.A2AResponse.Content)
 	assert.Equal(t, []string{"done"}, result.A2AResponse.Messages)
 	assert.Equal(t, "task-1", result.A2AResponse.TaskID)
-	assert.Empty(t, contentTexts(stream.chunks), "final status text is not streamed as live content")
+	assert.Equal(t, []string{"done"}, contentTexts(stream.chunks), "final status text is streamed when nothing else was")
 	assert.Len(t, statusEvents(stream.chunks), 1, "the non-final working update is emitted on the status channel")
 }
 
@@ -318,7 +318,115 @@ func TestConsumeA2AStreamEventsTask(t *testing.T) {
 	assert.Equal(t, "task result", result.A2AResponse.Content)
 	assert.Equal(t, []string{"task result"}, result.A2AResponse.Messages)
 	assert.Equal(t, "task-1", result.A2AResponse.TaskID)
+	assert.Equal(t, []string{"task result"}, contentTexts(stream.chunks))
+}
+
+func TestConsumeA2AStreamEventsCompletedTaskWithArtifacts(t *testing.T) {
+	result, stream, err := streamEvents(t, &protocol.Task{
+		ID:        "task-1",
+		ContextID: "ctx-1",
+		Status:    protocol.TaskStatus{State: protocol.TaskState(arka2a.TaskStateCompleted)},
+		Artifacts: []protocol.Artifact{
+			{ArtifactID: "t1", Name: strPtr("answer"), Parts: []protocol.Part{protocol.NewTextPart("task artifact")}},
+		},
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"task artifact"}, result.A2AResponse.Messages)
+	assert.Equal(t, []string{"task artifact"}, contentTexts(stream.chunks))
+	assert.Equal(t, 0, boundaryCount(stream.chunks))
+}
+
+func TestConsumeA2AStreamEventsCompletedTaskWithMultipleArtifacts(t *testing.T) {
+	result, stream, err := streamEvents(t, &protocol.Task{
+		ID:     "task-1",
+		Status: protocol.TaskStatus{State: protocol.TaskState(arka2a.TaskStateCompleted)},
+		Artifacts: []protocol.Artifact{
+			{ArtifactID: "a1", Parts: []protocol.Part{protocol.NewTextPart("first answer")}},
+			{ArtifactID: "a2", Parts: []protocol.Part{protocol.NewTextPart("second answer")}},
+		},
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"first answer", "second answer"}, result.A2AResponse.Messages)
+	assert.Equal(t, []string{"first answer", "second answer"}, contentTexts(stream.chunks))
+	assert.Equal(t, 1, boundaryCount(stream.chunks), "one boundary chunk between the two artifact bubbles")
+}
+
+func TestConsumeA2AStreamEventsCompletedTaskHistoryOnly(t *testing.T) {
+	result, stream, err := streamEvents(t, &protocol.Task{
+		ID:     "task-1",
+		Status: protocol.TaskStatus{State: protocol.TaskState(arka2a.TaskStateCompleted)},
+		History: []protocol.Message{
+			{Role: protocol.MessageRoleUser, Parts: []protocol.Part{protocol.NewTextPart("what?")}},
+			{Role: protocol.MessageRoleAgent, Parts: []protocol.Part{protocol.NewTextPart("history answer")}},
+		},
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"history answer"}, result.A2AResponse.Messages)
+	assert.Equal(t, []string{"history answer"}, contentTexts(stream.chunks))
+}
+
+func TestConsumeA2AStreamEventsTaskSeedThenArtifactUpdateNotDuplicated(t *testing.T) {
+	result, stream, err := streamEvents(
+		t,
+		&protocol.Task{
+			ID:        "task-1",
+			Status:    protocol.TaskStatus{State: protocol.TaskState(arka2a.TaskStateWorking)},
+			Artifacts: []protocol.Artifact{{ArtifactID: "x1", Parts: []protocol.Part{protocol.NewTextPart("seed")}}},
+		},
+		&protocol.TaskArtifactUpdateEvent{
+			TaskID:   "task-1",
+			Artifact: protocol.Artifact{ArtifactID: "x1", Parts: []protocol.Part{protocol.NewTextPart("updated seed")}},
+		},
+		&protocol.TaskStatusUpdateEvent{
+			TaskID: "task-1",
+			Final:  true,
+			Status: protocol.TaskStatus{State: protocol.TaskState(arka2a.TaskStateCompleted)},
+		},
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"updated seed"}, result.A2AResponse.Messages)
+	assert.Equal(t, []string{"updated seed"}, contentTexts(stream.chunks))
+}
+
+func TestConsumeA2AStreamEventsStreamedArtifactNotRepeatedAtEnd(t *testing.T) {
+	_, stream, err := streamEvents(
+		t,
+		&protocol.TaskArtifactUpdateEvent{
+			TaskID:   "task-1",
+			Artifact: protocol.Artifact{ArtifactID: "a1", Parts: []protocol.Part{protocol.NewTextPart("artifact answer")}},
+		},
+		&protocol.TaskStatusUpdateEvent{
+			TaskID: "task-1",
+			Final:  true,
+			Status: protocol.TaskStatus{
+				State:   protocol.TaskState(arka2a.TaskStateCompleted),
+				Message: &protocol.Message{Parts: []protocol.Part{protocol.NewTextPart("status summary")}},
+			},
+		},
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"artifact answer"}, contentTexts(stream.chunks))
+}
+
+func TestConsumeA2AStreamEventsEmptyFinalStreamsNoContent(t *testing.T) {
+	result, stream, err := streamEvents(
+		t,
+		&protocol.TaskStatusUpdateEvent{
+			TaskID: "task-1",
+			Final:  true,
+			Status: protocol.TaskStatus{State: protocol.TaskState(arka2a.TaskStateCompleted)},
+		},
+	)
+
+	require.NoError(t, err)
+	assert.Empty(t, result.A2AResponse.Messages)
 	assert.Empty(t, contentTexts(stream.chunks))
+	assert.Equal(t, 0, boundaryCount(stream.chunks))
 }
 
 func TestConsumeA2AStreamEventsTaskDoesNotResetArtifacts(t *testing.T) {

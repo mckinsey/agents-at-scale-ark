@@ -1,7 +1,7 @@
 """Agent CRD response models."""
 from typing import List, Dict, Optional, Any
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from .common import AvailabilityStatus, PaginatedListResponse
 
@@ -73,11 +73,26 @@ class AgentLabelSelector(BaseModel):
     matchExpressions: Optional[List[AgentLabelSelectorRequirement]] = None
 
 
+class ArgumentMatch(BaseModel):
+    """Narrows approval to tool calls whose arguments match a pattern."""
+    argument: str
+    pattern: str
+
+
+class ToolApprovalConfig(BaseModel):
+    """Approval configuration for human-in-the-loop tool execution."""
+    required: Optional[bool] = None
+    timeout: Optional[str] = None
+    onTimeout: Optional[str] = None
+    argumentMatches: Optional[List[ArgumentMatch]] = None
+
+
 class AgentTool(BaseModel):
     """Tool configuration for an agent."""
     type: str  # "built-in", "mcp", "http", "agent", "team", "builtin" (or deprecated "custom")
     name: Optional[str] = None
     labelSelector: Optional[AgentLabelSelector] = None
+    approval: Optional[ToolApprovalConfig] = None
 
 
 class AgentHeaderValue(BaseModel):
@@ -179,6 +194,10 @@ class AgentUpdateRequest(BaseModel):
     prompt: Optional[str] = None
     tools: Optional[List[AgentTool]] = None
     overrides: Optional[List[AgentOverride]] = None
+    annotations: Optional[Dict[str, Optional[str]]] = Field(
+        None,
+        description="Merged into the existing annotations; a null value removes the key. Only the openai-responses output-schema annotation is accepted.",
+    )
 
     @field_validator("overrides")
     @classmethod

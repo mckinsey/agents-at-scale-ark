@@ -1,12 +1,14 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 
 import { BrokerFallbackNotice } from '@/components/chat/broker-fallback-notice';
+import { ChatMcpCredentialFields } from '@/components/chat/chat-mcp-credential-fields';
 import { ChatMessageList } from '@/components/chat/chat-message-list';
 import { ChatNotice } from '@/components/chat/chat-notice';
 import { MemoryChatNotice } from '@/components/chat/memory-chat-notice';
-import { Autorenew, Build, Info, Send, Stop } from '@/components/icons';
+import { OutputSchemaField } from '@/components/common/output-schema-field';
+import { Autorenew, Build, Code, Info, Send, Stop } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { ChatParameterFields } from '@/components/ui/chat-parameter-fields';
 import { IconShell } from '@/components/ui/icon-shell';
@@ -20,6 +22,7 @@ import {
 } from '@/components/ui/tooltip';
 import { trackEvent } from '@/lib/analytics/singleton';
 import { useChatSession } from '@/lib/hooks';
+import { useChatMcpCredentials } from '@/lib/hooks/use-chat-mcp-credentials';
 import type { GraphEdge } from '@/lib/types/chat-message';
 import { cn } from '@/lib/utils';
 
@@ -42,6 +45,16 @@ export function ChatPanel({
   graphEdges,
   viewMode,
 }: ChatPanelProps) {
+  const usesMcpCredentials = type !== 'model';
+  const mcpCredentials = useChatMcpCredentials({
+    enabled: usesMcpCredentials,
+  });
+  const mcpBlockedNoticeId = useId();
+  const showMcpCredentials =
+    usesMcpCredentials &&
+    (mcpCredentials.servers.length > 0 || mcpCredentials.rows.length > 0);
+  const mcpCredentialsBlocked = usesMcpCredentials && mcpCredentials.blocked;
+
   const {
     messages,
     isProcessing,
@@ -74,15 +87,32 @@ export function ChatPanel({
     canAddParameterRow,
     missingParameters,
     engineToolWarning,
-  } = useChatSession({ name, type });
+    supportsOutputSchema,
+    hasOwnOutputSchema,
+    outputSchemaOverride,
+    setOutputSchemaOverride,
+    isOutputSchemaOverrideValid,
+  } = useChatSession({
+    name,
+    type,
+    mcpCredentials: usesMcpCredentials ? mcpCredentials.credentials : undefined,
+    mcpCredentialsBlocked,
+  });
 
   const [currentMessage, setCurrentMessage] = useState('');
   const [debugMode, setDebugMode] = useState(true);
+  const [showOutputSchema, setShowOutputSchema] = useState(false);
+  const canOverrideOutputSchema = supportsOutputSchema && !hasOwnOutputSchema;
+  const isOutputSchemaOverrideActive =
+    canOverrideOutputSchema && outputSchemaOverride.trim().length > 0;
+  const isOutputSchemaOverrideInvalid =
+    canOverrideOutputSchema && !isOutputSchemaOverrideValid;
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const toolCallCount = messages.reduce(
     (total, msg) =>
-      total + ('tool_calls' in msg && msg.tool_calls ? msg.tool_calls.length : 0),
+      total +
+      ('tool_calls' in msg && msg.tool_calls ? msg.tool_calls.length : 0),
     0,
   );
 
@@ -97,7 +127,8 @@ export function ChatPanel({
   }, [isProcessing]);
 
   const handleSendMessage = async () => {
-    if (!currentMessage.trim() || isProcessing) return;
+    if (!currentMessage.trim() || isProcessing || mcpCredentialsBlocked) return;
+    if (isOutputSchemaOverrideInvalid) return;
     const userMessage = currentMessage.trim();
     setCurrentMessage('');
     inputRef.current?.focus();
@@ -121,6 +152,13 @@ export function ChatPanel({
           {engineToolWarning && (
             <ChatNotice icon={<Info />} iconClassName="text-status-information">
               {engineToolWarning}
+            </ChatNotice>
+          )}
+          {mcpCredentialsBlocked && (
+            <ChatNotice icon={<Info />} iconClassName="text-status-information">
+              <span id={mcpBlockedNoticeId}>
+                Fix or remove the MCP credentials below to send a message.
+              </span>
             </ChatNotice>
           )}
           {missingParameters.length > 0 && (
@@ -165,6 +203,14 @@ export function ChatPanel({
             <MemoryChatNotice notice={memoryNotice} />
           </div>
         )}
+        {showMcpCredentials && (
+          <div className="px-4 pt-4">
+            <ChatMcpCredentialFields
+              credentials={mcpCredentials}
+              disabled={isProcessing}
+            />
+          </div>
+        )}
         {hasParameters && (
           <div className="px-4 pt-4">
             {parameterVariant === 'team' ? (
@@ -195,6 +241,24 @@ export function ChatPanel({
             )}
           </div>
         )}
+        {isOutputSchemaOverrideInvalid && !showOutputSchema && (
+          <div className="px-4 pt-4">
+            <ChatNotice icon={<Info />} iconClassName="text-status-error">
+              The output schema override is invalid. Open the output schema
+              panel to fix or clear it before sending.
+            </ChatNotice>
+          </div>
+        )}
+        {canOverrideOutputSchema && showOutputSchema && (
+          <div className="px-4 pt-4">
+            <OutputSchemaField
+              value={outputSchemaOverride}
+              onChange={setOutputSchemaOverride}
+              disabled={isProcessing}
+              description="Overrides the output schema for messages sent from this chat."
+            />
+          </div>
+        )}
         <div className="flex flex-col gap-2 px-4 py-3">
           <Textarea
             ref={inputRef}
@@ -202,13 +266,15 @@ export function ChatPanel({
             autoResize
             maxRows={17}
             placeholder={
-              isProcessing ? 'Processing...' : 'Type your message...'
+              isProcessing
+                ? 'Processing...'
+                : `Write here to chat with your ${type}...`
             }
             value={currentMessage}
             onChange={e => setCurrentMessage(e.target.value)}
             onKeyDown={handleKeyPress}
             disabled={isProcessing}
-            className="min-h-0 w-full resize-none border-0 bg-transparent px-0 py-1 text-sm font-normal leading-5 shadow-none hover:bg-transparent focus-visible:bg-transparent focus-visible:ring-0 disabled:bg-transparent disabled:hover:bg-transparent placeholder:text-fg-tertiary"
+            className="placeholder:text-fg-secondary min-h-0 w-full resize-none border-0 bg-transparent px-0 py-1 text-sm leading-5 font-normal shadow-none hover:bg-transparent focus-visible:bg-transparent focus-visible:ring-0 disabled:bg-transparent disabled:hover:bg-transparent"
           />
 
           <TooltipProvider>
@@ -257,7 +323,7 @@ export function ChatPanel({
                       </IconShell>
                       <span
                         className={cn(
-                          'absolute -right-0.5 -top-0.5 size-2 rounded-full',
+                          'absolute -top-0.5 -right-0.5 size-2 rounded-full',
                           debugMode ? 'bg-status-success' : 'bg-fg-disabled',
                         )}
                       />
@@ -267,6 +333,44 @@ export function ChatPanel({
                     {debugMode ? 'Hide tool calls' : 'Show tool calls'}
                   </TooltipContent>
                 </Tooltip>
+
+                {supportsOutputSchema && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="inline-flex">
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-pressed={
+                            canOverrideOutputSchema && showOutputSchema
+                          }
+                          aria-label="Output schema override"
+                          disabled={hasOwnOutputSchema}
+                          onClick={() => setShowOutputSchema(!showOutputSchema)}
+                          className="relative">
+                          <IconShell size="sm" variant="secondary">
+                            <Code />
+                          </IconShell>
+                          {isOutputSchemaOverrideActive && (
+                            <span
+                              className={cn(
+                                'absolute -top-0.5 -right-0.5 size-2 rounded-full',
+                                isOutputSchemaOverrideInvalid
+                                  ? 'bg-status-error'
+                                  : 'bg-status-success',
+                              )}
+                            />
+                          )}
+                        </Button>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {hasOwnOutputSchema
+                        ? 'This agent already has an output schema, so an override has no effect.'
+                        : 'Output schema override'}
+                    </TooltipContent>
+                  </Tooltip>
+                )}
 
                 {toolCallCount > 0 && (
                   <span className="text-fg-tertiary ml-1 font-mono text-xs">
@@ -323,11 +427,17 @@ export function ChatPanel({
                 <Button
                   onClick={handleSendMessage}
                   disabled={
-                    !currentMessage.trim() || missingParameters.length > 0
+                    !currentMessage.trim() ||
+                    missingParameters.length > 0 ||
+                    mcpCredentialsBlocked ||
+                    isOutputSchemaOverrideInvalid
                   }
                   variant="ghost"
                   size="icon-sm"
                   aria-label="Send message"
+                  aria-describedby={
+                    mcpCredentialsBlocked ? mcpBlockedNoticeId : undefined
+                  }
                   className="bg-fill-active text-fg-primary-inverse hover:bg-fill-active/90 disabled:bg-surface-bg-tertiary disabled:text-fg-tertiary">
                   <IconShell size="sm">
                     <Send />

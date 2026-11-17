@@ -3,7 +3,8 @@ export type SettingPage =
   | 'general'
   | 'experimental-features'
   | 'execution-engines'
-  | 'manage-marketplace';
+  | 'manage-marketplace'
+  | 'deployment-details';
 
 export type ExperimentalSettingPage =
   | 'execution-engines'
@@ -55,6 +56,10 @@ export const settingsSections: SettingsSection[] = [
         key: 'manage-marketplace',
         label: 'Manage marketplace',
         experimental: true,
+      },
+      {
+        key: 'deployment-details',
+        label: 'Deployment details',
       },
     ],
   },

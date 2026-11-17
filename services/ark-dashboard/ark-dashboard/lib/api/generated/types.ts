@@ -392,7 +392,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/ark-services/marketplace-items": {
+    "/v1/ark-services/helm-releases": {
         parameters: {
             query?: never;
             header?: never;
@@ -400,11 +400,11 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List Marketplace Items
-         * @description List Helm releases for marketplace item detection.
+         * List Helm Releases
+         * @description List deployed, failed and pending Helm releases in a namespace.
          *
-         *     Returns full Helm release data including chart metadata and annotations
-         *     for marketplace item detection via ark.mckinsey.com/marketplace-item-name.
+         *     Returns full Helm release data including chart metadata and annotations,
+         *     without filtering by Ark service annotation or looking up HTTPRoutes.
          *
          *     Args:
          *         namespace: The namespace to list Helm releases from (defaults to current context)
@@ -413,8 +413,9 @@ export interface paths {
          *         HelmReleaseListResponse containing:
          *         - items: List of Helm releases with chart metadata
          *         - count: Number of releases found
+         *         - errors: Releases whose details could not be read
          */
-        get: operations["list_marketplace_items_v1_ark_services_marketplace_items_get"];
+        get: operations["list_helm_releases_v1_ark_services_helm_releases_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2149,13 +2150,13 @@ export interface paths {
         };
         /**
          * List Secrets
-         * @description List all secrets in namespace using ark-sdk.
+         * @description List the shared and/or personal secrets in namespace using ark-sdk.
          */
         get: operations["list_secrets_v1_secrets_get"];
         put?: never;
         /**
          * Create Secret
-         * @description Create a new secret using ark-sdk.
+         * @description Create a new shared or personal secret using ark-sdk.
          */
         post: operations["create_secret_v1_secrets_post"];
         delete?: never;
@@ -2178,7 +2179,7 @@ export interface paths {
         get: operations["get_secret_v1_secrets__secret_name__get"];
         /**
          * Update Secret
-         * @description Update a secret using ark-sdk.
+         * @description Update a secret using ark-sdk; scope "shared" promotes a personal secret.
          */
         put: operations["update_secret_v1_secrets__secret_name__put"];
         post?: never;
@@ -2980,6 +2981,7 @@ export interface components {
          * @description Tool configuration for an agent.
          */
         AgentTool: {
+            approval?: components["schemas"]["ToolApprovalConfig"] | null;
             labelSelector?: components["schemas"]["AgentLabelSelector"] | null;
             /** Name */
             name?: string | null;
@@ -2991,6 +2993,13 @@ export interface components {
          * @description Request model for updating an agent.
          */
         AgentUpdateRequest: {
+            /**
+             * Annotations
+             * @description Merged into the existing annotations; a null value removes the key. Only the openai-responses output-schema annotation is accepted.
+             */
+            annotations?: {
+                [key: string]: string | null;
+            } | null;
             /** Description */
             description?: string | null;
             executionEngine?: components["schemas"]["ExecutionEngineRef"] | null;
@@ -3059,6 +3068,16 @@ export interface components {
             namespace: string;
             /** Taskid */
             taskId: string;
+        };
+        /**
+         * ArgumentMatch
+         * @description Narrows approval to tool calls whose arguments match a pattern.
+         */
+        ArgumentMatch: {
+            /** Argument */
+            argument: string;
+            /** Pattern */
+            pattern: string;
         };
         /**
          * ArkConfigMemoryRef
@@ -3867,10 +3886,10 @@ export interface components {
         };
         /**
          * HelmRelease
-         * @description Helm release information for marketplace item detection.
+         * @description Helm release information.
          *
-         *     Represents a Helm release with chart metadata including annotations
-         *     used for marketplace item identification.
+         *     Represents a Helm release with chart metadata including annotations,
+         *     which the marketplace uses for installed item detection.
          */
         HelmRelease: {
             /** App Version */
@@ -3892,12 +3911,27 @@ export interface components {
             updated: string;
         };
         /**
+         * HelmReleaseError
+         * @description A Helm release whose details could not be read.
+         */
+        HelmReleaseError: {
+            /** Message */
+            message: string;
+            /** Name */
+            name: string;
+        };
+        /**
          * HelmReleaseListResponse
          * @description Response model for listing Helm releases.
          */
         HelmReleaseListResponse: {
             /** Count */
             count: number;
+            /**
+             * Errors
+             * @default []
+             */
+            errors: components["schemas"]["HelmReleaseError"][];
             /** Items */
             items: components["schemas"]["HelmRelease"][];
         };
@@ -4083,6 +4117,10 @@ export interface components {
             } | null;
             authorization?: components["schemas"]["MCPServerAuthorization"] | null;
             available?: components["schemas"]["AvailabilityStatus"] | null;
+            /** Labels */
+            labels?: {
+                [key: string]: string;
+            } | null;
             /** Name */
             name: string;
             /** Namespace */
@@ -4169,6 +4207,8 @@ export interface components {
             }[] | null;
             /** Source */
             source: string;
+            /** Url */
+            url?: string | null;
         };
         /**
          * MarketplacePermissionsResponse
@@ -4861,6 +4901,12 @@ export interface components {
             labels: string[];
             /** Name */
             name: string;
+            /**
+             * Scope
+             * @default shared
+             * @enum {string}
+             */
+            scope: "shared" | "personal";
             /** String Data */
             string_data: {
                 [key: string]: string;
@@ -4884,6 +4930,8 @@ export interface components {
             } | null;
             /** Description */
             description?: string | null;
+            /** Display Name */
+            display_name: string;
             /** Id */
             id: string;
             /**
@@ -4898,6 +4946,11 @@ export interface components {
             labels: string[];
             /** Name */
             name: string;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "shared" | "personal";
             /** Secret Length */
             secret_length: number;
             /** Type */
@@ -4926,6 +4979,8 @@ export interface components {
             } | null;
             /** Description */
             description?: string | null;
+            /** Display Name */
+            display_name: string;
             /** Id */
             id: string;
             /**
@@ -4935,6 +4990,11 @@ export interface components {
             labels: string[];
             /** Name */
             name: string;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "shared" | "personal";
         };
         /**
          * SecretUpdateRequest
@@ -4950,6 +5010,8 @@ export interface components {
              * @default []
              */
             labels: string[];
+            /** Scope */
+            scope?: ("shared" | "personal") | null;
             /** String Data */
             string_data?: {
                 [key: string]: string;
@@ -5006,6 +5068,8 @@ export interface components {
         SystemInfo: {
             /** Argo Server Configured */
             argo_server_configured: boolean;
+            /** Argo Server Version Supported */
+            argo_server_version_supported?: boolean | null;
             /** Kubernetes Version */
             kubernetes_version: string;
             /** System Version */
@@ -5136,6 +5200,20 @@ export interface components {
             selector?: components["schemas"]["Selector"] | null;
             /** Strategy */
             strategy?: string | null;
+        };
+        /**
+         * ToolApprovalConfig
+         * @description Approval configuration for human-in-the-loop tool execution.
+         */
+        ToolApprovalConfig: {
+            /** Argumentmatches */
+            argumentMatches?: components["schemas"]["ArgumentMatch"][] | null;
+            /** Ontimeout */
+            onTimeout?: string | null;
+            /** Required */
+            required?: boolean | null;
+            /** Timeout */
+            timeout?: string | null;
         };
         /** ToolDetailResponse */
         ToolDetailResponse: {
@@ -5821,7 +5899,7 @@ export interface operations {
             };
         };
     };
-    list_marketplace_items_v1_ark_services_marketplace_items_get: {
+    list_helm_releases_v1_ark_services_helm_releases_get: {
         parameters: {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
@@ -9052,6 +9130,8 @@ export interface operations {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
                 namespace?: string | null;
+                /** @description Which secrets to list: shared (default), the caller's personal ones, or all of both */
+                scope?: "shared" | "personal" | "all";
             };
             header?: never;
             path?: never;

@@ -15,6 +15,9 @@ const (
 )
 
 func (v *Validator) ValidateQuery(ctx context.Context, query *arkv1alpha1.Query) ([]string, error) {
+	if err := v.validateCrossNamespaceRef(ctx, "Memory", queryMemoryTarget(query), query.Namespace); err != nil {
+		return nil, err
+	}
 	if !query.DeletionTimestamp.IsZero() {
 		return nil, nil
 	}

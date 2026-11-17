@@ -2,12 +2,7 @@
 
 import { useMemo, useState } from 'react';
 
-import {
-  ChevronRight,
-  ErrorIcon,
-  Build,
-  Trash,
-} from '@/components/icons';
+import { Build, ChevronRight, ErrorIcon, Trash } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -81,9 +76,7 @@ function ToolItem({
           className="flex flex-1 cursor-pointer flex-col items-start gap-0.5 text-sm font-normal">
           <span className="font-medium">{tool.name}</span>
           {tool.description && (
-            <span className="text-fg-tertiary text-xs">
-              {tool.description}
-            </span>
+            <span className="text-fg-tertiary text-xs">{tool.description}</span>
           )}
         </Label>
       </div>
@@ -173,8 +166,7 @@ export function ToolSelectionSection({
     [filteredTools],
   );
 
-  const noTools =
-    availableTools.length === 0 && unavailableTools.length === 0;
+  const noTools = availableTools.length === 0 && unavailableTools.length === 0;
 
   return (
     <div className="space-y-2">
@@ -217,36 +209,36 @@ export function ToolSelectionSection({
           />
           <ScrollArea className="border-stroke-divider border [&_[data-slot=scroll-area-viewport]]:max-h-[300px]">
             <div className="space-y-1 p-3">
-            {unavailableTools.length > 0 && onDeleteClick && (
-              <ToolGroup
-                toolGroup={{
-                  groupName: 'Unavailable Tools',
-                  tools: unavailableTools,
-                }}
-                onToggle={onToolToggle}
-                isToolSelected={isToolSelected}
-                unavailableTools={unavailableTools}
-                onDeleteClick={onDeleteClick}
-                disabled={disabled}
-              />
-            )}
-            {filteredTools.length === 0 && searchQuery ? (
-              <div className="text-fg-secondary py-4 text-center text-sm">
-                No tools found matching &quot;{searchQuery}&quot;
-              </div>
-            ) : (
-              groupedTools?.map((toolGroup, index) => (
+              {unavailableTools.length > 0 && onDeleteClick && (
                 <ToolGroup
-                  key={`${toolGroup.groupName}-${index}`}
-                  toolGroup={toolGroup}
+                  toolGroup={{
+                    groupName: 'Unavailable Tools',
+                    tools: unavailableTools,
+                  }}
                   onToggle={onToolToggle}
                   isToolSelected={isToolSelected}
                   unavailableTools={unavailableTools}
                   onDeleteClick={onDeleteClick}
                   disabled={disabled}
                 />
-              ))
-            )}
+              )}
+              {filteredTools.length === 0 && searchQuery ? (
+                <div className="text-fg-secondary py-4 text-center text-sm">
+                  No tools found matching &quot;{searchQuery}&quot;
+                </div>
+              ) : (
+                groupedTools?.map((toolGroup, index) => (
+                  <ToolGroup
+                    key={`${toolGroup.groupName}-${index}`}
+                    toolGroup={toolGroup}
+                    onToggle={onToolToggle}
+                    isToolSelected={isToolSelected}
+                    unavailableTools={unavailableTools}
+                    onDeleteClick={onDeleteClick}
+                    disabled={disabled}
+                  />
+                ))
+              )}
             </div>
           </ScrollArea>
         </div>
