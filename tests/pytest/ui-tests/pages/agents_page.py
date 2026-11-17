@@ -19,7 +19,7 @@ class AgentsPage(BasePage):
     CONFIRM_DELETE_DIALOG = "[role='dialog'], [role='alertdialog'], .modal, div:has-text('confirm'), div:has-text('delete')"
     CONFIRM_DELETE_BUTTON = "button:has-text('Delete'), button:has-text('Confirm'), button:has-text('Yes')"
     CHAT_BUTTON = "button[aria-label='Chat with agent']"
-    CHAT_WINDOW = "div[data-slot='card']"
+    CHAT_WINDOW = "[data-testid='chat-window']"
     CLOSE_CHAT_BUTTON = "button[aria-label='Close chat']"
 
     TEST_DATA = {

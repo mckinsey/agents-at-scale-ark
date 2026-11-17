@@ -41,8 +41,8 @@ export default function DashboardLayout({
             {children}
           </SidebarInset>
         </NavigationGuardProvider>
+        <ChatManager />
       </SidebarProvider>
-      <ChatManager />
     </>
   );
 }
