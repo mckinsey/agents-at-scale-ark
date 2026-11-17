@@ -66,3 +66,19 @@ this name, so it must match the constants of ark-api's marketplace_install modul
 {{- define "ark-tenant.marketplaceInstaller.serviceAccount" -}}
 ark-marketplace-installer
 {{- end }}
+
+{{/*
+Username of the installer service account, as its tokens and ark-api's
+impersonation present it to the API server.
+*/}}
+{{- define "ark-tenant.marketplaceInstaller.username" -}}
+system:serviceaccount:{{ .Release.Namespace }}:{{ include "ark-tenant.marketplaceInstaller.serviceAccount" . }}
+{{- end }}
+
+{{/*
+Name of the namespace's ValidatingAdmissionPolicy and of its binding. The bootstrap
+copy appends -bootstrap. ark-api looks both pairs up by name before it enables installs.
+*/}}
+{{- define "ark-tenant.marketplaceInstall.policyName" -}}
+ark-marketplace-installer-sa-{{ .Release.Namespace }}
+{{- end }}

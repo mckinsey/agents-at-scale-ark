@@ -1,0 +1,15 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata: {name: uses-installer}
+spec:
+  schedule: "0 0 1 1 *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: ark-marketplace-installer
+          restartPolicy: Never
+          containers:
+          - name: c
+            image: curlimages/curl:8.11.1
+            command: ["true"]
