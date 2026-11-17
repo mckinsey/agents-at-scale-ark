@@ -191,7 +191,10 @@ describe('ChatPanel MCP credentials', () => {
 
   async function typeMessage() {
     const user = userEvent.setup();
-    await user.type(screen.getByPlaceholderText('Type your message...'), 'Hi');
+    await user.type(
+      screen.getByPlaceholderText(/^Write here to chat with your/),
+      'Hi',
+    );
     return user;
   }
 
@@ -788,7 +791,7 @@ describe('ChatPanel output schema override', () => {
     });
 
     await user.type(
-      screen.getByPlaceholderText('Type your message...'),
+      screen.getByPlaceholderText('Write here to chat with your agent...'),
       'Hello{Enter}',
     );
 

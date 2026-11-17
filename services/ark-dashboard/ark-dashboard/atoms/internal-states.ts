@@ -44,6 +44,7 @@ export interface OpenChatWindow {
   type: 'model' | 'team' | 'agent';
   strategy?: string;
   graphEdges?: GraphEdge[];
+  minimized?: boolean;
 }
 
 const OPEN_CHAT_WINDOWS_KEY = 'open-chat-windows';
@@ -73,10 +74,7 @@ export const openChatWindowsAtom = atom(
   (_get, set, newValue: OpenChatWindow[]) => {
     set(openChatWindowsBaseAtom, newValue);
     if (typeof globalThis.window !== 'undefined') {
-      sessionStorage.setItem(
-        OPEN_CHAT_WINDOWS_KEY,
-        JSON.stringify(newValue),
-      );
+      sessionStorage.setItem(OPEN_CHAT_WINDOWS_KEY, JSON.stringify(newValue));
     }
   },
 );
