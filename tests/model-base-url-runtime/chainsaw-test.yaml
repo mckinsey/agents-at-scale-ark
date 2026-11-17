@@ -1,0 +1,137 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: model-base-url-runtime
+spec:
+  description: Re-checks a Model base URL read from a ConfigMap after the ConfigMap changes
+  steps:
+  - name: setup
+    try:
+    - apply:
+        file: manifests/a00-rbac.yaml
+    - script:
+        timeout: 180s
+        content: |
+          bash ../shared/install-mock-llm.sh
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - apply:
+        file: manifests/a01-endpoint-configmap.yaml
+    - apply:
+        file: manifests/a02-model.yaml
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: configmap-endpoint-model
+        timeout: 90s
+        for:
+          condition:
+            name: ModelAvailable
+            value: 'True'
+
+  - name: query-with-allowed-endpoint
+    try:
+    - apply:
+        file: manifests/a03-query-allowed.yaml
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: allowed-endpoint-query
+        timeout: 60s
+        for:
+          jsonPath:
+            path: '{.status.response.content}'
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: allowed-endpoint-query
+          status:
+            phase: done
+            (response.content): 'Paris'
+    catch:
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: allowed-endpoint-query
+
+  - name: model-unavailable-after-endpoint-change
+    try:
+    - apply:
+        file: manifests/a04-endpoint-configmap-loopback.yaml
+    - assert:
+        timeout: 60s
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Model
+          metadata:
+            name: configmap-endpoint-model
+          status:
+            (conditions[?type == 'ModelAvailable']):
+            - status: 'False'
+              reason: BaseURLNotAllowed
+              message: 'spec.config.openai.baseUrl is not allowed by the model URL policy: hosts outside the cluster must use HTTPS'
+    catch:
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: configmap-endpoint-model
+
+  - name: query-with-rejected-endpoint
+    try:
+    - apply:
+        file: manifests/a05-query-rejected.yaml
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: rejected-endpoint-query
+        timeout: 60s
+        for:
+          jsonPath:
+            path: '{.status.response.content}'
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: rejected-endpoint-query
+          status:
+            phase: error
+            "(contains(response.content, 'failed to load model configmap-endpoint-model: spec.config.openai.baseUrl is not allowed by the model URL policy: hosts outside the cluster must use HTTPS'))": true
+            (contains(response.content, '127.0.0.1')): false
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: rejected-endpoint-query
+
+  - name: model-available-after-endpoint-restored
+    try:
+    - apply:
+        file: manifests/a01-endpoint-configmap.yaml
+    - assert:
+        timeout: 60s
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Model
+          metadata:
+            name: configmap-endpoint-model
+          status:
+            (conditions[?type == 'ModelAvailable']):
+            - status: 'True'
+              reason: Available
+    catch:
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: configmap-endpoint-model
+    cleanup:
+    - script:
+        content: |
+          helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
