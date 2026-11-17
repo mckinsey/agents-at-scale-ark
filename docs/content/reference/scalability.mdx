@@ -42,17 +42,31 @@ The **messages**, **operation events**, and **sessions** stores can each opt in 
 
 When using the default etcd-backed storage, scalability is bounded by the cluster's etcd capacity. For deployments with a high volume of resources, the [PostgreSQL storage backend](/operations-guide/postgres-storage-backend) provides more headroom. PostgreSQL connection pooling is configured with sensible defaults (max open connections, idle connection management, connection lifetime limits) and can be tuned for higher throughput.
 
-The PostgreSQL backend's advantage grows with resource count — it is most pronounced on `LIST` operations. Benchmarks at 10,000 Ark resources:
+In load tests on a Kind cluster, a `LIST` of 2,000 objects of 10 KB took 1.68 s (P50) on PostgreSQL and 0.71 s on etcd. The aggregated apiserver has no watch cache, so every `LIST` reads all rows from PostgreSQL.
 
-| Operation | etcd | PostgreSQL |
-|-----------|------|------------|
-| LIST latency (P50) | 2,980ms | 1,504ms (~2x faster) |
-| LIST throughput | 6.1 ops/sec | 12.5 ops/sec (~2x higher) |
-| Create latency (P50) | 107ms | 106ms (comparable) |
-| Get latency (P50) | 103ms | 106ms (comparable) |
-| Watch latency (P50) | — | 73ms |
+Adding apiserver replicas makes writes and watches slower, because each replica with watches re-reads the last 500 resource versions of that kind on every change notification. Load: 20 updates per second, 10 watchers, 30 seconds.
 
-On PostgreSQL, production capacity is roughly ~230 ops/sec burst / ~180 ops/sec sustained, 200+ concurrent watchers at ~80ms P50, with optimal concurrency around 50–100 workers. See [Core Architecture → Storage backends](/reference/core-architecture#storage-backends) for the trade-off and [PostgreSQL Storage Backend](/operations-guide/postgres-storage-backend) for setup.
+| | 1 replica | 3 replicas |
+|---|---|---|
+| Rows re-read (10 KB objects) | 264,614 | 731,572 |
+| Update latency P50 (10 KB) | 10 ms | 39 ms |
+| Watch lag P50 (10 KB) | 27 ms | 80 ms |
+| Update latency P50 (100 KB) | 57 ms | 745 ms |
+| Watch lag P50 (100 KB) | 246 ms | 2.2 s |
+
+Change notifications run inside the write transaction and serialize commits on a PostgreSQL lock. With 32 concurrent clients, PostgreSQL did 4,948 commits per second without notifications and 298 with them. This limit applies to the PostgreSQL instance, whatever the replica count.
+
+These numbers come from a shared laptop. Compare the ratios, not the absolute values.
+
+#### Replicas
+
+Extra replicas share load only when kube-apiserver runs with `--enable-aggregator-routing=true`. Without it, kube-apiserver reaches the APIService through the Service ClusterIP over one HTTP/2 connection, and kube-proxy pins that connection to one pod. With three replicas, one pod served 3,000 requests and the other two served none. With the flag, the split was 507, 515 and 478. Managed clusters often do not allow the flag. Without it, extra replicas add availability, not capacity.
+
+#### Memory
+
+A `LIST` holds all rows in memory before encoding, so the peak is about four times the response size. In a load test, a single unpaginated `LIST` of 2,000 Queries of 100 KB was OOM-killed at a 256Mi limit, and so was a `LIST` paginated at 250. With a 2Gi limit the peak was 790Mi. Size `resources.limits.memory` from the largest `LIST` you expect.
+
+See [Core Architecture → Storage backends](/reference/core-architecture#storage-backends) for the trade-off and [PostgreSQL Storage Backend](/operations-guide/postgres-storage-backend) for setup.
 
 ### Executors
 
