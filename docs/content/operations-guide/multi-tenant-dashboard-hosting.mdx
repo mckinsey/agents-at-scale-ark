@@ -168,6 +168,7 @@ The per-tenant `ark-api` Role + RoleBinding isolates secrets, configmaps, pods, 
 Caveats (current state of the `ark-api` chart):
 
 - The chart's `ClusterRole` grants every tenant's ark-api full CRUD on the cluster-scoped `ArkConfig` resource. Tenants can read and modify the cluster's `ArkConfig`. Do not store cross-tenant defaults in `ArkConfig` if your trust model requires strict isolation.
+- The `ClusterRole` also lets every tenant's ark-api read any ValidatingAdmissionPolicy and binding by name. ark-api uses this to check that the policy protecting the marketplace installer ServiceAccount is in place.
 - If `impersonation.enabled=true` in the ark-api chart, every tenant's service account can impersonate arbitrary users and groups cluster-wide. Keep impersonation disabled for cross-organisation tenancy.
 - Without per-tenant audience separation (distinct `OIDC_APPLICATION_ID` per tenant), a JWT issued for one tenant's user is structurally valid against every tenant's ark-api. The Role + RoleBinding still scopes ark-api's *service account* to its own namespace, so the attacker only sees data from the ark-api they reached — but they can reach it.
 

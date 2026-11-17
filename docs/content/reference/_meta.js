@@ -5,6 +5,7 @@ export default {
 
   resources: 'Resources',
   'marketplace-sources': 'Marketplace Sources',
+  'marketplace-installs': 'Marketplace Installs',
 
   '---behaviour': { type: 'separator', title: 'System behaviour' },
   'core-architecture': 'Core Architecture',
