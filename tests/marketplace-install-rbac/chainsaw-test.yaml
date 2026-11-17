@@ -9,7 +9,9 @@ spec:
     ValidatingAdmissionPolicy API, that an install with the flag on creates
     the installer service account, and that the admission policy of the
     namespace stops tenant users and cluster admins from running workloads
-    or minting tokens as that service account.
+    or minting tokens as that service account, with no gap during upgrades,
+    after a rollback or on a reinstall over the bootstrap copy left by an
+    uninstall.
   timeouts:
     exec: 180s
 
@@ -58,6 +60,8 @@ spec:
     - script:
         content: |
           helm uninstall ark-tenant --namespace "$NAMESPACE" --wait --timeout=120s || true
+          kubectl delete validatingadmissionpolicybinding,validatingadmissionpolicy \
+            "ark-marketplace-installer-sa-$NAMESPACE-bootstrap" --ignore-not-found
         env:
         - name: NAMESPACE
           value: ($namespace)
@@ -67,7 +71,7 @@ spec:
     - script:
         content: |
           set -eu
-          for n in "ark-marketplace-installer-sa-$NAMESPACE"; do
+          for n in "ark-marketplace-installer-sa-$NAMESPACE" "ark-marketplace-installer-sa-$NAMESPACE-bootstrap"; do
             kubectl get validatingadmissionpolicy "$n" -o json | jq -e --arg ns "$NAMESPACE" '
               .spec.failurePolicy == "Fail" and
               ((.spec.matchConstraints.excludeResourceRules // []) | length) == 0 and
@@ -140,7 +144,97 @@ spec:
     - script:
         content: |
           helm uninstall ark-tenant --namespace "$NAMESPACE-b" --wait --timeout=120s || true
+          kubectl delete validatingadmissionpolicybinding,validatingadmissionpolicy \
+            "ark-marketplace-installer-sa-$NAMESPACE-b-bootstrap" --ignore-not-found
           kubectl delete namespace "$NAMESPACE-b" --ignore-not-found --wait=false
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: upgrade-keeps-policy
+    try:
+    - script:
+        timeout: 240s
+        content: |
+          set -eu
+          C=../../charts/ark-tenant
+          LOG=$(mktemp)
+          STOP="$LOG.stop"
+          (
+            i=0
+            while [ "$i" -lt 400 ] && [ ! -f "$STOP" ]; do
+              sed 's/{name: uses-installer}/{generateName: race-}/' manifests/installer-workloads/job.yaml \
+                | kubectl -n "$NAMESPACE" --as carol create -f - >/dev/null 2>&1 && echo LEAK
+              i=$((i + 1))
+            done
+            echo "attempts=$i"
+          ) > "$LOG" &
+          helm upgrade ark-tenant "$C" --namespace "$NAMESPACE" --reuse-values \
+            --set-json 'marketplaceInstall.extraRules=[]' --wait --timeout=120s
+          helm upgrade ark-tenant "$C" --namespace "$NAMESPACE" --values manifests/tenant-values.yaml \
+            --set marketplaceInstall.arkApiServiceAccount.namespace="$NAMESPACE" --wait --timeout=120s
+          touch "$STOP"
+          wait
+          cat "$LOG"
+          rm -f "$STOP"
+          if grep -q LEAK "$LOG"; then echo "a Job with the installer service account got through"; rm -f "$LOG"; exit 1; fi
+          if [ "$(sed -n 's/^attempts=//p' "$LOG")" -lt 5 ]; then echo "the create loop did not overlap the upgrades"; exit 1; fi
+          if kubectl -n "$NAMESPACE" get jobs -o jsonpath='{.items[*].spec.template.spec.serviceAccountName}' | grep -q ark-marketplace-installer; then
+            echo "found a Job with the installer service account"; exit 1
+          fi
+          echo ok
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: uninstall-leaves-bootstrap
+    try:
+    - script:
+        timeout: 240s
+        content: |
+          set -eu
+          . manifests/expect.sh
+          P="ark-marketplace-installer-sa-$NAMESPACE"
+          helm uninstall ark-tenant --namespace "$NAMESPACE" --wait --timeout=120s
+          if kubectl get validatingadmissionpolicy "$P" >/dev/null 2>&1; then echo "release policy must go on uninstall"; exit 1; fi
+          kubectl get validatingadmissionpolicy "$P-bootstrap"
+          kubectl get validatingadmissionpolicybinding "$P-bootstrap"
+          kubectl -n "$NAMESPACE" create serviceaccount ark-marketplace-installer
+          eventually_denied_by "$P-bootstrap" kubectl -n "$NAMESPACE" create -f manifests/installer-workloads/pod.yaml
+          kubectl -n "$NAMESPACE" delete serviceaccount ark-marketplace-installer
+          helm install ark-tenant ../../charts/ark-tenant --namespace "$NAMESPACE" \
+            --values manifests/tenant-values.yaml \
+            --set marketplaceInstall.arkApiServiceAccount.namespace="$NAMESPACE" --wait --timeout=120s
+          wait_enforced "$NAMESPACE"
+          kubectl get validatingadmissionpolicy "$P"
+          echo ok
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: rollback-restores-policy
+    try:
+    - script:
+        timeout: 240s
+        content: |
+          set -eu
+          . manifests/expect.sh
+          C=../../charts/ark-tenant
+          P="ark-marketplace-installer-sa-$NAMESPACE"
+          REV=$(helm status ark-tenant --namespace "$NAMESPACE" -o json | jq '.version')
+          helm upgrade ark-tenant "$C" --namespace "$NAMESPACE" --reuse-values \
+            --set marketplaceInstall.enabled=false --wait --timeout=120s
+          if kubectl get validatingadmissionpolicy "$P" >/dev/null 2>&1; then echo "policy must go with the flag"; exit 1; fi
+          if kubectl -n "$NAMESPACE" get serviceaccount ark-marketplace-installer >/dev/null 2>&1; then echo "service account must go with the flag"; exit 1; fi
+          kubectl delete validatingadmissionpolicybinding,validatingadmissionpolicy "$P-bootstrap"
+          wait_released "$NAMESPACE"
+          helm rollback ark-tenant "$REV" --namespace "$NAMESPACE" --wait --timeout=120s
+          kubectl get validatingadmissionpolicy "$P"
+          kubectl get validatingadmissionpolicybinding "$P"
+          kubectl -n "$NAMESPACE" get serviceaccount ark-marketplace-installer
+          wait_enforced "$NAMESPACE"
+          denied_by "$P" kubectl -n "$NAMESPACE" create -f manifests/installer-workloads/pod.yaml
+          echo ok
         env:
         - name: NAMESPACE
           value: ($namespace)
