@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { ErrorBoundary } from '@/components/common/error-boundary';
 import {
@@ -776,7 +776,7 @@ function TeamStepNode({
   );
 }
 
-function SessionDetailView({
+const SessionDetailView = memo(function SessionDetailView({
   session,
   isLoading = false,
 }: {
@@ -833,7 +833,7 @@ function SessionDetailView({
       </div>
     </div>
   );
-}
+});
 
 const RUN_ACTION_ERROR_TITLES: Record<WorkflowLifecycleAction, string> = {
   suspend: 'Failed to pause workflow',
@@ -959,17 +959,20 @@ function WorkflowRunControls({
   );
 }
 
-function SessionListItem({
+const SessionListItem = memo(function SessionListItem({
   session,
   isSelected,
-  onClick,
+  onSelect,
   onRunAction,
   isRunActionPending,
 }: {
   readonly session: Session;
   readonly isSelected: boolean;
-  readonly onClick: () => void;
-  readonly onRunAction?: (action: WorkflowLifecycleAction) => void;
+  readonly onSelect: (sessionId: string) => void;
+  readonly onRunAction?: (
+    sessionId: string,
+    action: WorkflowLifecycleAction,
+  ) => void;
   readonly isRunActionPending: boolean;
 }) {
   const showRunControls =
@@ -985,7 +988,7 @@ function SessionListItem({
     <div className="relative">
       <button
         type="button"
-        onClick={onClick}
+        onClick={() => onSelect(session.id)}
         title={session.name}
         aria-current={isSelected ? 'true' : undefined}
         className={cn(
@@ -1025,13 +1028,13 @@ function SessionListItem({
           status={session.status}
           suspended={Boolean(session.suspended)}
           disabled={isRunActionPending || shutdownInProgress}
-          onAction={onRunAction}
+          onAction={action => onRunAction(session.id, action)}
           className="absolute right-3 bottom-2"
         />
       )}
     </div>
   );
-}
+});
 
 function normalizeStatus(status: string): string {
   if (!status || status === 'all') return 'all';
@@ -1091,7 +1094,7 @@ function TemplateOptions({
   );
 }
 
-function SessionsBody({
+const SessionsBody = memo(function SessionsBody({
   error,
   isLoading,
   sessions,
@@ -1182,12 +1185,8 @@ function SessionsBody({
             key={session.id}
             session={session}
             isSelected={session.id === selectedSessionId}
-            onClick={() => onSelectSession(session.id)}
-            onRunAction={
-              onRunAction
-                ? action => onRunAction(session.id, action)
-                : undefined
-            }
+            onSelect={onSelectSession}
+            onRunAction={onRunAction}
             isRunActionPending={isRunActionPending(session.id)}
           />
         ))}
@@ -1209,7 +1208,7 @@ function SessionsBody({
       </div>
     </div>
   );
-}
+});
 
 export function SessionsSection({
   onCountChange,
@@ -1333,7 +1332,10 @@ export function SessionsSection({
     [runAction, showCreatedWorkflow, watchWorkflow],
   );
 
-  const allSessions = mapArgoWorkflowsToSessions(workflows);
+  const allSessions = useMemo(
+    () => mapArgoWorkflowsToSessions(workflows),
+    [workflows],
+  );
 
   // Suggestions come from the full set of workflow templates, not the current
   // page of workflow runs - a page can easily miss templates that still need
@@ -1359,11 +1361,15 @@ export function SessionsSection({
   }, [uniqueWorkflowTemplateNames, workflowTemplateNameInput]);
 
   // Filters apply only within the current page, not the whole collection.
-  const filteredSessions = allSessions.filter(session => {
-    if (sourceFilter === 'all') return true;
-    if (sourceFilter === 'workflows') return session.type === 'workflow';
-    return true;
-  });
+  const filteredSessions = useMemo(
+    () =>
+      allSessions.filter(session => {
+        if (sourceFilter === 'all') return true;
+        if (sourceFilter === 'workflows') return session.type === 'workflow';
+        return true;
+      }),
+    [allSessions, sourceFilter],
+  );
 
   useEffect(() => {
     const isUnresolvedDeepLink =
@@ -1393,10 +1399,14 @@ export function SessionsSection({
       detailRefreshKey,
     );
 
-  const selectedSession =
-    useRealData && selectedWorkflowDetail
-      ? mapArgoWorkflowToSession(selectedWorkflowDetail)
-      : selectedSessionFromList;
+  const selectedDetailSession = useMemo(
+    () =>
+      useRealData && selectedWorkflowDetail
+        ? mapArgoWorkflowToSession(selectedWorkflowDetail)
+        : undefined,
+    [useRealData, selectedWorkflowDetail],
+  );
+  const selectedSession = selectedDetailSession ?? selectedSessionFromList;
 
   useEffect(() => {
     if (selectedWorkflowDetail && useRealData) {
@@ -1430,7 +1440,7 @@ export function SessionsSection({
 
   const isLoading = loading || !isNamespaceResolved;
 
-  const clearFilters = () => {
+  const clearFilters = useCallback(() => {
     setTemplateTextDraft(null);
     setUrlState(
       {
@@ -1441,7 +1451,7 @@ export function SessionsSection({
       },
       { flush: true },
     );
-  };
+  }, [setUrlState]);
 
   return (
     <ErrorBoundary>
