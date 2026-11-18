@@ -145,8 +145,8 @@ profiles:
         path: images.ark-broker-migrate
         value:
           image: ark-broker-migrate
-          dockerfile: ./ark-broker/Dockerfile.migrate
-          context: ./ark-broker
+          dockerfile: ./migrate/Dockerfile
+          context: .
           docker:
             useBuildKit: true
       - op: add
