@@ -13,19 +13,13 @@ export const GET_ALL_MCP_SERVERS_QUERY_KEY = 'get-all-mcp-servers';
 export const GET_MCP_SERVER_QUERY_KEY = 'get-mcp-server';
 export const DELETE_MCP_SERVER_MUTATION_KEY = 'delete-mcp-server';
 
-type UseGetAllMcpServersOptions = {
-  enabled?: boolean;
-};
-
-export const useGetAllMcpServers = ({
-  enabled = true,
-}: UseGetAllMcpServersOptions = {}) => {
+export const useGetAllMcpServers = () => {
   const { namespace } = useNamespace();
 
   return useQuery({
     queryKey: [GET_ALL_MCP_SERVERS_QUERY_KEY, namespace],
     queryFn: () => mcpServersService.getAll(namespace),
-    enabled: enabled && Boolean(namespace),
+    enabled: Boolean(namespace),
   });
 };
 
