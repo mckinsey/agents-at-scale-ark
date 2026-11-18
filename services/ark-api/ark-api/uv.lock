@@ -322,7 +322,7 @@ requires-dist = [
     { name = "coverage", specifier = ">=7.10.4" },
     { name = "defusedxml", specifier = ">=0.7.1" },
     { name = "dpath", specifier = ">=2.2.0" },
-    { name = "fastapi", specifier = ">=0.115.8,<0.137.0" },
+    { name = "fastapi", specifier = ">=0.163.2" },
     { name = "httpx", specifier = ">=0.24.0" },
     { name = "kubernetes", specifier = ">=32.0.0,<36.0.0" },
     { name = "kubernetes-asyncio", specifier = ">=33.3.0,<34.0.0" },
@@ -367,14 +367,14 @@ dependencies = [
     { name = "uvicorn", extra = ["standard"] },
 ]
 wheels = [
-    { filename = "ark_sdk-0.1.73-py3-none-any.whl", hash = "sha256:0e6d7a31664967739c64dab34953371d60180940d8394ee201b823a088390fe6" },
+    { filename = "ark_sdk-0.1.73-py3-none-any.whl", hash = "sha256:3d6e6da0d4a8cbd1e1c562d8c1bd9970258062bec8239f920f09f44389fd6e77" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "a2a-sdk", extras = ["http-server"], specifier = ">=1.0.0,<2.0.0" },
     { name = "build", specifier = ">=1.0.0" },
-    { name = "fastapi", specifier = ">=0.115.0" },
+    { name = "fastapi", specifier = ">=0.163.2" },
     { name = "httpx", specifier = ">=0.24.0" },
     { name = "kubernetes", specifier = ">=32.0.0" },
     { name = "kubernetes-asyncio", specifier = ">=24.2.0" },
@@ -988,18 +988,20 @@ wheels = [
 
 [[package]]
 name = "fastapi"
-version = "0.136.3"
+version = "0.163.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "annotated-doc" },
+    { name = "anyio" },
+    { name = "opentelemetry-api" },
     { name = "pydantic" },
     { name = "starlette" },
     { name = "typing-extensions" },
     { name = "typing-inspection" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/81/2d/ff8d91d7b564d464629a0fd50a4489c97fcb836ac230bf3a7269232a9b1f/fastapi-0.136.3.tar.gz", hash = "sha256:e487fae93ad408e6f47641ee4dfe389864fd7bec92e547ea8498fc13f43e83ab", size = 396410, upload-time = "2026-05-23T18:53:15.192Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/bf/2f/d173f9bf5aba1285067ff47fd06b7e35bb922e3a1e52588fb7b31319d4ad/fastapi-0.163.2.tar.gz", hash = "sha256:e605c4c9b94be78b43aa8239a62ccf7b6684346cdc9e053633feab0ab21b87c7", size = 547696, upload-time = "2026-11-17T18:29:03.57Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e0/82/45359b62a067409bd929ae8a56b8ed13e5a8c8a61194b3c236920999ab83/fastapi-0.136.3-py3-none-any.whl", hash = "sha256:3d2a69bdf04b7e9f3afa292c3bc7a98816bbfafa10bc9b45f3f3700d2f761620", size = 117481, upload-time = "2026-05-23T18:53:16.924Z" },
+    { url = "https://files.pythonhosted.org/packages/58/ef/bf79bc47e914dfabc56657bb6a2d33340b1faa5a514b0b92e842aa088d1e/fastapi-0.163.2-py3-none-any.whl", hash = "sha256:825a8fdd18d7bfcb1b86735e9805c59b7400d55c4060d3df5331b62ae452f004", size = 154717, upload-time = "2026-11-17T18:29:02.025Z" },
 ]
 
 [[package]]

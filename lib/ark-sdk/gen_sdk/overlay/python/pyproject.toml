@@ -7,7 +7,7 @@ authors = [
 ]
 readme = "README.md"
 keywords = ["kubernetes", "ai", "agents", "mckinsey", "ark", "llm", "automation", "agentic-ai"]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 classifiers = [
   "Development Status :: 4 - Beta",
   "Intended Audience :: Developers",
@@ -30,7 +30,7 @@ dependencies = [
   "kubernetes_asyncio>=24.2.0",
   "pytest>=7.2.1",
   "build>=1.0.0",
-  "fastapi>=0.115.0",
+  "fastapi>=0.163.2",
   "httpx>=0.24.0",
   "PyJWT[crypto]>=2.10.0",
   "pydantic-settings>=2.0.0",
