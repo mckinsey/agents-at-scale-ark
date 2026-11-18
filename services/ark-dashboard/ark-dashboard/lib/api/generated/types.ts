@@ -6049,6 +6049,8 @@ export interface operations {
                 limit?: number;
                 /** @description Cursor for pagination */
                 cursor?: number | null;
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
             };
             header?: never;
             path?: never;
