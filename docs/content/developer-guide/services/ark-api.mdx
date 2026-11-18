@@ -61,12 +61,12 @@ See the [Ark API Reference](/reference/ark-apis) for complete API documentation,
 
 ### A2A Gateway
 
-The A2A Gateway exposes ARK agents via the [A2A Protocol](https://github.com/a2a-integration/a2a-spec) for standardized agent-to-agent communication. All ARK agents in Kubernetes are automatically discovered and exposed.
+The A2A Gateway exposes ARK agents via the [A2A Protocol](https://a2a-protocol.org) for standardized agent-to-agent communication. All ARK agents in Kubernetes are automatically discovered and exposed. See [Exposing Agents via A2A](/developer-guide/exposing-agents-via-a2a) for the full walkthrough.
 
 **Endpoints:**
 - `GET /agents` - List all available agents
-- `GET /agent/{agent-name}/.well-known/agent-card.json` - Get agent card
-- `GET /agent/{agent-name}/*` - Dynamic A2A protocol routes
+- `GET /a2a/agent/{agent-name}/.well-known/agent.json` - Get agent card
+- `* /a2a/agent/{agent-name}/*` - Dynamic A2A protocol routes
 
 **Example:**
 ```bash
@@ -74,7 +74,7 @@ The A2A Gateway exposes ARK agents via the [A2A Protocol](https://github.com/a2a
 curl http://localhost:8000/agents
 
 # Get agent card
-curl http://localhost:8000/agent/<agent-name>/.well-known/agent.json
+curl http://localhost:8000/a2a/agent/<agent-name>/.well-known/agent.json
 ```
 
 ### Service Proxy
