@@ -313,6 +313,9 @@ def context(browser, request):
         "ignore_https_errors": True
     }
     context = browser.new_context(**context_args)
+    context.add_init_script(
+        "try { window.localStorage.setItem('onboarding-completed', 'true'); } catch (e) {}"
+    )
     yield context
     context.close()
 

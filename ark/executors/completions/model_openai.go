@@ -17,6 +17,9 @@ func loadOpenAIConfig(ctx context.Context, resolver *common.ValueSourceResolver,
 	if err != nil {
 		return fmt.Errorf("failed to resolve OpenAI baseURL: %w", err)
 	}
+	if err := checkBaseURL("spec.config.openai.baseUrl", baseURL); err != nil {
+		return err
+	}
 
 	apiKey, err := resolver.ResolveValueSource(ctx, config.APIKey, namespace)
 	if err != nil {

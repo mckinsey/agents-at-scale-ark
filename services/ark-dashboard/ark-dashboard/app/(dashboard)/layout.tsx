@@ -2,6 +2,7 @@
 
 import { AppSidebar } from '@/components/app-sidebar';
 import ChatManager from '@/components/chat-manager';
+import { OnboardingManager } from '@/components/onboarding/onboarding-manager';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { Spinner } from '@/components/ui/spinner';
 import { NavigationGuardProvider } from '@/lib/hooks/use-navigation-guard';
@@ -41,8 +42,9 @@ export default function DashboardLayout({
             {children}
           </SidebarInset>
         </NavigationGuardProvider>
+        <ChatManager />
       </SidebarProvider>
-      <ChatManager />
+      <OnboardingManager />
     </>
   );
 }

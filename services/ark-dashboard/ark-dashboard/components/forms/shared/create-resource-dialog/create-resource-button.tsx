@@ -77,6 +77,7 @@ type CreateResourceButtonProps = {
   readonly defaultValue?: string;
   readonly label?: string;
   readonly dialogTitle?: string;
+  readonly disabled?: boolean;
 };
 
 export function CreateResourceButton({
@@ -85,6 +86,7 @@ export function CreateResourceButton({
   defaultValue = '',
   label = 'Add New',
   dialogTitle,
+  disabled,
 }: CreateResourceButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
   const copy = COPY[kind];
@@ -136,6 +138,7 @@ export function CreateResourceButton({
         string_data: { token: values.value },
         labels: [],
         type: 'Opaque',
+        scope: 'shared',
       });
       return;
     }
@@ -159,7 +162,11 @@ export function CreateResourceButton({
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
-        <Button type="button" variant="outline" size="default">
+        <Button
+          type="button"
+          variant="outline"
+          size="default"
+          disabled={disabled}>
           {label}
         </Button>
       </DialogTrigger>

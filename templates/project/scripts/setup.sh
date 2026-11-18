@@ -65,7 +65,7 @@ if [ -n "$OPENAI_API_KEY" ]; then
     kubectl create secret generic openai-secret \
         --from-literal=api-key="$OPENAI_API_KEY" \
         --namespace="$NAMESPACE" \
-        --dry-run=client -o yaml | kubectl apply -f -
+        --dry-run=client -o yaml | kubectl label --local -f - ark.mckinsey.com/resource-type=secret ark.mckinsey.com/scope=shared -o yaml | kubectl apply -f -
     echo -e "${GREEN}✅ Created OpenAI secret${NC}"
 fi
 
@@ -73,7 +73,7 @@ if [ -n "$AZURE_OPENAI_API_KEY" ]; then
     kubectl create secret generic azure-openai-secret \
         --from-literal=api-key="$AZURE_OPENAI_API_KEY" \
         --namespace="$NAMESPACE" \
-        --dry-run=client -o yaml | kubectl apply -f -
+        --dry-run=client -o yaml | kubectl label --local -f - ark.mckinsey.com/resource-type=secret ark.mckinsey.com/scope=shared -o yaml | kubectl apply -f -
     echo -e "${GREEN}✅ Created Azure OpenAI secret${NC}"
 fi
 
@@ -81,7 +81,7 @@ if [ -n "$ANTHROPIC_API_KEY" ]; then
     kubectl create secret generic anthropic-secret \
         --from-literal=api-key="$ANTHROPIC_API_KEY" \
         --namespace="$NAMESPACE" \
-        --dry-run=client -o yaml | kubectl apply -f -
+        --dry-run=client -o yaml | kubectl label --local -f - ark.mckinsey.com/resource-type=secret ark.mckinsey.com/scope=shared -o yaml | kubectl apply -f -
     echo -e "${GREEN}✅ Created Anthropic secret${NC}"
 fi
 
