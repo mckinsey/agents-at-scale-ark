@@ -20,6 +20,11 @@ argo-workflows:
       - name: ARGO_EXECUTOR_PLUGINS
         value: "true"
 
+    envFrom:
+      - secretRef:
+          name: argo-workflows-tracing
+          optional: true
+
     resources:
       requests:
         memory: "256Mi"
@@ -68,6 +73,12 @@ argo-workflows:
       limits:
         memory: "256Mi"
         cpu: "200m"
+
+tracing:
+  enabled: false
+  endpoint: ""
+  protocol: http/protobuf
+  headers: ""
 
 # Additional role bindings. For development, we are generally installing argo
 # into an existing tenant namespace (such as 'default'). So we can bind the
