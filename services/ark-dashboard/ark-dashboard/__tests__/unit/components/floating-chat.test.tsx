@@ -10,7 +10,6 @@ import {
 } from '@/atoms/experimental-features';
 import { lastConversationIdAtom } from '@/atoms/internal-states';
 import FloatingChat from '@/components/floating-chat';
-import type * as McpCredentialsModule from '@/lib/hooks/use-chat-mcp-credentials';
 import type { QueryDetailResponse } from '@/lib/services';
 import { chatService } from '@/lib/services';
 
@@ -26,23 +25,6 @@ vi.mock('@/providers/NamespaceProvider', () => ({
     isNamespaceResolved: true,
     isPending: false,
     readOnlyMode: false,
-  }),
-}));
-
-vi.mock('@/lib/hooks/use-chat-mcp-credentials', async importOriginal => ({
-  ...(await importOriginal<typeof McpCredentialsModule>()),
-  useChatMcpCredentials: () => ({
-    rows: [],
-    credentials: [],
-    blocked: false,
-    servers: [],
-    isServersPending: false,
-    secrets: [],
-    isSecretsPending: false,
-    isSecretsError: false,
-    addRow: vi.fn(),
-    updateRow: vi.fn(),
-    removeRow: vi.fn(),
   }),
 }));
 
@@ -1123,7 +1105,6 @@ describe('FloatingChat', () => {
             conversationId: undefined,
             timeout: '5m',
             parameters: undefined,
-            overrides: [],
             annotations: undefined,
           },
         );
@@ -1259,7 +1240,6 @@ describe('FloatingChat', () => {
             conversationId: undefined,
             timeout: '5m',
             parameters: undefined,
-            overrides: [],
             annotations: undefined,
           },
         );
