@@ -875,16 +875,8 @@ describe('useChatSession - Stream force-close (#2862)', () => {
 
   function mockHungStreamWithoutContent(queryName: string) {
     vi.mocked(chatService.startStreamChatResponse).mockImplementation(
-      async (
-        _namespace,
-        _input,
-        _targetType,
-        _targetName,
-        _sessionId,
-        _conversationId,
-        _timeout,
-        abortSignal,
-      ) => {
+      async (_namespace, _input, _targetType, _targetName, options) => {
+        const abortSignal = options?.abortSignal;
         async function* hung(): AsyncGenerator<Record<string, unknown>> {
           await new Promise<void>((_resolve, reject) => {
             if (abortSignal?.aborted) return reject(makeAbortError());
