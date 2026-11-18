@@ -9,7 +9,6 @@ import {
   chatHistoryAtom,
   createNewSessionId,
 } from '@/atoms/chat-history';
-import type { StoredMcpCredential } from '@/atoms/chat-mcp-credentials';
 import {
   isChatStreamingEnabledAtom,
   queryTimeoutSettingAtom,
@@ -25,7 +24,6 @@ import {
   useAgentQueryParameters,
 } from '@/lib/hooks/use-agent-query-parameters';
 import { useBrokerFallbackNotice } from '@/lib/hooks/use-broker-fallback-notice';
-import { buildMcpCredentialOverrides } from '@/lib/hooks/use-chat-mcp-credentials';
 import {
   type PendingApprovalQuery,
   useResumePendingApproval,
@@ -38,7 +36,6 @@ import {
   type ChatResponse,
   type MemoryNotice,
   type MemoryNoticeLookup,
-  type QueryOverride,
   isBrokerUnavailableError,
 } from '@/lib/services/chat';
 import { useInvalidateQueriesList } from '@/lib/services/queries-hooks';
@@ -115,13 +112,10 @@ async function* streamUntilForceClose<T>(
 interface UseChatSessionParams {
   name: string;
   type: ChatType;
-  mcpCredentials?: readonly StoredMcpCredential[];
-  mcpCredentialsBlocked?: boolean;
 }
 
 interface ChatTurnRequest {
   parameters?: ApiQueryParameter[];
-  overrides?: QueryOverride[];
 }
 
 interface UseChatSessionReturn {
@@ -165,13 +159,9 @@ interface UseChatSessionReturn {
   isOutputSchemaOverrideValid: boolean;
 }
 
-const NO_MCP_CREDENTIALS: readonly StoredMcpCredential[] = [];
-
 export function useChatSession({
   name,
   type,
-  mcpCredentials = NO_MCP_CREDENTIALS,
-  mcpCredentialsBlocked = false,
 }: UseChatSessionParams): UseChatSessionReturn {
   const { namespace } = useNamespace();
   const invalidateQueriesList = useInvalidateQueriesList();
@@ -426,7 +416,6 @@ export function useChatSession({
   );
   const isSendBlocked =
     missingParameters.length > 0 ||
-    mcpCredentialsBlocked ||
     (canOverrideOutputSchema && !isOutputSchemaOverrideValid);
 
   useEffect(() => {
@@ -560,7 +549,6 @@ export function useChatSession({
             timeout: queryTimeout,
             abortSignal: chatStreamAbortControllerRef.current.signal,
             parameters: turnRequest.parameters,
-            overrides: turnRequest.overrides,
             annotations: outputSchemaAnnotations,
           },
         );
@@ -683,7 +671,6 @@ export function useChatSession({
             conversationId,
             timeout: queryTimeout,
             parameters: turnRequest.parameters,
-            overrides: turnRequest.overrides,
             annotations: outputSchemaAnnotations,
           },
         );
@@ -814,7 +801,6 @@ export function useChatSession({
 
       const turnRequest: ChatTurnRequest = {
         parameters: toApiParameters(),
-        overrides: buildMcpCredentialOverrides(mcpCredentials),
       };
       clearActiveQuery();
 
@@ -899,7 +885,6 @@ export function useChatSession({
       handleStreamChatResponse,
       isChatStreamingEnabled,
       isSendBlocked,
-      mcpCredentials,
       name,
       recoverViaPolling,
       refreshMemoryNotice,
