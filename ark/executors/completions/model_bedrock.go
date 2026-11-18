@@ -15,6 +15,11 @@ func loadBedrockConfig(ctx context.Context, resolver *common.ValueSourceResolver
 
 	region := resolveOptionalValue(ctx, resolver, config.Region, namespace)
 	baseURL := resolveOptionalValue(ctx, resolver, config.BaseURL, namespace)
+	if baseURL != "" {
+		if err := checkBaseURL("spec.config.bedrock.baseUrl", baseURL); err != nil {
+			return err
+		}
+	}
 	accessKeyID := resolveOptionalValue(ctx, resolver, config.AccessKeyID, namespace)
 	secretAccessKey := resolveOptionalValue(ctx, resolver, config.SecretAccessKey, namespace)
 	sessionToken := resolveOptionalValue(ctx, resolver, config.SessionToken, namespace)

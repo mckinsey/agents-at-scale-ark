@@ -252,7 +252,9 @@ describe('chatService', () => {
         'Hello',
         'agent',
         'TestAgent',
-        'session-123',
+        {
+          sessionId: 'session-123',
+        },
       );
 
       expect(apiClient.post).toHaveBeenCalledWith(
@@ -268,8 +270,9 @@ describe('chatService', () => {
         'Hello',
         'agent',
         'TestAgent',
-        undefined,
-        'conv-456',
+        {
+          conversationId: 'conv-456',
+        },
       );
 
       expect(apiClient.post).toHaveBeenCalledWith(
@@ -285,9 +288,9 @@ describe('chatService', () => {
         'Hello',
         'agent',
         'TestAgent',
-        undefined,
-        undefined,
-        '5m',
+        {
+          timeout: '5m',
+        },
       );
 
       expect(apiClient.post).toHaveBeenCalledWith(
@@ -847,10 +850,9 @@ describe('chatService', () => {
         'test input',
         'agent',
         'TestAgent',
-        undefined,
-        undefined,
-        undefined,
-        controller.signal,
+        {
+          abortSignal: controller.signal,
+        },
       )) {
       }
 
