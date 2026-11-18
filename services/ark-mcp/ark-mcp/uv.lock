@@ -694,18 +694,20 @@ wheels = [
 
 [[package]]
 name = "fastapi"
-version = "0.140.1"
+version = "0.163.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "annotated-doc" },
+    { name = "anyio" },
+    { name = "opentelemetry-api" },
     { name = "pydantic" },
     { name = "starlette" },
     { name = "typing-extensions" },
     { name = "typing-inspection" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/94/04/90178464ab31cf2534ab6da71b72864b39360fa0b529854b6eb2515b3461/fastapi-0.140.1.tar.gz", hash = "sha256:8c10f75cf17c46f9d27c512a6f9bcc3643ffef2029a9ac956f8bf821ef47ceea", size = 421119, upload-time = "2026-07-27T12:07:52.666Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/bf/2f/d173f9bf5aba1285067ff47fd06b7e35bb922e3a1e52588fb7b31319d4ad/fastapi-0.163.2.tar.gz", hash = "sha256:e605c4c9b94be78b43aa8239a62ccf7b6684346cdc9e053633feab0ab21b87c7", size = 547696, upload-time = "2026-11-17T18:29:03.57Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/6c/b6/aaa42a7793c87e434036801225c1ff135ec22ddfc4b945d46c6159faeff2/fastapi-0.140.1-py3-none-any.whl", hash = "sha256:1b4944b5ca29a67783d0edc42078c3edb4aaeb13faecc1a9c131de88458a59c8", size = 130909, upload-time = "2026-07-27T12:07:51.034Z" },
+    { url = "https://files.pythonhosted.org/packages/58/ef/bf79bc47e914dfabc56657bb6a2d33340b1faa5a514b0b92e842aa088d1e/fastapi-0.163.2-py3-none-any.whl", hash = "sha256:825a8fdd18d7bfcb1b86735e9805c59b7400d55c4060d3df5331b62ae452f004", size = 154717, upload-time = "2026-11-17T18:29:02.025Z" },
 ]
 
 [[package]]
@@ -1335,11 +1337,11 @@ wheels = [
 
 [[package]]
 name = "oauthlib"
-version = "3.3.1"
+version = "4.0.1"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/0b/5f/19930f824ffeb0ad4372da4812c50edbd1434f678c90c2733e1188edfc63/oauthlib-3.3.1.tar.gz", hash = "sha256:0f0f8aa759826a193cf66c12ea1af1637f87b9b4622d46e866952bb022e538c9", size = 185918, upload-time = "2025-06-19T22:48:08.269Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/33/17/2bb072de0b990303c985f26869fd47bb179024a051f47e7f9d208eb92f8e/oauthlib-4.0.1.tar.gz", hash = "sha256:3d73febdb6faa00f277c81fb04be7b7586fb96fc3b7f0b9c772dada69a25ede7", size = 191219, upload-time = "2026-10-31T09:52:58.008Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/be/9c/92789c596b8df838baa98fa71844d84283302f7604ed565dafe5a6b5041a/oauthlib-3.3.1-py3-none-any.whl", hash = "sha256:88119c938d2b8fb88561af5f6ee0eec8cc8d552b7bb1f712743136eb7523b7a1", size = 160065, upload-time = "2025-06-19T22:48:06.508Z" },
+    { url = "https://files.pythonhosted.org/packages/df/ef/3b8adde1b32a6f540758bff734d3442c621734c83708e5f02b0ba2f43b84/oauthlib-4.0.1-py3-none-any.whl", hash = "sha256:498a298876e996301950a5b053d12c31628bb7b895db03666430c69ce182eb61", size = 161934, upload-time = "2026-10-31T09:52:56.206Z" },
 ]
 
 [[package]]
