@@ -113,6 +113,25 @@ check_absent() {
     fi
 }
 
+check_render_fails() {
+    local name="$1"
+    local expected="$2"
+    shift 2
+    local output
+    if output=$("$@" 2>&1); then
+        echo -e "${RED}FAIL${NC} $name"
+        echo -e "${YELLOW}  expected helm template to fail, but it rendered${NC}"
+        FAILED=$((FAILED + 1))
+    elif grep -qF -- "$expected" <<<"$output"; then
+        echo -e "${GREEN}OK${NC}   $name (rejected: $expected)"
+    else
+        echo -e "${RED}FAIL${NC} $name"
+        echo -e "${YELLOW}  expected error containing:${NC} $expected"
+        echo "$output" | sed 's/^/    /'
+        FAILED=$((FAILED + 1))
+    fi
+}
+
 echo "Validating chart value rendering for $MANAGER_TEMPLATE..."
 
 # Defaults from values.yaml.
@@ -188,6 +207,17 @@ check_contains "apiserver metrics disabled by default" '--metrics-bind-address=0
 check_absent   "no metrics-secure flag by default"     '--metrics-secure'         "$as_default"
 check_absent   "no metrics port by default"            'name: metrics'            "$as_default"
 check_absent   "no apiserver servicemonitor by default" 'kind: ServiceMonitor'    "$as_default"
+
+pool_value() {
+    awk '/name: ARK_POSTGRES_MAX_OPEN_CONNS/ {getline; print}' <<<"$1"
+}
+check_contains "apiserver pool defaults to 40"          'value: "40"' "$(pool_value "$as_default")"
+as_pool="$(render_apiserver --set postgresql.maxOpenConns=80)"
+check_contains "apiserver pool override reaches the env" 'value: "80"' "$(pool_value "$as_pool")"
+for bad_pool in 0 -5 abc; do
+    check_render_fails "apiserver rejects maxOpenConns=$bad_pool" 'postgresql.maxOpenConns must be a positive integer' \
+        render_apiserver --set "postgresql.maxOpenConns=$bad_pool"
+done
 
 as_metrics="$(render_apiserver --set metrics.enabled=true)"
 check_contains "apiserver metrics enabled binds :8443" '--metrics-bind-address=:8443' "$as_metrics"

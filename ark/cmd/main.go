@@ -516,6 +516,13 @@ func apiserverConfigFromEnv() (apiserver.Config, error) {
 		}
 		cfg.PostgresPort = port
 	}
+	if connsStr := os.Getenv("ARK_POSTGRES_MAX_OPEN_CONNS"); connsStr != "" {
+		conns, err := strconv.Atoi(connsStr)
+		if err != nil || conns < 1 {
+			return cfg, fmt.Errorf("invalid ARK_POSTGRES_MAX_OPEN_CONNS %q: must be a positive integer", connsStr)
+		}
+		cfg.PostgresMaxOpenConns = conns
+	}
 	cfg.PostgresDB = os.Getenv("ARK_POSTGRES_DATABASE")
 	cfg.PostgresUser = os.Getenv("ARK_POSTGRES_USER")
 	cfg.PostgresPass = os.Getenv("ARK_POSTGRES_PASSWORD")

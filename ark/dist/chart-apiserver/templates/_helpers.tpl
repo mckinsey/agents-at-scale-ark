@@ -24,6 +24,14 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- printf "%s:%s" .Values.image.repository $tag -}}
 {{- end }}
 
+{{- define "ark-apiserver.maxOpenConns" -}}
+{{- $conns := int .Values.postgresql.maxOpenConns -}}
+{{- if lt $conns 1 -}}
+{{- fail (printf "postgresql.maxOpenConns must be a positive integer, got %v" .Values.postgresql.maxOpenConns) -}}
+{{- end -}}
+{{- $conns -}}
+{{- end }}
+
 {{- define "ark-apiserver.postgresEnv" -}}
 - name: ARK_POSTGRES_HOST
   value: {{ required "postgresql.host is required" .Values.postgresql.host | quote }}
