@@ -11,6 +11,7 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
+INDENT_SED='s/^/    /'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ARK_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -36,7 +37,7 @@ expect_arg() {
     if ! output=$(render "$@" 2>&1); then
         echo -e "${RED}FAIL${NC} $name"
         echo -e "${YELLOW}  helm template failed:${NC}"
-        echo "$output" | sed 's/^/    /'
+        echo "$output" | sed "$INDENT_SED"
         FAILED=$((FAILED + 1))
         return 0
     fi
@@ -46,7 +47,7 @@ expect_arg() {
         echo -e "${RED}FAIL${NC} $name"
         echo -e "${YELLOW}  expected to find:${NC} $expected"
         echo -e "${YELLOW}  rendered args:${NC}"
-        echo "$output" | grep -E -- '--max-concurrent-(queries|reconciles)=' | sed 's/^/    /' || true
+        echo "$output" | grep -E -- '--max-concurrent-(queries|reconciles)=' | sed "$INDENT_SED" || true
         FAILED=$((FAILED + 1))
     fi
     return 0
@@ -61,7 +62,7 @@ expect_no_arg() {
     if ! output=$(render "$@" 2>&1); then
         echo -e "${RED}FAIL${NC} $name"
         echo -e "${YELLOW}  helm template failed:${NC}"
-        echo "$output" | sed 's/^/    /'
+        echo "$output" | sed "$INDENT_SED"
         FAILED=$((FAILED + 1))
         return 0
     fi
@@ -110,6 +111,25 @@ check_absent() {
         FAILED=$((FAILED + 1))
     else
         echo -e "${GREEN}OK${NC}   $1 (absent: $2)"
+    fi
+}
+
+check_render_fails() {
+    local name="$1"
+    local expected="$2"
+    shift 2
+    local output
+    if output=$("$@" 2>&1); then
+        echo -e "${RED}FAIL${NC} $name" >&2
+        echo -e "${YELLOW}  expected helm template to fail, but it rendered${NC}" >&2
+        FAILED=$((FAILED + 1))
+    elif grep -qF -- "$expected" <<<"$output"; then
+        echo -e "${GREEN}OK${NC}   $name (rejected: $expected)"
+    else
+        echo -e "${RED}FAIL${NC} $name" >&2
+        echo -e "${YELLOW}  expected error containing:${NC} $expected" >&2
+        echo "$output" | sed "$INDENT_SED" >&2
+        FAILED=$((FAILED + 1))
     fi
 }
 
@@ -188,6 +208,18 @@ check_contains "apiserver metrics disabled by default" '--metrics-bind-address=0
 check_absent   "no metrics-secure flag by default"     '--metrics-secure'         "$as_default"
 check_absent   "no metrics port by default"            'name: metrics'            "$as_default"
 check_absent   "no apiserver servicemonitor by default" 'kind: ServiceMonitor'    "$as_default"
+
+pool_value() {
+    local rendered="$1"
+    awk '/name: ARK_POSTGRES_MAX_OPEN_CONNS/ {getline; print}' <<<"$rendered"
+}
+check_contains "apiserver pool defaults to 40"          'value: "40"' "$(pool_value "$as_default")"
+as_pool="$(render_apiserver --set postgresql.maxOpenConns=80)"
+check_contains "apiserver pool override reaches the env" 'value: "80"' "$(pool_value "$as_pool")"
+for bad_pool in 0 -5 abc; do
+    check_render_fails "apiserver rejects maxOpenConns=$bad_pool" 'postgresql.maxOpenConns must be a positive integer' \
+        render_apiserver --set "postgresql.maxOpenConns=$bad_pool"
+done
 
 as_metrics="$(render_apiserver --set metrics.enabled=true)"
 check_contains "apiserver metrics enabled binds :8443" '--metrics-bind-address=:8443' "$as_metrics"
