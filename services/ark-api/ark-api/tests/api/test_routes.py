@@ -1477,6 +1477,25 @@ class TestAgentsEndpoint(unittest.TestCase):
         )
         self.assertEqual(duplicate_mcp.status_code, 422)
 
+        expressions = {"matchExpressions": [{"key": "team", "operator": "In", "values": ["a"]}]}
+        request_data["overrides"] = [
+            {"resourceType": "mcpserver", "labelSelector": expressions, "headers": [{"name": "X-Team", "value": {"value": "a"}}]},
+            {"resourceType": "mcpserver", "labelSelector": expressions, "headers": [{"name": "x-team", "value": {"value": "b"}}]},
+        ]
+        duplicate_selector = self.client.put(
+            "/v1/agents/test-agent?namespace=default", json=request_data
+        )
+        self.assertEqual(duplicate_selector.status_code, 422)
+
+        request_data["overrides"] = [
+            {"resourceType": "mcpserver", "headers": [{"name": "X-Team", "value": {"value": "a"}}]},
+            {"resourceType": "mcpserver", "labelSelector": {"matchLabels": {"team": "a", "env": "prod"}}, "headers": [{"name": "X-Team", "value": {"value": "b"}}]},
+        ]
+        other_selector = self.client.put(
+            "/v1/agents/test-agent?namespace=default", json=request_data
+        )
+        self.assertEqual(other_selector.status_code, 200)
+
     @patch("ark_api.api.v1.agents.with_ark_client")
     def test_update_agent_partial(self, mock_ark_client):
         """Test partial agent update."""
