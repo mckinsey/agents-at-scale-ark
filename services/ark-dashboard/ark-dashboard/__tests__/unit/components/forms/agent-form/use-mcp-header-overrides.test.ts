@@ -33,7 +33,7 @@ describe('useMcpHeaderOverrides', () => {
 
     expect(result.current.rows).toHaveLength(2);
     expect(result.current.toPayload()).toEqual(overrides);
-    expect(snapshot).toBe(JSON.stringify(overrides));
+    expect(JSON.parse(snapshot)).toEqual(overrides);
   });
 
   it('removes the rows of a server whose tools are deselected', () => {
