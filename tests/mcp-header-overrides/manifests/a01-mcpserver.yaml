@@ -1,0 +1,25 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: MCPServer
+metadata:
+  name: header-overrides-mcp
+spec:
+  transport: http
+  address:
+    valueFrom:
+      serviceRef:
+        name: mock-llm
+        port: http
+        path: /mcp
+  headers:
+  - name: X-Server-Default
+    value:
+      value: server-default-value
+  - name: X-Agent-Scoped
+    value:
+      value: server-agent-value
+  - name: X-Agent-Unscoped
+    value:
+      value: server-all-value
+  - name: X-Query-Override
+    value:
+      value: server-query-value

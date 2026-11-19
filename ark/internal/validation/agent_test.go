@@ -11,6 +11,7 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/annotations"
+	"mckinsey.com/ark/internal/labels"
 )
 
 func TestValidateAgent(t *testing.T) {
@@ -158,6 +159,19 @@ func TestValidateAgentModelOverrideHeaders(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "duplicate header name: x-tenant") {
 			t.Fatalf("expected duplicate header error, got %v", err)
 		}
+
+		agent.Spec.Overrides = []arkv1alpha1.Override{
+			{ResourceType: "mcpserver", Headers: []arkv1alpha1.Header{{Name: "Authorization", Value: arkv1alpha1.HeaderValue{Value: "a"}}}},
+			{
+				ResourceType:  "mcpserver",
+				Headers:       []arkv1alpha1.Header{{Name: "authorization", Value: arkv1alpha1.HeaderValue{Value: "b"}}},
+				LabelSelector: &metav1.LabelSelector{MatchLabels: map[string]string{labels.NameLabel: "github"}},
+			},
+		}
+		_, err = v.ValidateAgent(ctx, agent)
+		if err == nil || !strings.Contains(err.Error(), "spec.overrides (mcpserver, ark.mckinsey.com/name=github): duplicate header name: authorization") {
+			t.Fatalf("expected duplicate MCP header error, got %v", err)
+		}
 	})
 
 	t.Run("allows duplicate header names outside unselected model overrides", func(t *testing.T) {
@@ -175,7 +189,16 @@ func TestValidateAgentModelOverrideHeaders(t *testing.T) {
 						Headers:       duplicates,
 						LabelSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"env": "prod"}},
 					},
-					{ResourceType: "mcpserver", Headers: duplicates},
+					{
+						ResourceType:  "mcpserver",
+						Headers:       duplicates[:1],
+						LabelSelector: &metav1.LabelSelector{MatchLabels: map[string]string{labels.NameLabel: "github"}},
+					},
+					{
+						ResourceType:  "mcpserver",
+						Headers:       duplicates[1:],
+						LabelSelector: &metav1.LabelSelector{MatchLabels: map[string]string{labels.NameLabel: "jira"}},
+					},
 				},
 			},
 		}

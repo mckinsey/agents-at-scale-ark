@@ -1,6 +1,8 @@
 """Agent CRD response models."""
+import json
 from typing import List, Dict, Optional, Any
 
+from ark_sdk.labels import NAME_LABEL
 from pydantic import BaseModel, Field, field_validator
 
 from .common import AvailabilityStatus, PaginatedListResponse
@@ -131,8 +133,41 @@ def _has_label_selector(selector: Optional[AgentLabelSelector]) -> bool:
     return selector is not None and bool(selector.matchLabels or selector.matchExpressions)
 
 
+def _selected_mcp_server(selector: Optional[AgentLabelSelector]) -> Optional[str]:
+    if selector is None or selector.matchExpressions:
+        return None
+    match_labels = selector.matchLabels or {}
+    if len(match_labels) != 1:
+        return None
+    return match_labels.get(NAME_LABEL) or None
+
+
+def _ensure_unique_mcp_override_header_names(overrides: List[AgentOverride]) -> None:
+    """Per MCP server, the headers selected by its name label plus the unscoped ones;
+    other selectors on their own."""
+    unscoped: List[AgentHeader] = []
+    by_server: Dict[str, List[AgentHeader]] = {}
+    by_selector: Dict[str, List[AgentHeader]] = {}
+    for override in overrides:
+        if override.resourceType != "mcpserver":
+            continue
+        if not _has_label_selector(override.labelSelector):
+            unscoped.extend(override.headers)
+        elif server := _selected_mcp_server(override.labelSelector):
+            by_server.setdefault(server, []).extend(override.headers)
+        else:
+            scope = json.dumps(override.labelSelector.model_dump(exclude_none=True), sort_keys=True)
+            by_selector.setdefault(scope, []).extend(override.headers)
+    ensure_unique_header_names(unscoped)
+    for headers in by_server.values():
+        ensure_unique_header_names(unscoped + headers)
+    for headers in by_selector.values():
+        ensure_unique_header_names(headers)
+
+
 def ensure_unique_override_header_names(overrides: Optional[List[AgentOverride]]) -> Optional[List[AgentOverride]]:
-    """Apply header name uniqueness across model overrides that have no label selector."""
+    """Apply header name uniqueness across model overrides that have no label selector,
+    and per MCP server across MCP server overrides."""
     model_headers = [
         header
         for override in overrides or []
@@ -140,6 +175,7 @@ def ensure_unique_override_header_names(overrides: Optional[List[AgentOverride]]
         for header in override.headers
     ]
     ensure_unique_header_names(model_headers)
+    _ensure_unique_mcp_override_header_names(overrides or [])
     return overrides
 
 

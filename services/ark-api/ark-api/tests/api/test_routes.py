@@ -1457,6 +1457,26 @@ class TestAgentsEndpoint(unittest.TestCase):
         )
         self.assertEqual(duplicate.status_code, 422)
 
+        def server(name):
+            return {"matchLabels": {"ark.mckinsey.com/name": name}}
+
+        request_data["overrides"] = [
+            {"resourceType": "mcpserver", "labelSelector": server("github"), "headers": [{"name": "Authorization", "value": {"value": "a"}}]},
+            {"resourceType": "mcpserver", "labelSelector": server("jira"), "headers": [{"name": "Authorization", "value": {"value": "b"}}]},
+        ]
+        per_server = self.client.put(
+            "/v1/agents/test-agent?namespace=default", json=request_data
+        )
+        self.assertEqual(per_server.status_code, 200)
+
+        request_data["overrides"].append(
+            {"resourceType": "mcpserver", "headers": [{"name": "authorization", "value": {"value": "c"}}]}
+        )
+        duplicate_mcp = self.client.put(
+            "/v1/agents/test-agent?namespace=default", json=request_data
+        )
+        self.assertEqual(duplicate_mcp.status_code, 422)
+
     @patch("ark_api.api.v1.agents.with_ark_client")
     def test_update_agent_partial(self, mock_ark_client):
         """Test partial agent update."""
