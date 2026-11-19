@@ -15,6 +15,16 @@ import { chatService } from '@/lib/services';
 
 const mockInvalidateQueriesList = vi.fn();
 
+vi.mock('@/lib/hooks/use-query-mcp-headers', () => ({
+  useQueryMcpHeaders: () => ({
+    visible: false,
+    rows: [],
+    errors: {},
+    hasErrors: false,
+    toApiOverrides: () => undefined,
+  }),
+}));
+
 vi.mock('@/lib/services/queries-hooks', () => ({
   useInvalidateQueriesList: () => mockInvalidateQueriesList,
 }));
