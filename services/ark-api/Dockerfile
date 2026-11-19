@@ -8,7 +8,8 @@ RUN adduser --system --uid 1001 --home /home/ark ark && \
   apt-get upgrade -y libsqlite3-0 zlib1g libgnutls30 && \
   apt-get --no-install-recommends install -y \
   curl \
-  && curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash \
+  && curl -fsSL https://raw.githubusercontent.com/helm/helm/v3.22.1/scripts/get-helm-3 | DESIRED_VERSION=v3.22.1 bash \
+  && helm version --template '{{.Version}}' | grep -qx v3.22.1 \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/* \
   && mkdir -p /home/ark \
@@ -30,6 +31,9 @@ RUN uv sync --frozen
 
 ENV HOME=/home/ark
 ENV XDG_CACHE_HOME=/home/ark/.cache
+ENV HELM_CACHE_HOME=/tmp/helm/cache
+ENV HELM_CONFIG_HOME=/tmp/helm/config
+ENV HELM_DATA_HOME=/tmp/helm/data
 RUN mkdir -p /home/ark/.cache/uv && \
     mkdir -p /app/src/ark_api.egg-info && \
     chown -R ark:nogroup /home/ark && \
