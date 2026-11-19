@@ -132,7 +132,7 @@ With the flag on, the chart creates:
 The tenant Role lets users create Jobs and Deployments, and whoever creates a pod chooses its service account. Without the policy, any tenant user could run a pod as an admin of the namespace. The policy lets only the installer account itself and the Kubernetes controllers run workloads as that account, and only the installer account create token Secrets for it. Requests that helm sends from inside the install pod carry the `authentication.kubernetes.io/pod-name` extra of the pod token, and for those the policy also refuses:
 
 - RoleBindings to a ClusterRole, to this chart's Roles, to a Group, to a service account of another namespace or to a `system:` user;
-- Roles with wildcards, rules on RBAC, Secret writes, `pods/exec`, `pods/attach`, `pods/ephemeralcontainers`, `serviceaccounts/token` or `impersonate`;
+- Roles with wildcards on resources or subresources, rules on RBAC, any rule on Secrets (read access would expose the namespace's personal secrets to the chart's pods), `pods/exec`, `pods/attach`, `pods/ephemeralcontainers`, `serviceaccounts/token`, or the `impersonate`, `escalate` and `bind` verbs;
 - workloads and token Secrets for the installer account;
 - Secrets named like a personal secret (`u-<16 hex>-…`) or labelled with an `ark.mckinsey.com/scope` other than `shared`.
 - deleting this chart's Roles and RoleBindings, personal secrets, or whole collections of Secrets or RoleBindings.

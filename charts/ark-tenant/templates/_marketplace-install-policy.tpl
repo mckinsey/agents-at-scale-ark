@@ -176,21 +176,21 @@ spec:
         (s.kind == 'ServiceAccount' && (!has(s.namespace) || s.namespace == request.namespace)) ||
         (s.kind == 'User' && !s.name.startsWith('system:')))
   {{- /*
-     Role rules a chart may create: nothing on RBAC, no wildcards, no Secret writes,
-     nothing that runs code in another pod or mints tokens, no impersonation. RBAC
-     escalation checks already refuse rules the installer does not hold; these cover
-     what admin grants.
+     Role rules a chart may create: nothing on RBAC, no wildcards on resources or
+     subresources, nothing on Secrets (even read access would expose the personal
+     secrets of the namespace to the chart's pods), nothing that runs code in another
+     pod or mints tokens, and no impersonate, escalate or bind. RBAC escalation checks
+     already refuse rules the installer does not hold; these cover what admin grants.
   */}}
   - name: safeRules
     expression: >-
       object.kind != 'Role' || !has(object.rules) ||
       object.rules.all(r,
         !(has(r.apiGroups) && r.apiGroups.exists(g, g == 'rbac.authorization.k8s.io' || g == '*')) &&
-        !(has(r.resources) && r.resources.exists(x, x == '*' || x.startsWith('*/') ||
+        !(has(r.resources) && r.resources.exists(x, x == '*' || x.startsWith('*/') || x.endsWith('/*') ||
+          x == 'secrets' || x.startsWith('secrets/') ||
           x in ['pods/exec', 'pods/attach', 'pods/ephemeralcontainers', 'serviceaccounts/token'])) &&
-        !r.verbs.exists(v, v == '*' || v == 'impersonate') &&
-        !(has(r.resources) && r.resources.exists(x, x == 'secrets') &&
-          r.verbs.exists(v, v in ['create', 'update', 'patch', 'delete', 'deletecollection'])))
+        !r.verbs.exists(v, v in ['*', 'impersonate', 'escalate', 'bind']))
   {{- /*
      Secrets that pass for personal ones: the u-<16 hex>- name of a personal secret, or
      an ark.mckinsey.com/scope label other than shared.
@@ -242,7 +242,7 @@ spec:
     message: "a chart may bind only its own Roles, and only to service accounts of this namespace or to users outside system:"
   {{- /* Helm in the install pod may not create Roles with the rules safeRules refuses. */}}
   - expression: "!variables.fromInstallPod || variables.isDelete || variables.safeRules"
-    message: "a chart may not create Roles over RBAC, wildcards, Secret writes, pods/exec, pods/attach, pods/ephemeralcontainers, serviceaccounts/token or impersonate"
+    message: "a chart may not create Roles over RBAC, Secrets, wildcards, pods/exec, pods/attach, pods/ephemeralcontainers, serviceaccounts/token, impersonate, escalate or bind"
   {{- /* Helm in the install pod may not create Secrets that pass for personal secrets. */}}
   - expression: "!variables.fromInstallPod || variables.isDelete || !variables.reservedSecret"
     message: "a chart may not create Secrets with a personal secret name or a non-shared ark.mckinsey.com/scope label"
