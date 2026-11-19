@@ -164,6 +164,19 @@ httpRoute:
   #     backendRefs:
   #       - name: ark-dashboard
   #         port: 3000
+  # NGINX Gateway Fabric only. Attaches a SnippetsFilter to the default rule that
+  # raises the response buffers for this route. Under SSO the session JWT is
+  # chunked into several Set-Cookie headers, written twice per response (by the
+  # middleware and by the auth route), which overflow nginx's default
+  # proxy_buffer_size and turn /api/auth/session into a 502. Requires the
+  # gateway.nginx.org CRDs and snippetsFilters enabled on the gateway: the
+  # localhost-gateway install applies the CRDs and its chart sets the flag.
+  # Custom rules above must add the ExtensionRef filter themselves.
+  proxyBuffers:
+    enabled: false
+    bufferSize: 64k
+    buffers: 4 64k
+    busyBuffersSize: 128k
 
 # Seeded into the `marketplace-sources` ConfigMap. Set to [] to skip.
 # Optional `auth` block = authenticated fetch. The token is NEVER templated here:
