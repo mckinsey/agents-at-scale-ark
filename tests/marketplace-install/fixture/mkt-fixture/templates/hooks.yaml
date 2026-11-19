@@ -1,0 +1,39 @@
+{{/*
+Hooks. Helm creates them outside the release manifest, so the preview must read
+them from `helm template` output too, which includes hooks by default.
+- fail: a pre-install Job that exits 1, so the install fails before the release
+  objects exist;
+- hook: a pre-install ConfigMap with a fixed name, so a test can put a
+  conflicting object in its way.
+*/}}
+{{- if eq .Values.variant "fail" }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-pre
+  annotations:
+    helm.sh/hook: pre-install
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: fail
+        image: busybox:1.37
+        imagePullPolicy: IfNotPresent
+        command: [sh, -c, "echo pre-install hook failing on purpose; exit 1"]
+        {{- include "fx.sc" . | nindent 8 }}
+          runAsUser: 1000
+{{- end }}
+{{- if eq .Values.variant "hook" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: shared-config
+  annotations:
+    helm.sh/hook: pre-install
+    helm.sh/hook-delete-policy: before-hook-creation
+data: {owner: {{ .Release.Name }}}
+{{- end }}
