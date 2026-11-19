@@ -1,0 +1,111 @@
+{{/*
+Objects the preview must flag. None of them is rendered by the ok variant.
+*/}}
+
+{{- /* conflict: a fixed name, so a test can create it beforehand. */}}
+{{- if eq .Values.variant "conflict" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: preexisting
+data: {owner: {{ .Release.Name }}}
+{{- end }}
+
+{{- /*
+cluster: a cluster-scoped object, and a namespaced one pinned to a namespace
+other than the install target. Installs are limited to the tenant namespace.
+*/}}
+{{- if eq .Values.variant "cluster" }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Release.Name }}-cluster
+rules: [{apiGroups: [""], resources: [pods], verbs: [get]}]
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-elsewhere
+  namespace: default
+data: {x: y}
+{{- end }}
+
+{{- /*
+crd: a CRD from templates/. A CRD in crds/ would be rendered by every variant
+under --include-crds, so this one sits behind the variant switch instead.
+*/}}
+{{- if eq .Values.variant "crd" }}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: widgets.fixture.example.com
+spec:
+  group: fixture.example.com
+  names: {kind: Widget, plural: widgets, singular: widget}
+  scope: Namespaced
+  versions:
+  - name: v1
+    served: true
+    storage: true
+    schema:
+      openAPIV3Schema: {type: object, x-kubernetes-preserve-unknown-fields: true}
+{{- end }}
+
+{{- /*
+rbac: a Role that grants everything and a RoleBinding to the admin ClusterRole
+for the default ServiceAccount. Either one would hand the installer's admin
+rights to a workload of the chart.
+*/}}
+{{- if eq .Values.variant "rbac" }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .Release.Name }}-all
+rules: [{apiGroups: ["*"], resources: ["*"], verbs: ["*"]}]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ .Release.Name }}-admin
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: admin}
+subjects: [{kind: ServiceAccount, name: default, namespace: {{ .Release.Namespace }}}]
+{{- end }}
+
+{{- /*
+reserved-secret: one Secret named like a user's personal Secret, and one that
+carries a personal scope label. Both would pass for another user's Secret.
+*/}}
+{{- if eq .Values.variant "reserved-secret" }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "fx.personalSecret" . }}
+stringData: {token: not-a-real-token}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Release.Name }}-scoped
+  labels:
+    ark.mckinsey.com/resource-type: secret
+    ark.mckinsey.com/scope: user-0123456789abcdef
+stringData: {token: not-a-real-token}
+{{- end }}
+
+{{- /*
+ark: an Ark resource. Ark's API server ignores dryRun and would store it, so
+the preview must check it without a dry run.
+*/}}
+{{- if eq .Values.variant "ark" }}
+---
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: {{ .Release.Name }}-agent
+spec:
+  prompt: You are a test agent from the marketplace install fixture.
+{{- end }}

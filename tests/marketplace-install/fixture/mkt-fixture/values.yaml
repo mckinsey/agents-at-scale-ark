@@ -1,0 +1,33 @@
+# Which case this copy of the chart reproduces. Every variant renders the base
+# objects (a Deployment, a Service and a ConfigMap, all restricted-compliant)
+# plus the objects listed below. Tests render one variant with
+# `helm template --set variant=<name>`; package.sh bakes the name in.
+#
+#   ok                 only the base objects; installs cleanly (verdict free)
+#   slow               the Deployment never becomes ready, so `helm install --wait`
+#                      runs until its timeout (state timed-out)
+#   fail               a pre-install hook Job that exits 1 (state failed)
+#   hook               a pre-install hook ConfigMap with a fixed name, to check
+#                      that hooks are part of the preview
+#   conflict           a ConfigMap with a fixed name ("preexisting"); create it
+#                      first to get conflict-unmanaged or conflict-release
+#   cluster            a ClusterRole (cluster-scoped) and a ConfigMap in the
+#                      "default" namespace (namespace-mismatch)
+#   crd                a CustomResourceDefinition rendered from templates (crd)
+#   skiplabel          the base objects carry ark.mckinsey.com/skip-webhook-validation
+#                      (skip-webhook-label)
+#   rbac               a Role with "*" and a RoleBinding to the admin ClusterRole
+#                      (rbac-escalation)
+#   rbac-installer-sa  a Deployment that runs as the installer ServiceAccount
+#                      (rbac-escalation)
+#   nosc               the Deployment has no securityContext, so it breaks the
+#                      restricted Pod Security level (psa-violation)
+#   reserved-secret    a Secret with a reserved personal name and one with a
+#                      personal scope label (reserved-secret)
+#   personal-ref       a Deployment that mounts and reads Secrets with reserved
+#                      personal names (personal-secret-ref)
+#   ark                an Ark Agent, to prove the preview never sends a dry run
+#                      to Ark's API server, which would persist it
+#
+# Any other name makes the render fail, so a typo cannot silently test "ok".
+variant: ok
