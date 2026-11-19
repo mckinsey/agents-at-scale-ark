@@ -92,6 +92,7 @@ class MCPServerResponse(BaseModel):
     status_message: Optional[str] = None
     tool_count: Optional[int] = None
     authorization: Optional[MCPServerAuthorization] = None
+    header_names: List[str] = []
 
 
 class MCPServerListResponse(PaginatedListResponse):

@@ -93,6 +93,53 @@ ark import ark-export.yaml --upsert
 
 Exports created by older Ark CLI versions may contain stale `metadata.resourceVersion` and `status` fields. Regenerate or clean those files before importing them with `--upsert`.
 
+## Unreleased
+
+### Duplicate MCP Header Names Rejected on Agents
+
+The admission webhook and `ark-api` now reject an Agent whose `mcpserver` overrides send the same header name twice to one MCP server. Names are compared case-insensitively, after trimming whitespace, so `Authorization` and `authorization` count as the same header.
+
+| Overrides | Checked as one list |
+|-----------|---------------------|
+| No `labelSelector` | All of them together |
+| `labelSelector` exactly `matchLabels: {ark.mckinsey.com/name: <server>}` | Per server, together with the overrides without a `labelSelector`, because those reach every server |
+| Any other `labelSelector` | Per selector |
+
+So an Agent can no longer set a header for all MCP servers and the same header for one of them. The same name on two different servers is allowed. Query overrides are not checked.
+
+Since v0.1.72, Models and Agent `model` overrides without a `labelSelector` are checked the same way.
+
+The check runs on every create and update. Existing Agents with duplicates keep working, but any later change to them is rejected until the duplicates are removed, including label or annotation edits, `kubectl apply` and `ark import --upsert`. The error names the server and the header, for example `spec.overrides (mcpserver, ark.mckinsey.com/name=github): duplicate header name: authorization`. `ark-api` returns `422` for agent create and update requests.
+
+**Migration:**
+- Find Agents with duplicate MCP header names:
+
+```bash
+kubectl get agents -A -o json | jq -r '
+  def norm: ascii_downcase | gsub("^\\s+|\\s+$"; "");
+  def nsel: ((.labelSelector.matchLabels // {}) | length) + ((.labelSelector.matchExpressions // []) | length);
+  def scope: if (.labelSelector.matchExpressions // []) == [] and ((.labelSelector.matchLabels // {}) | keys) == ["ark.mckinsey.com/name"]
+    then "ark.mckinsey.com/name=\(.labelSelector.matchLabels["ark.mckinsey.com/name"])"
+    else (.labelSelector | tostring) end;
+  .items[] | . as $a
+  | [(.spec.overrides // [])[] | select(.resourceType == "mcpserver")] as $mcp
+  | [$mcp[] | select(nsel == 0) | (.headers // [])[].name | norm] as $all
+  | ([{scope: "all servers", names: $all}]
+     + ([$mcp[] | select(nsel > 0) | {scope: scope, names: [(.headers // [])[].name | norm]}]
+        | group_by(.scope)
+        | map({scope: .[0].scope, names: (map(.names) | add)})
+        | map(if (.scope | startswith("ark.mckinsey.com/name=")) then .names += $all else . end)))[]
+  | .scope as $s | .names | group_by(.)[] | select(length > 1)
+  | "\($a.metadata.namespace)/\($a.metadata.name) (mcpserver, \($s)): \(.[0])"'
+```
+
+- Keep one entry per header name and server in each listed Agent. To send a different value to one server, remove the header from the overrides without a `labelSelector` and set it per server instead. Update the source manifests too, so later applies and imports are not rejected.
+
+### MCP Server List Returns Header Names, Secret List Returns Keys
+
+- `GET /v1/mcp-servers` items include `header_names`: the names from `spec.headers`, without values.
+- `GET /v1/secrets` items include `type` and `keys`, the names of the keys in the Secret's data, sorted. Values are never returned.
+
 ## v0.2.0
 
 ### Secrets Created by Ark Carry Ownership Labels
