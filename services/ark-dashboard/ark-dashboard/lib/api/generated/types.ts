@@ -1322,6 +1322,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/namespaces/{namespace}/marketplace-installs/{item}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview Marketplace Install */
+        post: operations["preview_marketplace_install_v1_namespaces__namespace__marketplace_installs__item__preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/namespaces/{namespace}/marketplace-items": {
         parameters: {
             query?: never;
@@ -4206,6 +4223,64 @@ export interface components {
             enabled: boolean;
             /** Reason */
             reason?: ("read-only" | "api-key-not-supported" | "impersonation-disabled" | "namespace-not-enabled" | "policy-missing" | "not-permitted") | null;
+        };
+        /** MarketplaceInstallPreview */
+        MarketplaceInstallPreview: {
+            /** Blocked */
+            blocked: boolean;
+            /** Chartname */
+            chartName: string;
+            /** Chartref */
+            chartRef: string;
+            /** Chartversion */
+            chartVersion: string;
+            /** Digest */
+            digest: string;
+            /**
+             * Expiresat
+             * Format: date-time
+             */
+            expiresAt: string;
+            /** Itemname */
+            itemName: string;
+            /** Namespace */
+            namespace: string;
+            /** Releasename */
+            releaseName: string;
+            /** Resources */
+            resources: components["schemas"]["MarketplaceInstallResource"][];
+            /** Source */
+            source: string;
+        };
+        /** MarketplaceInstallPreviewRequest */
+        MarketplaceInstallPreviewRequest: {
+            /** Source */
+            source: string;
+        };
+        /** MarketplaceInstallResource */
+        MarketplaceInstallResource: {
+            /** Apiversion */
+            apiVersion: string;
+            /**
+             * Hook
+             * @default false
+             */
+            hook: boolean;
+            /** Kind */
+            kind: string;
+            /** Message */
+            message?: string | null;
+            /** Name */
+            name: string;
+            /** Namespace */
+            namespace?: string | null;
+            /** Ownedbyrelease */
+            ownedByRelease?: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "free" | "conflict-release" | "conflict-unmanaged" | "cluster-scoped" | "namespace-mismatch" | "crd" | "skip-webhook-label" | "rbac-escalation" | "reserved-secret" | "personal-secret-ref" | "psa-violation" | "unverifiable";
         };
         /**
          * MarketplaceItemError
@@ -7847,6 +7922,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MarketplaceInstallCapability"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_marketplace_install_v1_namespaces__namespace__marketplace_installs__item__preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                namespace: string;
+                item: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarketplaceInstallPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketplaceInstallPreview"];
                 };
             };
             /** @description Validation Error */
