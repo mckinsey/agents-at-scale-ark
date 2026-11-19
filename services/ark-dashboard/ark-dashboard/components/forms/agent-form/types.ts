@@ -5,10 +5,13 @@ import type { CustomHeaderRows } from '@/components/forms/shared/custom-header-r
 import type { Parameter } from '@/components/ui/parameter-editor';
 import type { Agent, AgentTool, Model, Skill, Tool } from '@/lib/services';
 import { kubernetesNameSchema } from '@/lib/utils/kubernetes-validation';
+import type { ServerIssueForServer } from '@/lib/utils/mcp-header-overrides';
 import {
   supportsOutputSchema,
   validateOutputSchema,
 } from '@/lib/utils/output-schema';
+
+import type { McpHeaderOverrides } from './use-mcp-header-overrides';
 
 export function createAgentFormSchema(
   isOutputSchemaSupported: (
@@ -63,6 +66,10 @@ export interface AgentFormState {
   unavailableTools: Tool[];
   parameters: Parameter[];
   headerRows: CustomHeaderRows;
+  mcpHeaders: McpHeaderOverrides;
+  mcpServerNames: string[];
+  mcpHeaderNames: Record<string, string[]>;
+  mcpServerIssueFor: ServerIssueForServer;
   isExperimentalExecutionEngineEnabled: boolean;
   hasChanges: boolean;
 }

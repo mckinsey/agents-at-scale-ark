@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/field';
 import { Form, FormField } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import { McpHeaderOverridesEditor } from '@/components/ui/mcp-header-overrides-editor';
 import { ParameterEditor } from '@/components/ui/parameter-editor';
 import {
   Select,
@@ -56,6 +57,10 @@ export function CreateAgentForm({
     selectedTools,
     parameters,
     headerRows,
+    mcpHeaders,
+    mcpServerNames,
+    mcpHeaderNames,
+    mcpServerIssueFor,
   } = state;
 
   const {
@@ -109,9 +114,9 @@ export function CreateAgentForm({
       <Form {...form}>
         <form
           onSubmit={form.handleSubmit(onSubmit, onInvalid)}
-          className="flex min-h-0 flex-1 items-start gap-20 overflow-hidden pb-2 pl-px">
+          className="flex min-h-0 flex-1 items-start gap-10 overflow-hidden pb-2 pl-px">
           {/* Left column — form fields (576px) */}
-          <div className="flex max-h-full min-h-0 w-[576px] flex-col gap-6 overflow-y-auto">
+          <div className="flex max-h-full min-h-0 w-[576px] min-w-0 flex-col gap-6 overflow-y-auto">
             <FormField
               control={form.control}
               name="name"
@@ -186,6 +191,22 @@ export function CreateAgentForm({
               }}
             />
 
+            <FormField
+              control={form.control}
+              name="prompt"
+              render={({ field, fieldState }) => (
+                <PromptField
+                  value={field.value || ''}
+                  onChange={field.onChange}
+                  error={fieldState.error?.message}
+                  hasError={!!fieldState.error}
+                  disabled={isDisabled}
+                  parameters={parameters}
+                  required
+                />
+              )}
+            />
+
             <FieldSet className="gap-2">
               <FieldTitle>Tools</FieldTitle>
               <ToolsMultiSelect
@@ -204,20 +225,16 @@ export function CreateAgentForm({
               disabled={isDisabled}
             />
 
-            <FormField
-              control={form.control}
-              name="prompt"
-              render={({ field, fieldState }) => (
-                <PromptField
-                  value={field.value || ''}
-                  onChange={field.onChange}
-                  error={fieldState.error?.message}
-                  hasError={!!fieldState.error}
-                  disabled={isDisabled}
-                  parameters={parameters}
-                  required
-                />
-              )}
+            <McpHeaderOverridesEditor
+              rows={mcpHeaders.rows}
+              errors={mcpHeaders.errors}
+              serverNames={mcpServerNames}
+              headerNamesByServer={mcpHeaderNames}
+              serverIssueFor={mcpServerIssueFor}
+              disabled={isDisabled}
+              onAddRow={mcpHeaders.addRow}
+              onUpdateRow={mcpHeaders.updateRow}
+              onRemoveRow={mcpHeaders.removeRow}
             />
 
             <CustomHeadersField
@@ -229,8 +246,8 @@ export function CreateAgentForm({
             />
           </div>
 
-          {/* Right column — Variables panel (figma 4257:26496, 464px fixed) */}
-          <div className="bg-surface-primary flex max-h-full min-h-0 w-[464px] flex-none flex-col overflow-y-auto p-5">
+          {/* Right column — Variables panel (figma 4257:26496, 560px fixed) */}
+          <div className="bg-surface-primary flex max-h-full min-h-0 w-[560px] flex-none flex-col gap-8 overflow-y-auto p-5">
             <ParameterEditor
               parameters={parameters}
               onChange={setParameters}
