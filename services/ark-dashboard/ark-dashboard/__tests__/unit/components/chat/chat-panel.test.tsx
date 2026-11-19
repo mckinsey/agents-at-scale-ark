@@ -56,6 +56,22 @@ function chatSession(overrides: Partial<ChatSession> = {}): ChatSession {
     outputSchemaOverride: '',
     setOutputSchemaOverride: vi.fn(),
     isOutputSchemaOverrideValid: true,
+    mcpHeaders: {
+      visible: false,
+      rows: [],
+      nameOptionsFor: vi.fn(() => []),
+      namesForServer: vi.fn(() => []),
+      serverIssueFor: vi.fn(),
+      canAddRow: false,
+      errors: {},
+      hasErrors: false,
+      serverNames: [],
+      effectiveCount: 0,
+      addRow: vi.fn(),
+      updateRow: vi.fn(),
+      removeRow: vi.fn(),
+      toApiOverrides: vi.fn(),
+    },
     ...overrides,
   };
 }

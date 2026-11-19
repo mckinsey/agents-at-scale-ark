@@ -25,6 +25,10 @@ import {
 } from '@/lib/hooks/use-agent-query-parameters';
 import { useBrokerFallbackNotice } from '@/lib/hooks/use-broker-fallback-notice';
 import {
+  type QueryMcpHeaders,
+  useQueryMcpHeaders,
+} from '@/lib/hooks/use-query-mcp-headers';
+import {
   type PendingApprovalQuery,
   useResumePendingApproval,
 } from '@/lib/hooks/use-resume-pending-approval';
@@ -36,6 +40,7 @@ import {
   type ChatResponse,
   type MemoryNotice,
   type MemoryNoticeLookup,
+  type QueryOverride,
   isBrokerUnavailableError,
 } from '@/lib/services/chat';
 import { useInvalidateQueriesList } from '@/lib/services/queries-hooks';
@@ -116,6 +121,7 @@ interface UseChatSessionParams {
 
 interface ChatTurnRequest {
   parameters?: ApiQueryParameter[];
+  overrides?: QueryOverride[];
 }
 
 interface UseChatSessionReturn {
@@ -157,6 +163,7 @@ interface UseChatSessionReturn {
   outputSchemaOverride: string;
   setOutputSchemaOverride: (value: string) => void;
   isOutputSchemaOverrideValid: boolean;
+  mcpHeaders: QueryMcpHeaders;
 }
 
 export function useChatSession({
@@ -395,7 +402,11 @@ export function useChatSession({
     executionEngineName,
     executionEngineAnnotations,
     agentAnnotations,
+    agent,
   } = useAgentQueryParameters(name, type);
+
+  const mcpHeaders = useQueryMcpHeaders(type === 'agent' ? agent : null);
+  const { hasErrors: hasMcpHeaderErrors, toApiOverrides } = mcpHeaders;
 
   const supportsOutputSchema =
     type === 'agent' &&
@@ -416,6 +427,7 @@ export function useChatSession({
   );
   const isSendBlocked =
     missingParameters.length > 0 ||
+    hasMcpHeaderErrors ||
     (canOverrideOutputSchema && !isOutputSchemaOverrideValid);
 
   useEffect(() => {
@@ -549,6 +561,7 @@ export function useChatSession({
             timeout: queryTimeout,
             abortSignal: chatStreamAbortControllerRef.current.signal,
             parameters: turnRequest.parameters,
+            overrides: turnRequest.overrides,
             annotations: outputSchemaAnnotations,
           },
         );
@@ -671,6 +684,7 @@ export function useChatSession({
             conversationId,
             timeout: queryTimeout,
             parameters: turnRequest.parameters,
+            overrides: turnRequest.overrides,
             annotations: outputSchemaAnnotations,
           },
         );
@@ -801,6 +815,7 @@ export function useChatSession({
 
       const turnRequest: ChatTurnRequest = {
         parameters: toApiParameters(),
+        overrides: toApiOverrides(),
       };
       clearActiveQuery();
 
@@ -889,6 +904,7 @@ export function useChatSession({
       recoverViaPolling,
       refreshMemoryNotice,
       resumeAutoScroll,
+      toApiOverrides,
       toApiParameters,
       type,
       updateChatMessages,
@@ -1121,5 +1137,6 @@ export function useChatSession({
     outputSchemaOverride,
     setOutputSchemaOverride,
     isOutputSchemaOverrideValid,
+    mcpHeaders,
   };
 }
