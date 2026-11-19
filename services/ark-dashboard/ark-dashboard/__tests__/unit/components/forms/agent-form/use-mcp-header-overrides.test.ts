@@ -86,5 +86,18 @@ describe('useMcpHeaderOverrides', () => {
         ],
       },
     ]);
+
+    act(() => result.current.addRow());
+    const second = result.current.rows[1].id;
+    act(() => result.current.updateRow(second, { name: 'X-Org-Id' }));
+    act(() => {
+      result.current.validate();
+    });
+    expect(result.current.errors[second]).toBeDefined();
+
+    act(() => result.current.removeRow(second));
+    act(() => result.current.removeRow(id));
+    expect(result.current.rows).toEqual([]);
+    expect(result.current.errors).toEqual({});
   });
 });
