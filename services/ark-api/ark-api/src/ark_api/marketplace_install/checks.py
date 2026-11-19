@@ -18,6 +18,15 @@ WILDCARD_SUBRESOURCES = {"pods", "serviceaccounts", "secrets"}
 
 
 @dataclass(frozen=True)
+class ObjectRef:
+    api_version: str
+    kind: str
+    name: str
+    plural: str
+    namespaced: bool
+
+
+@dataclass(frozen=True)
 class Verdict:
     state: InstallResourceState
     message: str
