@@ -13,6 +13,16 @@ import { trackEvent } from '@/lib/analytics/singleton';
 
 import { useChatSession } from './use-chat-session';
 
+vi.mock('@/lib/hooks/use-query-mcp-headers', () => ({
+  useQueryMcpHeaders: () => ({
+    visible: false,
+    rows: [],
+    errors: {},
+    hasErrors: false,
+    toApiOverrides: () => undefined,
+  }),
+}));
+
 vi.mock('@/providers/NamespaceProvider', () => ({
   useNamespace: () => ({
     namespace: 'default',

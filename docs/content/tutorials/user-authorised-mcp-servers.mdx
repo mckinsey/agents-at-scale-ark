@@ -120,16 +120,16 @@ The dashboard stores the value under the `token` key. Ark names the Secret `u-<o
 
 ## Step 4 — Chat with the agent as the user
 
-As Alice, open a chat with `github-agent`. Above the message box sits the **MCP credentials** block, collapsed while it has no rows. Expand it, select **+** to add a row, and fill it in:
+As Alice, open a chat with `github-agent`. Above the message box sits the **MCP header overrides** panel, collapsed and showing `0 effective`. Expand it, select **Add new** and fill in the row:
 
 - MCP server: `github`.
-- Header name: `Authorization`, the default.
-- Secret: `github`, marked **Personal**.
-- Key: `token`, the default.
+- Header name: `Authorization`.
+- Source: **Secret**.
+- Header override: `github · token`, marked **Personal**.
 
 Ask "Who am I on GitHub? Reply with just my login." The chat sends the row as an `mcpserver` override that selects `ark.mckinsey.com/name: github` and reads Alice's Secret, so the `github-get-me` call runs with her token and the agent answers with her login. Bob does the same with his own Secret, and the same agent answers as Bob, without re-registering the server.
 
-The rows apply to every agent and team chat in the namespace, and the browser keeps them for Alice in that namespace. A server created before the upgrade and not updated since has no name label, shows **Needs name label** and cannot be picked. See [use personal secrets from the chat](/user-guide/secrets#use-personal-secrets-from-the-chat) for the cases where the chat blocks sending.
+The row applies to the queries this chat sends while the panel is open. A server created before the upgrade and not updated since has no name label and cannot be picked. See [use personal secrets from the chat](/user-guide/secrets#use-personal-secrets-from-the-chat) for the cases where the chat blocks sending.
 
 ## Step 5 — Query as the user through the API
 
