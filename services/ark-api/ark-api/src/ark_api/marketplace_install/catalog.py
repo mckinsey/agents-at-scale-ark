@@ -73,14 +73,24 @@ def release_name_valid(name: str) -> bool:
     return len(name) <= MAX_RELEASE_NAME_LENGTH and RELEASE_NAME.fullmatch(name) is not None
 
 
+def _reader(impersonation: Optional[ImpersonationConfig]) -> str:
+    return "ark-api cannot" if impersonation is None else "You cannot"
+
+
 async def _read_source(namespace: str, source: str, impersonation: Optional[ImpersonationConfig]):
     async with get_impersonating_api_client(impersonation) as api:
         core = client.CoreV1Api(api)
         try:
             config_map = await core.read_namespaced_config_map(CONFIGMAP_NAME, namespace)
         except ApiException as e:
-            if e.status in (403, 404):
+            if e.status == 404:
                 raise install_error(404, SOURCE_NOT_FOUND, f"Marketplace source {source} was not found") from None
+            if e.status == 403:
+                raise install_error(
+                    502,
+                    CATALOG_UNAVAILABLE,
+                    f"{_reader(impersonation)} read the marketplace sources of namespace {namespace}",
+                ) from None
             logger.warning("Reading marketplace sources failed: %s", describe_error(e))
             raise install_error(502, CATALOG_UNAVAILABLE, "Marketplace sources could not be read") from None
         raw = (config_map.data or {}).get(source)
@@ -92,7 +102,9 @@ async def _read_source(namespace: str, source: str, impersonation: Optional[Impe
             raise install_error(502, CATALOG_UNAVAILABLE, f"Marketplace source {source} is malformed") from None
         header, error = await _resolve_auth_header(core, namespace, parsed)
         if error is not None:
-            raise install_error(502, CATALOG_UNAVAILABLE, f"The credential of marketplace source {source} is not accessible")
+            raise install_error(
+                502, CATALOG_UNAVAILABLE, f"{_reader(impersonation)} read the credential of marketplace source {source}"
+            )
         return parsed, header
 
 
