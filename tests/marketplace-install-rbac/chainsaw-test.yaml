@@ -307,10 +307,10 @@ spec:
           for r in role marketplace-installer-extra marketplace-impersonate marketplace-lock marketplace-installer; do
             denied "$P" pod create rolebinding "probe-$r" --role="ark-tenant-$r" --user=carol
           done
-          for f in wildcard rbac secret-create secret-patch secret-delete exec attach token impersonate; do
+          for f in wildcard rbac secret-read secret-create secret-patch secret-delete subresource-wildcard exec attach token impersonate escalate bind; do
             denied "$P" pod create -f "$B/role-$f.yaml"
           done
-          for f in ephemeral any-group any-resource any-verb any-subresource; do
+          for f in ephemeral any-group any-resource any-verb any-subresource pods-subresources serviceaccounts-subresources; do
             refused create -f "$B/role-$f.yaml"
           done
           denied "$P" pod create -f "$B/deployment-installer.yaml"
