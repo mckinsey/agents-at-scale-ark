@@ -362,6 +362,11 @@ jobs:
           version: "0.12.2"
           args: "--version"
 
+      - name: Install Helm
+        uses: azure/setup-helm@v5
+        with:
+          version: "3.22.1"
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
