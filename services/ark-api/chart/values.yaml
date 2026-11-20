@@ -87,6 +87,10 @@ app:
     # Read-only mode - set to "true" to disable write operations
     - name: READ_ONLY_MODE
       value: "false"
+    - name: MARKETPLACE_INSTALL_REGISTRY_ALLOWLIST
+      value: "oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts/"
+    - name: MARKETPLACE_INSTALL_PLAIN_HTTP_REGISTRIES
+      value: ""
     - name: API_KEY_RETENTION_SECONDS
       value: "7776000"
     - name: API_KEY_REAPER_INTERVAL_SECONDS
