@@ -26,6 +26,15 @@ spec:
       {{- fail "policy.thirdPartyWebhooks.required=true conflicts with policy.thirdPartyWebhooks.enabled=false: enforcement cannot be both mandatory and switched off — the apiserver would refuse to start" }}
       {{- end }}
       serviceAccountName: {{ .Values.serviceAccountName }}
+      {{- if .Values.topologySpread.enabled }}
+      topologySpreadConstraints:
+        - maxSkew: {{ .Values.topologySpread.maxSkew }}
+          topologyKey: {{ .Values.topologySpread.topologyKey }}
+          whenUnsatisfiable: {{ .Values.topologySpread.whenUnsatisfiable }}
+          labelSelector:
+            matchLabels:
+              {{- include "ark-apiserver.selectorLabels" . | nindent 14 }}
+      {{- end }}
       terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
       securityContext:
         {{- toYaml .Values.securityContext | nindent 8 }}
