@@ -1,0 +1,80 @@
+---
+title: Marketplace Installs
+description: The ark-api endpoints that let the dashboard install marketplace items, and who may use them
+---
+
+# Marketplace Installs
+
+ark-api can install a marketplace item into the current namespace on behalf of the dashboard user. The install runs as a dedicated `ark-marketplace-installer` ServiceAccount, which exists only in namespaces where the platform team has enabled the feature through the `marketplaceInstall` values of the `ark-tenant` chart.
+
+The installer ServiceAccount is a namespace admin. Anyone allowed to start an install can make a chart grant them lasting permissions in the namespace, so treat the permission below as namespace admin.
+
+## Who may install
+
+Installing requires `create` on the `marketplaceinstalls` resource in the `ark.mckinsey.com` API group, in the target namespace. There is no `marketplaceinstalls` CRD: the name exists only for RBAC, and ark-api checks it with a SelfSubjectAccessReview made as the signed-in user.
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: marketplace-installer
+  namespace: team-a
+rules:
+  - apiGroups: ["ark.mckinsey.com"]
+    resources: ["marketplaceinstalls"]
+    verbs: ["create"]
+```
+
+Reading install state requires `list` on `jobs` or the `create` permission above. Install logs additionally require `get` on `pods/log`.
+
+Installs need a user identity:
+
+| Authentication | Behaviour |
+| --- | --- |
+| `AUTH_MODE=open` (or unset) | No user check. |
+| API key | Refused with `api-key-not-supported`. |
+| `sso` or `hybrid` with impersonation disabled | Refused with `impersonation-disabled`. |
+| `sso` or `hybrid` with impersonation enabled | SelfSubjectAccessReview as the user. Any error during the review counts as a deny. |
+
+## ark-api endpoints
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/v1/namespaces/{namespace}/marketplace-installs/capability` | Whether the current user can install in the namespace, and why not. |
+
+### Capability
+
+The response is always HTTP 200:
+
+```json
+{"enabled": false, "reason": "namespace-not-enabled"}
+```
+
+`reason` is `null` when `enabled` is `true`. Otherwise it is the first of these that applies:
+
+| Reason | Meaning |
+| --- | --- |
+| `read-only` | ark-api runs with `READ_ONLY_MODE=true`. |
+| `api-key-not-supported` | The request was authenticated with an API key. |
+| `impersonation-disabled` | User impersonation is disabled on ark-api. |
+| `namespace-not-enabled` | The installer ServiceAccount is missing, ark-api cannot impersonate it, or it cannot create Jobs. |
+| `policy-missing` | Neither `ark-marketplace-installer-sa-<namespace>` nor its `-bootstrap` copy is a ValidatingAdmissionPolicy and binding pair that protects the installer ServiceAccount. A pair counts when the binding is in `Deny` mode, points at the policy of the same name, and has no resource rules, exclusions or object selector. The policy must have `failurePolicy: Fail` and no exclusions or object selector, and both namespace selectors must cover the namespace. |
+| `not-permitted` | The request has no user identity, or the user lacks `create` on `marketplaceinstalls`. |
+
+A request without a user identity gets `not-permitted` right after the API key and impersonation checks, before the namespace checks. In open mode, `read-only`, `namespace-not-enabled` and `policy-missing` still apply.
+
+The `policy-missing` check reads how the policy and binding are matched, not their `validations` or `matchConditions`. Creating or changing a ValidatingAdmissionPolicy needs cluster admin rights, so only a cluster admin can weaken it. When a pair does not count, ark-api logs the reason at info level.
+
+The namespace must be a valid Kubernetes namespace name. Any other value returns HTTP 422.
+
+The capability only tells the dashboard what to show. Every install endpoint repeats the user check.
+
+## Errors
+
+Install endpoints return errors in this shape:
+
+```json
+{"detail": {"code": "not-permitted", "message": "You are not permitted to install marketplace items in this namespace"}}
+```
+
+The user check returns HTTP 403 with `code` set to `api-key-not-supported`, `impersonation-disabled` or `not-permitted`.

@@ -1305,6 +1305,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/namespaces/{namespace}/marketplace-installs/capability": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Marketplace Install Capability */
+        get: operations["get_marketplace_install_capability_v1_namespaces__namespace__marketplace_installs_capability_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/namespaces/{namespace}/marketplace-items": {
         parameters: {
             query?: never;
@@ -4182,6 +4199,13 @@ export interface components {
         };
         "MCPServerValueSource-Output": {
             [key: string]: unknown;
+        };
+        /** MarketplaceInstallCapability */
+        MarketplaceInstallCapability: {
+            /** Enabled */
+            enabled: boolean;
+            /** Reason */
+            reason?: ("read-only" | "api-key-not-supported" | "impersonation-disabled" | "namespace-not-enabled" | "policy-missing" | "not-permitted") | null;
         };
         /**
          * MarketplaceItemError
@@ -7792,6 +7816,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NamespaceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_marketplace_install_capability_v1_namespaces__namespace__marketplace_installs_capability_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                namespace: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketplaceInstallCapability"];
                 };
             };
             /** @description Validation Error */

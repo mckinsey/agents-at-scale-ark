@@ -105,6 +105,9 @@ rules:
   - apiGroups: ["authorization.k8s.io"]
     resources: ["selfsubjectaccessreviews"]
     verbs: ["create"]
+  - apiGroups: ["admissionregistration.k8s.io"]
+    resources: ["validatingadmissionpolicies", "validatingadmissionpolicybindings"]
+    verbs: ["get"]
   {{- if .Values.impersonation.enabled }}
   # User impersonation for SSO-authenticated requests (must be cluster-scoped)
   - apiGroups: [""]
