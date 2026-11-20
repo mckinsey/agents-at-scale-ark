@@ -1,0 +1,14 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: probe-default}
+spec:
+  replicas: 0
+  selector: {matchLabels: {app: probe-default}}
+  template:
+    metadata: {labels: {app: probe-default}}
+    spec:
+      serviceAccountName: default
+      containers:
+      - name: c
+        image: curlimages/curl:8.11.1
+        command: ["sleep", "3600"]

@@ -58,3 +58,43 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+{{/*
+Name of the marketplace installer service account. ark-api impersonates it by
+this name, so it must match the constants of ark-api's marketplace_install module.
+*/}}
+{{- define "ark-tenant.marketplaceInstaller.serviceAccount" -}}
+ark-marketplace-installer
+{{- end }}
+
+{{/*
+Username of the installer service account, as its tokens and ark-api's
+impersonation present it to the API server.
+*/}}
+{{- define "ark-tenant.marketplaceInstaller.username" -}}
+system:serviceaccount:{{ .Release.Namespace }}:{{ include "ark-tenant.marketplaceInstaller.serviceAccount" . }}
+{{- end }}
+
+{{/*
+Name of the namespace's ValidatingAdmissionPolicy and of its binding. The bootstrap
+copy appends -bootstrap. ark-api looks both pairs up by name before it enables installs.
+*/}}
+{{- define "ark-tenant.marketplaceInstall.policyName" -}}
+ark-marketplace-installer-sa-{{ .Release.Namespace }}
+{{- end }}
+
+{{/*
+Name of the Lease that ark-api takes as the per-namespace install lock.
+*/}}
+{{- define "ark-tenant.marketplaceInstall.lockName" -}}
+marketplace-install-lock
+{{- end }}
+
+{{/*
+Username of ark-api's service account, from marketplaceInstall.arkApiServiceAccount.
+The policy lets only this identity hold the install lock.
+*/}}
+{{- define "ark-tenant.marketplaceInstall.arkApiUsername" -}}
+{{- $sa := .Values.marketplaceInstall.arkApiServiceAccount -}}
+system:serviceaccount:{{ $sa.namespace }}:{{ $sa.name }}
+{{- end }}

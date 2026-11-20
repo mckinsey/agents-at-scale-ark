@@ -22,6 +22,18 @@ rbac:
   # - kind: Group
   #   name: developers
 
+marketplaceInstall:
+  enabled: false
+  installers: []
+  arkApiServiceAccount:
+    name: ark-api-sa
+    namespace: default
+  extraRules:
+  - apiGroups: [gateway.networking.k8s.io]
+    resources: [httproutes]
+    verbs: ["*"]
+  assumeAdmissionPolicyApi: false
+
 # Note on Controller Impersonation:
 # The Ark controller can impersonate the service account created above when
 # rbac.impersonation.enabled=true (default) in the ark-controller chart.

@@ -1,0 +1,14 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: uses-installer}
+spec:
+  replicas: 0
+  selector: {matchLabels: {app: uses-installer}}
+  template:
+    metadata: {labels: {app: uses-installer}}
+    spec:
+      serviceAccountName: ark-marketplace-installer
+      containers:
+      - name: c
+        image: curlimages/curl:8.11.1
+        command: ["sleep", "3600"]
