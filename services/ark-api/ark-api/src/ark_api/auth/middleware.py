@@ -39,6 +39,10 @@ class ReservedIdentityError(Exception):
     pass
 
 
+class EmptyIdentityError(Exception):
+    pass
+
+
 def _check_identity_value(value: str, kind: str) -> None:
     if value.strip().lower().startswith(_RESERVED_IDENTITY_PREFIX):
         raise ReservedIdentityError(f"Token {kind} uses the reserved '{_RESERVED_IDENTITY_PREFIX}' prefix")
@@ -71,6 +75,8 @@ def _extract_user_identity(
         groups = [raw_groups]
 
     if settings.enabled:
+        if not str(username).strip():
+            raise EmptyIdentityError("Token username claim is empty")
         _check_identity_value(str(username), "username")
         for group in groups:
             _check_identity_value(group, "group")
@@ -139,7 +145,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
     def _apply_user_identity(self, request: Request, jwt_payload: Dict[str, Any]) -> Optional[JSONResponse]:
         try:
             identity = _extract_user_identity(jwt_payload, self.impersonation_settings)
-        except ReservedIdentityError as e:
+        except (ReservedIdentityError, EmptyIdentityError) as e:
             logger.warning(f"Rejected token for {request.method} {request.url.path}: {e}")
             return JSONResponse(status_code=401, content={"detail": str(e)})
 
