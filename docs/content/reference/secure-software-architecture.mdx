@@ -27,7 +27,7 @@ A separate leader-election Role, scoped to the controller's own namespace, manag
 
 ### API
 
-The Ark API service has a namespace-scoped Role granting access to Ark resources, Secrets, and supporting Kubernetes objects within its deployment namespace. A separate ClusterRole covers cluster-scoped resources (ArkConfig) and, when impersonation is enabled, the ability to impersonate users and groups.
+The Ark API service has a namespace-scoped Role granting access to Ark resources, Secrets, and supporting Kubernetes objects within its deployment namespace. A separate ClusterRole covers cluster-scoped resources (ArkConfig, read access to ValidatingAdmissionPolicies and their bindings for marketplace installs) and, when impersonation is enabled, the ability to impersonate users and groups.
 
 ### Dashboard and broker
 

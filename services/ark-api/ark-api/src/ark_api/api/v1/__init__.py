@@ -27,6 +27,7 @@ from .file_preview import router as file_preview_router
 from .arkconfig import router as arkconfig_router
 from .marketplace_sources import router as marketplace_sources_router
 from .marketplace_items import router as marketplace_items_router
+from .marketplace_installs import router as marketplace_installs_router
 
 router = APIRouter(prefix="/v1", tags=["v1"])
 
@@ -58,3 +59,4 @@ router.include_router(file_preview_router)
 router.include_router(arkconfig_router)
 router.include_router(marketplace_sources_router)
 router.include_router(marketplace_items_router)
+router.include_router(marketplace_installs_router)

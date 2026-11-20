@@ -176,6 +176,8 @@ All endpoints run under the requesting user's identity via impersonation.
 | `GET` | `/api/v1/namespaces/{namespace}/marketplace-sources/permissions` | Permission probe (`{canEdit}`, fail-closed). |
 | `GET` | `/api/v1/namespaces/{namespace}/marketplace-items` | Aggregate items across all sources. |
 
+Installing items from the dashboard has its own endpoints, described in [Marketplace Installs](/reference/marketplace-installs).
+
 The items aggregator fetches each source's manifest concurrently
 (per-source timeout 10s, aggregator total 30s), caches successful fetches for
 one hour per `(namespace, source, url)`, and always returns HTTP 200 — per-source
