@@ -431,6 +431,17 @@ class UsageReportingExecutor(BaseExecutor):
         return [Message(role="assistant", content="stub")]
 
 
+class FailingUsageReportingExecutor(BaseExecutor):
+    async def execute_agent(self, request: ExecutionEngineRequest) -> list[Message]:
+        self.report_usage(prompt_tokens=100, completion_tokens=20)
+        raise RuntimeError("boom")
+
+
+class FailingExecutor(BaseExecutor):
+    async def execute_agent(self, request: ExecutionEngineRequest) -> list[Message]:
+        raise RuntimeError("boom")
+
+
 class TestReportUsage:
     @pytest.mark.anyio
     async def test_accumulates_across_calls(self):
@@ -489,7 +500,7 @@ async def _run_adapter(executor: BaseExecutor, conversation_id: str = "conv-1"):
         await adapter._do_execute(context, event_queue)
 
     response_msg = event_queue.enqueue_event.await_args.args[0]
-    return broker, MessageToDict(response_msg.metadata)[QUERY_EXTENSION_METADATA_KEY]
+    return broker, MessageToDict(response_msg.metadata).get(QUERY_EXTENSION_METADATA_KEY, {})
 
 
 class TestAdapterResponseMetadata:
@@ -539,6 +550,32 @@ class TestAdapterResponseMetadata:
         broker, _ = await _run_adapter(StubExecutor("test"))
 
         assert broker.send_final_chunk.await_args.kwargs["token_usage"] is None
+
+    @pytest.mark.anyio
+    async def test_reports_token_usage_on_execution_error(self):
+        _, meta = await _run_adapter(FailingUsageReportingExecutor("test"))
+
+        assert meta == {
+            "tokenUsage": {
+                "prompt_tokens": 100,
+                "completion_tokens": 20,
+                "total_tokens": 120,
+                "cached_tokens": 0,
+            },
+        }
+
+    @pytest.mark.anyio
+    async def test_omits_metadata_on_execution_error_without_usage(self):
+        _, meta = await _run_adapter(FailingExecutor("test"))
+
+        assert meta == {}
+
+    @pytest.mark.anyio
+    async def test_usage_does_not_leak_after_execution_error(self):
+        executor = FailingUsageReportingExecutor("test")
+        await _run_adapter(executor)
+
+        assert executor._token_usage is None
 
     @pytest.mark.anyio
     async def test_usage_does_not_leak_into_next_request(self):

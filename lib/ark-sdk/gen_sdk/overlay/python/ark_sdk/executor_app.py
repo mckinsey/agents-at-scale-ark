@@ -270,9 +270,7 @@ class A2AExecutorAdapter(AgentExecutor):
                 ] + response_dicts
                 await broker.send_messages(conversation_id, all_messages)
 
-            token_usage = self.executor._token_usage
-            if token_usage and token_usage.totalTokens <= 0:
-                token_usage = None
+            token_usage = self._reported_token_usage()
 
             if broker:
                 if not self.executor._streamed:
@@ -299,19 +297,29 @@ class A2AExecutorAdapter(AgentExecutor):
             await event_queue.enqueue_event(response_msg)
         except Exception as e:
             logger.error(f"Execution failed: {e}", exc_info=True)
-            await event_queue.enqueue_event(
-                A2AMessage(
-                    role=Role.ROLE_AGENT,
-                    parts=[Part(text=f"Execution error: {e}")],
-                    message_id="error-response",
-                )
+            error_msg = A2AMessage(
+                role=Role.ROLE_AGENT,
+                parts=[Part(text=f"Execution error: {e}")],
+                message_id="error-response",
             )
+            token_usage = self._reported_token_usage()
+            if token_usage:
+                error_msg.metadata.update({
+                    QUERY_EXTENSION_METADATA_KEY: {"tokenUsage": token_usage.to_engine_metadata()},
+                })
+            await event_queue.enqueue_event(error_msg)
         finally:
             self.executor._broker_client = None
             self.executor._query_status_updater = None
             self.executor._streamed = False
             self.executor._tool_call_index = 0
             self.executor._token_usage = None
+
+    def _reported_token_usage(self) -> TokenUsage | None:
+        token_usage = self.executor._token_usage
+        if token_usage and token_usage.totalTokens <= 0:
+            return None
+        return token_usage
 
     async def cancel(self, context: Any, event_queue: EventQueue) -> None:
         pass
