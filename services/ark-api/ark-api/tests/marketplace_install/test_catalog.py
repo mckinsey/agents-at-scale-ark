@@ -173,9 +173,17 @@ class TestResolveErrors(CatalogTestCase):
         self.cluster.config_map_error = ApiException(status=404)
         self.assert_error(404, catalog.SOURCE_NOT_FOUND)
 
-    def test_unreadable_config_map_looks_missing(self):
+    def test_unreadable_config_map_is_reported(self):
         self.cluster.config_map_error = ApiException(status=403)
-        self.assert_error(404, catalog.SOURCE_NOT_FOUND)
+        message = self.assert_error(502, catalog.CATALOG_UNAVAILABLE)
+        self.assertEqual(message, "You cannot read the marketplace sources of namespace team-a")
+
+    def test_unreadable_config_map_in_open_mode_names_ark_api(self):
+        self.cluster.config_map_error = ApiException(status=403)
+        with self.assertRaises(HTTPException) as raised:
+            self.resolve(impersonation=None)
+        self.assertEqual(raised.exception.status_code, 502)
+        self.assertEqual(raised.exception.detail["message"], "ark-api cannot read the marketplace sources of namespace team-a")
 
     def test_config_map_server_error(self):
         self.cluster.config_map_error = ApiException(status=500)
@@ -197,7 +205,8 @@ class TestResolveErrors(CatalogTestCase):
         self.cluster.config_map = _config_map(
             {SOURCE: {"url": SOURCE_URL, "auth": {"scheme": "bearer", "secretRef": CREDENTIAL}}}
         )
-        self.assert_error(502, catalog.CATALOG_UNAVAILABLE)
+        message = self.assert_error(502, catalog.CATALOG_UNAVAILABLE)
+        self.assertEqual(message, "You cannot read the credential of marketplace source official")
         self.assertEqual(self.fetches, [])
 
     def test_fetch_failures(self):
