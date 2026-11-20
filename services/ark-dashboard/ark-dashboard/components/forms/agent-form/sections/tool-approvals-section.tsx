@@ -31,6 +31,10 @@ interface ToolApprovalsSectionProps {
   readonly getToolApproval: (
     toolName: string,
   ) => ToolApprovalConfig | undefined;
+  readonly getEffectiveToolApproval: (
+    toolName: string,
+  ) => ToolApprovalConfig | undefined;
+  readonly isToolApprovalEnforced: (toolName: string) => boolean;
   readonly onApprovalChange: (
     toolName: string,
     approval: ToolApprovalConfig | undefined,
@@ -41,6 +45,8 @@ interface ToolApprovalsSectionProps {
 export function ToolApprovalsSection({
   selectedTools,
   getToolApproval,
+  getEffectiveToolApproval,
+  isToolApprovalEnforced,
   onApprovalChange,
   disabled = false,
 }: ToolApprovalsSectionProps) {
@@ -55,22 +61,42 @@ export function ToolApprovalsSection({
       <FieldLegend variant="label">Tool approvals</FieldLegend>
       <div className="border-stroke-divider flex flex-col gap-3 rounded-md border p-3">
         {tools.map(tool => {
-          const approval = getToolApproval(tool.name);
-          const required = approval?.required === true;
+          // Agent-level config is the base for any override we persist; the
+          // effective config (agent unioned with the Tool CR's own approval)
+          // drives what the panel shows.
+          const agentApproval = getToolApproval(tool.name);
+          const effective = getEffectiveToolApproval(tool.name);
+          const enforced = isToolApprovalEnforced(tool.name);
+          const required = effective?.required === true;
           const timeoutId = `approval-timeout-${tool.name}`;
           const onTimeoutId = `approval-on-timeout-${tool.name}`;
-          const timeoutInvalid = isInvalidTimeout(approval?.timeout);
+          const timeoutInvalid = isInvalidTimeout(effective?.timeout);
+
+          // Persist overrides against the agent-level config, not the effective
+          // one, so a Tool-gated tool does not get the Tool's values copied into
+          // the agent spec. A Tool-enforced gate is never written as required
+          // on the agent (the Tool already enforces it and the agent cannot
+          // unset it).
+          const writeOverride = (patch: Partial<ToolApprovalConfig>) =>
+            onApprovalChange(tool.name, {
+              ...agentApproval,
+              ...(enforced ? {} : { required: true }),
+              ...patch,
+            });
+
           return (
             <div key={tool.name} className="flex flex-col gap-2">
               <div className="flex items-center gap-2">
                 <Checkbox
                   id={`approval-${tool.name}`}
                   checked={required}
-                  disabled={disabled}
+                  disabled={disabled || enforced}
                   onCheckedChange={checked =>
                     onApprovalChange(
                       tool.name,
-                      checked ? { ...approval, required: true } : undefined,
+                      checked
+                        ? { ...agentApproval, required: true }
+                        : undefined,
                     )
                   }
                 />
@@ -79,6 +105,11 @@ export function ToolApprovalsSection({
                   className="cursor-pointer text-sm font-normal">
                   {tool.name}
                 </Label>
+                {enforced && (
+                  <span className="text-fg-tertiary text-xs">
+                    Required by tool
+                  </span>
+                )}
               </div>
               {required && (
                 <div className="ml-6 flex gap-3">
@@ -91,18 +122,14 @@ export function ToolApprovalsSection({
                     <Input
                       id={timeoutId}
                       placeholder="e.g., 5m"
-                      value={approval?.timeout ?? ''}
+                      value={effective?.timeout ?? ''}
                       disabled={disabled}
                       aria-invalid={timeoutInvalid}
                       aria-describedby={
                         timeoutInvalid ? `${timeoutId}-error` : undefined
                       }
                       onChange={e =>
-                        onApprovalChange(tool.name, {
-                          ...approval,
-                          required: true,
-                          timeout: e.target.value || undefined,
-                        })
+                        writeOverride({ timeout: e.target.value || undefined })
                       }
                     />
                     {timeoutInvalid && (
@@ -121,14 +148,10 @@ export function ToolApprovalsSection({
                     </FieldLabel>
                     <Select
                       items={ON_TIMEOUT_ITEMS}
-                      value={approval?.onTimeout ?? undefined}
+                      value={effective?.onTimeout ?? undefined}
                       disabled={disabled}
                       onValueChange={(value: unknown) =>
-                        onApprovalChange(tool.name, {
-                          ...approval,
-                          required: true,
-                          onTimeout: String(value),
-                        })
+                        writeOverride({ onTimeout: String(value) })
                       }>
                       <SelectTrigger id={onTimeoutId}>
                         <SelectValue placeholder="Select" />

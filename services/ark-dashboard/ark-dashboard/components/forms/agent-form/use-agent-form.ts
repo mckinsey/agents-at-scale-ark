@@ -50,6 +50,7 @@ import {
   agentParametersChanged,
   buildAgentOverrides,
   getModelOverrideHeaders,
+  mergeToolApproval,
   transformAgentParametersToForm,
   transformFormParametersToApi,
 } from './utils';
@@ -408,6 +409,31 @@ export function useAgentForm({
     [selectedTools],
   );
 
+  const getToolLevelApproval = useCallback(
+    (toolName: string) =>
+      availableTools.find(t => t.name === toolName)?.approval ?? undefined,
+    [availableTools],
+  );
+
+  // The effective approval the runtime applies: the Tool CR's own approval
+  // unioned with the agent's per-tool override. A Tool-gated tool reads as
+  // required even when the agent sets nothing.
+  const getEffectiveToolApproval = useCallback(
+    (toolName: string) =>
+      mergeToolApproval(
+        getToolLevelApproval(toolName),
+        selectedTools.find(t => t.name === toolName)?.approval,
+      ),
+    [getToolLevelApproval, selectedTools],
+  );
+
+  // True when the Tool CR itself requires approval. The agent cannot unset this,
+  // so the panel locks the checkbox on.
+  const isToolApprovalEnforced = useCallback(
+    (toolName: string) => getToolLevelApproval(toolName)?.required === true,
+    [getToolLevelApproval],
+  );
+
   const setToolApproval = useCallback(
     (toolName: string, approval: ToolApprovalConfig | undefined) => {
       setSelectedTools(prev =>
@@ -472,6 +498,8 @@ export function useAgentForm({
       handleDeleteTool,
       isToolSelected,
       getToolApproval,
+      getEffectiveToolApproval,
+      isToolApprovalEnforced,
       setToolApproval,
       isOutputSchemaSupported,
       onSubmit,
