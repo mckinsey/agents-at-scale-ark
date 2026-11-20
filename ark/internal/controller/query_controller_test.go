@@ -5,6 +5,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -1119,6 +1120,22 @@ var _ = Describe("Query Controller Fallback Raw", func() {
 			jsonStr := buildFallbackRaw("")
 			Expect(jsonStr).To(ContainSubstring(`"role":"assistant"`))
 			Expect(jsonStr).To(ContainSubstring(`"content":""`))
+		})
+	})
+
+	Context("When choosing the stored response raw", func() {
+		It("should keep engine messages within the size limit", func() {
+			messages := `[{"role":"tool","content":"result"},{"role":"assistant","content":"hello"}]`
+			Expect(buildResponseRaw(messages, "hello")).To(Equal(messages))
+		})
+
+		It("should fall back to assistant text when engine sends no messages", func() {
+			Expect(buildResponseRaw("", "hello")).To(Equal(buildFallbackRaw("hello")))
+		})
+
+		It("should fall back to assistant text when engine messages exceed the size limit", func() {
+			oversized := `[{"role":"tool","content":"` + strings.Repeat("x", maxResponseRawBytes) + `"}]`
+			Expect(buildResponseRaw(oversized, "hello")).To(Equal(buildFallbackRaw("hello")))
 		})
 	})
 })
