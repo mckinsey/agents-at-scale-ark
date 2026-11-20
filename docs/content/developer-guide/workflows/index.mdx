@@ -96,6 +96,45 @@ devspace dev
 kubectl get tenant   # check Minio tenant status
 ```
 
+### Tracing
+
+Argo Workflows can send OpenTelemetry traces for each workflow run: the workflow, each node, and pod creation, with their timings. [Argo marks tracing as beta](https://argo-workflows.readthedocs.io/en/latest/tracing/). Tracing is off by default.
+
+Enable it with an OTLP HTTP traces endpoint:
+
+```bash
+helm upgrade --install argo-workflows \
+  oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/argo-workflows \
+  --set tracing.enabled=true \
+  --set tracing.endpoint=http://otel-collector.observability:4318/v1/traces
+```
+
+| Value | Description |
+|-------|-------------|
+| `tracing.enabled` | Creates the `argo-workflows-tracing` Secret that the workflow controller reads. Default `false`. |
+| `tracing.endpoint` | Full OTLP traces URL, including `/v1/traces`. Required when enabled. |
+| `tracing.protocol` | OTLP protocol. Default `http/protobuf`. |
+| `tracing.headers` | Optional `key=value` pairs, comma-separated, for example an `Authorization` header. |
+
+To send to Langfuse, use its OTLP endpoint and Basic auth with the project's public and secret keys:
+
+```bash
+AUTH=$(echo -n "pk-lf-...:sk-lf-..." | base64 | tr -d '\n')
+helm upgrade --install argo-workflows \
+  oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/argo-workflows \
+  --set tracing.enabled=true \
+  --set tracing.endpoint=https://cloud.langfuse.com/api/public/otel/v1/traces \
+  --set "tracing.headers=Authorization=Basic%20${AUTH}"
+```
+
+Notes:
+
+- Only the traces endpoint is set, so Argo does not export OpenTelemetry metrics.
+- The controller reads the Secret at startup. After changing tracing values on an existing install, restart it: `kubectl rollout restart deployment -l app.kubernetes.io/component=workflow-controller`.
+- To keep credentials out of Helm values, leave `tracing.enabled` false and create a Secret named `argo-workflows-tracing` with the `OTEL_EXPORTER_OTLP_TRACES_*` variables yourself.
+- Argo sets a `TRACEPARENT` environment variable on each workflow pod. With tracing on, steps that emit OpenTelemetry spans join the workflow's trace.
+- Spans from the `argoexec` init and wait containers are not exported. Argo also emits many low-level spans (for example `waitClientRateLimiter` and Kubernetes API calls). Use an OpenTelemetry Collector to filter them before your backend if needed.
+
 ### Adding the `ark-query` template to an existing Argo installation
 
 The Ark `argo-workflows` chart ships a reusable `ark-query` `WorkflowTemplate`, a canonical building block that submits an Ark `Query` and returns its structured outputs. This can be referenced with `templateRef: {name: ark-query, template: query}`. The chart installs it automatically, so the steps above already give you everything. If you run your **own** Argo Workflows (installed separately from the Ark chart), add just this template.
