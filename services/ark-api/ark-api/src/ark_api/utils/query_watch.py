@@ -51,31 +51,31 @@ def _create_chat_completion_response(query_name: str, model: str, content: str, 
     return response
 
 
+def query_error_message(status: dict) -> str:
+    """Pick the most specific error text from a Query status."""
+    content = (status.get("response") or {}).get("content")
+    if content:
+        return content
+    if status.get("message"):
+        return status["message"]
+    for condition in reversed(status.get("conditions") or []):
+        if condition.get("message"):
+            return condition["message"]
+    return "Query execution failed: No error details available"
+
+
 def _get_error_detail(status: dict) -> dict:
     """Extract error details from query status.
 
     Returns a structured error dict with:
     - message: The error message from the response or status
     """
-    error_message = status.get("message", "")
-    response = status.get("response", {})
-
     # The response dict carries model output content; keep it verbose-only (see logging contract).
-    logger.info(f"_get_error_detail - error_message: {error_message}")
-    logger.debug(f"_get_error_detail - response: {response}")
-
-    # Get error from response content if available
-    response_content = response.get("content", "") if response else ""
-
-    if response_content:
-        main_message = response_content
-    elif error_message:
-        main_message = error_message
-    else:
-        main_message = "Query execution failed: No error details available"
+    logger.info(f"_get_error_detail - error_message: {status.get('message', '')}")
+    logger.debug(f"_get_error_detail - response: {status.get('response', {})}")
 
     return {
-        "message": main_message,
+        "message": query_error_message(status),
         "errors": []
     }
 

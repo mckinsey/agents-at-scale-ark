@@ -17,6 +17,7 @@ from ark_api.auth.generic_resources import (  # noqa: E402
     GenericResourceGuard,
 )
 from ark_api.main import app  # noqa: E402
+from tests.utils.route_introspection import iter_api_routes  # noqa: E402
 
 SENSITIVE_CORE_KINDS = {"Secret", "ConfigMap", "ServiceAccount"}
 
@@ -52,11 +53,11 @@ def _expected_verb(method: str, path: str) -> str:
     return {"POST": "create", "PUT": "update", "DELETE": "delete"}[method]
 
 
-def _kind_routes() -> list[APIRoute]:
+def _kind_routes() -> list[tuple[str, APIRoute]]:
     return [
-        route
-        for route in app.routes
-        if isinstance(route, APIRoute) and route.path.startswith("/v1/resources/") and "{kind}" in route.path
+        (path, route)
+        for path, route in iter_api_routes(app)
+        if path.startswith("/v1/resources/") and "{kind}" in path
     ]
 
 
@@ -100,7 +101,8 @@ DENIED_REQUESTS = [
     ("DELETE", "/v1/resources/apis/argoproj.io/v1alpha1/Workflow/x", None),
     ("GET", "/v1/resources/apis/argoproj.io/v1/Workflow", None),
     ("GET", "/v1/resources/apis/argoproj.io/v1alpha1/workflowtemplate", None),
-    ("POST", "/v1/resources/apis/argoproj.io/v1alpha1/CronWorkflow", {"kind": "CronWorkflow"}),
+    ("POST", "/v1/resources/apis/argoproj.io/v1alpha1/ClusterWorkflowTemplate", {"kind": "ClusterWorkflowTemplate"}),
+    ("GET", "/v1/resources/apis/argoproj.io/v1alpha1/cronworkflow", None),
 ]
 
 UNROUTED_REQUESTS = [
@@ -195,17 +197,17 @@ class TestGenericResourcesAllowlistCoverage(unittest.TestCase):
     def test_every_kind_route_declares_the_guard_for_its_verb(self):
         routes = _kind_routes()
         self.assertTrue(routes)
-        for route in routes:
+        for path, route in routes:
             for method in route.methods - {"HEAD"}:
-                with self.subTest(method=method, path=route.path):
+                with self.subTest(method=method, path=path):
                     guards = _guards(route)
                     self.assertEqual(len(guards), 1, "generic route without GenericResourceGuard")
-                    self.assertEqual(guards[0].verb, _expected_verb(method, route.path))
+                    self.assertEqual(guards[0].verb, _expected_verb(method, path))
 
     def test_only_core_routes_declare_the_core_group(self):
-        for route in _kind_routes():
-            with self.subTest(path=route.path):
-                self.assertEqual(_guards(route)[0].core, route.path.startswith("/v1/resources/api/"))
+        for path, route in _kind_routes():
+            with self.subTest(path=path):
+                self.assertEqual(_guards(route)[0].core, path.startswith("/v1/resources/api/"))
 
     def test_guard_denies_when_group_is_missing_and_route_is_not_core(self):
         with self.assertRaises(HTTPException) as denied:
@@ -226,9 +228,9 @@ class TestGenericResourcesAllowlistCoverage(unittest.TestCase):
 
     def test_core_path_only_serves_list(self):
         core_routes = {
-            (method, route.path)
-            for route in _kind_routes()
-            if route.path.startswith("/v1/resources/api/")
+            (method, path)
+            for path, route in _kind_routes()
+            if path.startswith("/v1/resources/api/")
             for method in route.methods - {"HEAD"}
         }
         self.assertEqual(core_routes, {("GET", "/v1/resources/api/{version}/{kind}")})

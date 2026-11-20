@@ -3,7 +3,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAtomValue } from 'jotai';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 
 import { isExperimentalExecutionEngineEnabledAtom } from '@/atoms/experimental-features';
@@ -22,6 +22,7 @@ import type {
   ExecutionEngine,
   ModelListItem,
   Tool,
+  ToolApprovalConfig,
 } from '@/lib/services';
 import {
   agentsService,
@@ -33,9 +34,18 @@ import {
   GET_AGENT_BY_NAME_QUERY_KEY,
   GET_ALL_AGENTS_QUERY_KEY,
 } from '@/lib/services/agents-hooks';
+import {
+  OUTPUT_SCHEMA_ANNOTATION,
+  buildOutputSchemaAnnotationUpdate,
+  supportsOutputSchema,
+} from '@/lib/utils/output-schema';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
-import { AgentFormMode, type AgentFormValues, agentFormSchema } from './types';
+import {
+  AgentFormMode,
+  type AgentFormValues,
+  createAgentFormSchema,
+} from './types';
 import {
   agentParametersChanged,
   buildAgentOverrides,
@@ -53,6 +63,12 @@ interface UseAgentFormOptions {
   mode: AgentFormMode;
   agentName?: string;
   onSuccess?: () => void;
+}
+
+function toEngineName(executionEngineName: string | undefined): string {
+  return executionEngineName && executionEngineName !== '__none__'
+    ? executionEngineName
+    : '';
 }
 
 export function useAgentForm({
@@ -94,8 +110,30 @@ export function useAgentForm({
     isExperimentalExecutionEngineEnabledAtom,
   );
 
+  const isOutputSchemaSupported = useCallback(
+    (executionEngineName: string | undefined) =>
+      !agent?.isA2A &&
+      supportsOutputSchema(
+        executionEngineName,
+        executionEngines.find(engine => engine.name === executionEngineName)
+          ?.annotations,
+      ),
+    [agent, executionEngines],
+  );
+  const isOutputSchemaSupportedRef = useRef(isOutputSchemaSupported);
+  isOutputSchemaSupportedRef.current = isOutputSchemaSupported;
+  const resolver = useMemo(
+    () =>
+      zodResolver(
+        createAgentFormSchema(executionEngineName =>
+          isOutputSchemaSupportedRef.current(executionEngineName),
+        ),
+      ),
+    [],
+  );
+
   const form = useForm<AgentFormValues>({
-    resolver: zodResolver(agentFormSchema),
+    resolver,
     defaultValues: {
       name: '',
       description: '',
@@ -103,6 +141,7 @@ export function useAgentForm({
       selectedModelNamespace: '',
       executionEngineName: '',
       prompt: '',
+      outputSchema: '',
     },
   });
 
@@ -166,6 +205,8 @@ export function useAgentForm({
             selectedModelNamespace: agentData.modelRef?.namespace || '',
             executionEngineName: agentData.executionEngine?.name || '',
             prompt: agentData.prompt || '',
+            outputSchema:
+              agentData.annotations?.[OUTPUT_SCHEMA_ANNOTATION] || '',
           });
         } else {
           const [modelsData, toolsData, enginesData] = await Promise.all([
@@ -266,6 +307,13 @@ export function useAgentForm({
             prompt: agent.isA2A ? undefined : values.prompt || null,
             tools: agent.isA2A ? undefined : selectedTools,
             parameters: agent.isA2A ? undefined : mapParametersToApi(),
+            annotations: buildOutputSchemaAnnotationUpdate({
+              supported: isOutputSchemaSupported(values.executionEngineName),
+              engineChanged:
+                toEngineName(values.executionEngineName) !==
+                toEngineName(agent.executionEngine?.name),
+              value: values.outputSchema,
+            }),
             overrides: agent.isA2A
               ? undefined
               : overrides.length > 0
@@ -306,7 +354,12 @@ export function useAgentForm({
       } catch (error) {
         const action = mode === AgentFormMode.CREATE ? 'create' : 'update';
         console.error(`Failed to ${action} agent`, error);
-        toast.error(`Unable to ${action} agent`);
+        const reason = error instanceof Error ? error.message : undefined;
+        toast.error(
+          reason
+            ? `Unable to ${action} agent: ${reason}`
+            : `Unable to ${action} agent`,
+        );
       } finally {
         setSaving(false);
       }
@@ -323,12 +376,16 @@ export function useAgentForm({
       namespace,
       form,
       isExperimentalExecutionEngineEnabled,
+      isOutputSchemaSupported,
     ],
   );
 
   const handleToolToggle = useCallback((tool: Tool, checked: boolean) => {
     if (checked) {
-      const newTool: AgentTool = { type: 'custom', name: tool.name };
+      const newTool: AgentTool = {
+        type: tool.type ?? 'custom',
+        name: tool.name,
+      };
       setSelectedTools(prev => [...prev, newTool]);
     } else {
       setSelectedTools(prev => prev.filter(t => t.name !== tool.name));
@@ -345,11 +402,30 @@ export function useAgentForm({
     [selectedTools],
   );
 
+  const getToolApproval = useCallback(
+    (toolName: string) =>
+      selectedTools.find(t => t.name === toolName)?.approval ?? undefined,
+    [selectedTools],
+  );
+
+  const setToolApproval = useCallback(
+    (toolName: string, approval: ToolApprovalConfig | undefined) => {
+      setSelectedTools(prev =>
+        prev.map(t => (t.name === toolName ? { ...t, approval } : t)),
+      );
+    },
+    [],
+  );
+
   const hasToolsChanged = useCallback(() => {
     if (selectedTools.length !== initialTools.length) return true;
-    const selectedNames = selectedTools.map(t => t.name).sort();
-    const initialNames = initialTools.map(t => t.name).sort();
-    return selectedNames.some((name, i) => name !== initialNames[i]);
+    const normalize = (tools: AgentTool[]) =>
+      [...tools]
+        .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+        .map(t => `${t.name}:${JSON.stringify(t.approval ?? null)}`);
+    const selected = normalize(selectedTools);
+    const initial = normalize(initialTools);
+    return selected.some((entry, i) => entry !== initial[i]);
   }, [selectedTools, initialTools]);
 
   const hasParametersChanged = useCallback(
@@ -395,6 +471,9 @@ export function useAgentForm({
       handleToolToggle,
       handleDeleteTool,
       isToolSelected,
+      getToolApproval,
+      setToolApproval,
+      isOutputSchemaSupported,
       onSubmit,
       onInvalid,
     },

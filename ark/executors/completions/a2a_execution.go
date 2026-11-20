@@ -274,7 +274,7 @@ func consumeA2AStreamEvents(ctx context.Context, k8sClient client.Client, events
 				if !received {
 					return nil, fmt.Errorf("a2a streaming returned no events")
 				}
-				return buildA2AStreamResult(sc), nil
+				return sc.finish(ctx), nil
 			}
 			idleTimer.Reset(idleTimeout)
 			received = true
@@ -288,7 +288,7 @@ func consumeA2AStreamEvents(ctx context.Context, k8sClient client.Client, events
 				consumeA2ATaskEvent(ctx, k8sClient, result, sc, a2aServer)
 			case *protocol.TaskStatusUpdateEvent:
 				if consumeA2AStatusUpdateEvent(ctx, result, sc) {
-					return buildA2AStreamResult(sc), nil
+					return sc.finish(ctx), nil
 				}
 			case *protocol.TaskArtifactUpdateEvent:
 				consumeA2AArtifactUpdateEvent(ctx, result, sc)
@@ -427,6 +427,18 @@ func (sc *a2aStreamContext) artifactReplyTexts() []string {
 		})
 	}
 	return arka2a.ArtifactTexts(artifacts)
+}
+
+func (sc *a2aStreamContext) finish(ctx context.Context) *ExecutionResult {
+	result := buildA2AStreamResult(sc)
+	if !sc.liveStarted {
+		for i, text := range sc.response.Messages {
+			if text != "" {
+				sc.streamLiveText(ctx, fmt.Sprintf("__final_%d__", i), text)
+			}
+		}
+	}
+	return result
 }
 
 func buildA2AStreamResult(sc *a2aStreamContext) *ExecutionResult {

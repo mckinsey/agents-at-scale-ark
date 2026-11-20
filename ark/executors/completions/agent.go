@@ -18,6 +18,7 @@ import (
 	arka2a "mckinsey.com/ark/internal/a2a"
 	"mckinsey.com/ark/internal/eventing"
 	arkmcp "mckinsey.com/ark/internal/mcp"
+	"mckinsey.com/ark/internal/secretscope"
 	"mckinsey.com/ark/internal/telemetry"
 )
 
@@ -389,12 +390,12 @@ func ValidateExecutionEngine(ctx context.Context, k8sClient client.Client, execu
 }
 
 func resolveModelHeadersForAgent(ctx context.Context, k8sClient client.Client, agentCRD *arkv1alpha1.Agent, queryCRD *arkv1alpha1.Query) (map[string]string, error) {
-	agentHeadersMap, err := ResolveHeadersFromOverrides(ctx, k8sClient, agentCRD.Spec.Overrides, agentCRD.Namespace, OverrideTypeModel)
+	agentHeadersMap, err := ResolveHeadersFromOverrides(ctx, k8sClient, agentCRD.Spec.Overrides, agentCRD.Namespace, OverrideTypeModel, secretscope.RejectPersonal)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve model headers for agent %s/%s: %w", agentCRD.Namespace, agentCRD.Name, err)
 	}
 
-	queryHeadersMap, err := ResolveHeadersFromOverrides(ctx, k8sClient, queryCRD.Spec.Overrides, queryCRD.Namespace, OverrideTypeModel)
+	queryHeadersMap, err := ResolveHeadersFromOverrides(ctx, k8sClient, queryCRD.Spec.Overrides, queryCRD.Namespace, OverrideTypeModel, secretscope.RejectPersonal)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve model headers from query %s/%s: %w", queryCRD.Namespace, queryCRD.Name, err)
 	}
@@ -417,12 +418,12 @@ func resolveModelHeadersForAgent(ctx context.Context, k8sClient client.Client, a
 }
 
 func resolveMCPSettingsForAgent(ctx context.Context, k8sClient client.Client, agentCRD *arkv1alpha1.Agent, queryCRD *arkv1alpha1.Query, queryMCPSettings map[string]arkmcp.MCPSettings) (map[string]arkmcp.MCPSettings, error) {
-	agentHeadersMap, err := ResolveHeadersFromOverrides(ctx, k8sClient, agentCRD.Spec.Overrides, agentCRD.Namespace, OverrideTypeMCPServer)
+	agentHeadersMap, err := ResolveHeadersFromOverrides(ctx, k8sClient, agentCRD.Spec.Overrides, agentCRD.Namespace, OverrideTypeMCPServer, secretscope.RejectPersonal)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve MCP headers for agent %s/%s: %w", agentCRD.Namespace, agentCRD.Name, err)
 	}
 
-	queryHeadersMap, err := ResolveHeadersFromOverrides(ctx, k8sClient, queryCRD.Spec.Overrides, queryCRD.Namespace, OverrideTypeMCPServer)
+	queryHeadersMap, err := ResolveHeadersFromOverrides(ctx, k8sClient, queryCRD.Spec.Overrides, queryCRD.Namespace, OverrideTypeMCPServer, secretscope.AllowPersonal)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve MCP headers from query %s/%s: %w", queryCRD.Namespace, queryCRD.Name, err)
 	}

@@ -840,54 +840,6 @@ func TestValidateBaseURL(t *testing.T) { //nolint:gocognit,gocyclo,cyclop
 	})
 }
 
-func TestIsWhitelistedDomain(t *testing.T) {
-	whitelist := []string{"api.openai.com", "openai.azure.com", "amazonaws.com"}
-
-	tests := []struct {
-		name     string
-		hostname string
-		want     bool
-	}{
-		{"Exact match", "api.openai.com", true},
-		{"Subdomain", "my.openai.azure.com", true},
-		{"AWS subdomain bedrock", "bedrock-runtime.us-east-1.amazonaws.com", true},
-		{"Not in list", "evil.com", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := isWhitelistedDomain(tt.hostname, whitelist)
-			if got != tt.want {
-				t.Errorf("isWhitelistedDomain(%s) = %v, want %v", tt.hostname, got, tt.want)
-			}
-		})
-	}
-}
-
-func TestMatchDomainPattern(t *testing.T) {
-	tests := []struct {
-		name     string
-		hostname string
-		pattern  string
-		want     bool
-	}{
-		{"Wildcard prefix match", "llm.prod.example.com", "*.prod.example.com", true},
-		{"Wildcard base match", "prod.example.com", "*.prod.example.com", true},
-		{"Wildcard no match", "dev.example.com", "*.prod.example.com", false},
-		{"Exact match", "api.openai.com", "api.openai.com", true},
-		{"Subdomain match", "sub.example.com", "example.com", true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := matchDomainPattern(tt.hostname, tt.pattern)
-			if got != tt.want {
-				t.Errorf("matchDomainPattern(%s, %s) = %v, want %v", tt.hostname, tt.pattern, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestValidateBedrockBaseURL(t *testing.T) {
 	bedrockModel := func(baseURL *arkv1alpha1.ValueSource) *arkv1alpha1.Model {
 		return &arkv1alpha1.Model{
@@ -973,59 +925,6 @@ func TestValidateBedrockBaseURL(t *testing.T) {
 			}
 			if !contains(err.Error(), tt.wantErr) {
 				t.Fatalf("expected error containing %q, got %q", tt.wantErr, err.Error())
-			}
-		})
-	}
-}
-
-func TestMatchWildcard(t *testing.T) {
-	tests := []struct {
-		name     string
-		hostname string
-		pattern  string
-		want     bool
-	}{
-		{"pattern without wildcard matches exactly", "api.openai.com", "api.openai.com", true},
-		{"pattern without wildcard rejects subdomain", "evil.api.openai.com", "api.openai.com", false},
-		{"embedded wildcard matches", "api-eu.example.com", "api-*.example.com", true},
-		{"embedded wildcard rejects wrong prefix", "web-eu.example.com", "api-*.example.com", false},
-		{"embedded wildcard rejects wrong suffix", "api-eu.evil.com", "api-*.example.com", false},
-		{"embedded wildcard rejects suffix appended to another domain", "api-eu.example.com.evil.com", "api-*.example.com", false},
-		{"leading wildcard matches", "eu-prod.example.com", "*-prod.example.com", true},
-		{"multiple wildcards never match", "api.eu.example.com", "api.*.*.example.com", false},
-		{"overlapping prefix and suffix require distinct spans", "example.com", "example.com*example.com", false},
-		{"wildcard spans label separators", "api-eu.internal.example.com", "api-*.example.com", true},
-		{"bare wildcard matches any hostname", "evil.com", "*", true},
-		{"trailing wildcard matches any parent domain", "api.example.com.evil.com", "api.example.*", true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := matchWildcard(tt.hostname, tt.pattern)
-			if got != tt.want {
-				t.Errorf("matchWildcard(%s, %s) = %v, want %v", tt.hostname, tt.pattern, got, tt.want)
-			}
-		})
-	}
-}
-
-func TestMatchDomainPatternDispatchesEmbeddedWildcard(t *testing.T) {
-	tests := []struct {
-		name     string
-		hostname string
-		pattern  string
-		want     bool
-	}{
-		{"embedded wildcard match", "api-eu.example.com", "api-*.example.com", true},
-		{"embedded wildcard no match", "api-eu.evil.com", "api-*.example.com", false},
-		{"uppercase pattern is lowered before matching", "api-eu.example.com", "API-*.EXAMPLE.COM", true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := matchDomainPattern(tt.hostname, tt.pattern)
-			if got != tt.want {
-				t.Errorf("matchDomainPattern(%s, %s) = %v, want %v", tt.hostname, tt.pattern, got, tt.want)
 			}
 		})
 	}

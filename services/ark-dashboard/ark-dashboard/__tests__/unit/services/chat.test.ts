@@ -252,7 +252,9 @@ describe('chatService', () => {
         'Hello',
         'agent',
         'TestAgent',
-        'session-123',
+        {
+          sessionId: 'session-123',
+        },
       );
 
       expect(apiClient.post).toHaveBeenCalledWith(
@@ -268,8 +270,9 @@ describe('chatService', () => {
         'Hello',
         'agent',
         'TestAgent',
-        undefined,
-        'conv-456',
+        {
+          conversationId: 'conv-456',
+        },
       );
 
       expect(apiClient.post).toHaveBeenCalledWith(
@@ -285,9 +288,9 @@ describe('chatService', () => {
         'Hello',
         'agent',
         'TestAgent',
-        undefined,
-        undefined,
-        '5m',
+        {
+          timeout: '5m',
+        },
       );
 
       expect(apiClient.post).toHaveBeenCalledWith(
@@ -654,7 +657,7 @@ describe('chatService', () => {
 
       const chunks: Record<string, unknown>[] = [];
       for await (const chunk of chatService.streamChatResponse(
-        'default',
+        'team-a',
         'test input',
         'agent',
         'TestAgent',
@@ -664,7 +667,7 @@ describe('chatService', () => {
 
       expect(chunks).toEqual([{ content: 'Hello' }, { content: 'World' }]);
       expect(mockFetch).toHaveBeenCalledWith(
-        '/tenant-a/api/v1/broker/chunks?watch=true&query-id=test-query-1',
+        '/tenant-a/api/v1/broker/chunks?watch=true&query-id=test-query-1&namespace=team-a',
         expect.objectContaining({ signal: undefined }),
       );
     });
@@ -847,15 +850,14 @@ describe('chatService', () => {
         'test input',
         'agent',
         'TestAgent',
-        undefined,
-        undefined,
-        undefined,
-        controller.signal,
+        {
+          abortSignal: controller.signal,
+        },
       )) {
       }
 
       expect(mockFetch).toHaveBeenCalledWith(
-        '/tenant-a/api/v1/broker/chunks?watch=true&query-id=test-query-abort',
+        '/tenant-a/api/v1/broker/chunks?watch=true&query-id=test-query-abort&namespace=default',
         expect.objectContaining({ signal: controller.signal }),
       );
     });
