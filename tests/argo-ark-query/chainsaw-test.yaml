@@ -37,7 +37,7 @@ spec:
             --set minio.enabled=false \
             --set argo-workflows.crds.full=false \
             --show-only charts/argo-workflows/templates/crds.yaml \
-            | kubectl apply -f -
+            | kubectl apply --server-side --force-conflicts -f -
           helm install argo ../../services/argo-workflows/chart \
             --namespace "$NAMESPACE" \
             --set argo-workflows.singleNamespace=true \
