@@ -100,7 +100,7 @@ An `Agent` can name a `Model` in another namespace (`spec.modelRef.namespace`) a
 kubectl annotate model shared-gpt -n tenant-b ark.mckinsey.com/allowed-namespaces=tenant-a
 ```
 
-Without the annotation the admission webhook rejects the `Agent` or `Query`, and the completions executor refuses to load the target. Sharing a `Memory` across namespaces is still subject to the broker rules in the next section.
+Without the annotation the admission webhook rejects the `Agent` or `Query`, and the completions executor refuses to load the target. Sharing a `Memory` across namespaces is still subject to the broker rules in the next section. A namespace served by its own completions executor cannot use cross-namespace references at all, annotation or not: see [Per-tenant completions executor](#per-tenant-completions-executor).
 
 ## Broker storage isolation
 
@@ -139,7 +139,7 @@ helm upgrade --install ark-completions \
 
 Running the executor in the tenant namespace has these effects:
 
-- The tenant's executor cannot read Secrets, ConfigMaps, Services, or Ark resources in other namespaces. A query fails when it needs a Model, Memory, MCPServer, or ExecutionEngine in another namespace, for example through `modelRef.namespace`, `spec.memory.namespace`, or `mcpServerRef.namespace`. Keep the resources the tenant uses in its own namespace.
+- The tenant's executor cannot read Secrets, ConfigMaps, Services, or Ark resources in other namespaces. A query fails when it needs a Model, Memory, MCPServer, or ExecutionEngine in another namespace, for example through `modelRef.namespace`, `spec.memory.namespace`, or `mcpServerRef.namespace`, even when the target allows it with the `ark.mckinsey.com/allowed-namespaces` annotation (see [Cross-namespace references](#cross-namespace-references)). Keep the resources the tenant uses in its own namespace, or let the central executor serve the namespace.
 - Broker discovery looks only in `tenant-a` and runs when the executor starts. Install the tenant's broker first (`ark install ark-tenant` installs it), or restart the executor after the broker is up.
 - The executor reads its OpenTelemetry settings from the `otel-environment-variables` ConfigMap or Secret in `tenant-a`, not from `ark-system`. To keep the executor's traces, create it in the tenant namespace in the format shown in [Per-Tenant OTEL Routing](/developer-guide/observability#per-tenant-otel-routing).
 - The controller dispatches to the tenant's executor from `ark-system`, so with `networkPolicy.enabled=true` on `ark-tenant`, add `ark-system` to `networkPolicy.allowNamespaces`.
