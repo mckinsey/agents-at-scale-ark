@@ -297,4 +297,63 @@ describe('useResumeRunningQuery', () => {
     expect(params.clearActiveQuery).not.toHaveBeenCalled();
     expect(state.messages).toEqual([{ role: 'user', content: 'hello' }]);
   });
+
+  it('releases the processing state when it stops polling for a namespace switch', async () => {
+    const { params } = createParams([{ role: 'user', content: 'hello' }]);
+    vi.mocked(chatService.getQueryResult).mockResolvedValue({
+      status: 'running',
+      terminal: false,
+    });
+
+    const view = renderHook(
+      ({ namespace, chatKey, activeQueryName }) =>
+        useResumeRunningQuery({
+          ...params,
+          namespace,
+          chatKey,
+          activeQueryName,
+        }),
+      {
+        initialProps: {
+          namespace: 'test-namespace',
+          chatKey: 'test-namespace/agent-test-agent',
+          activeQueryName: 'q1' as string | undefined,
+        },
+      },
+    );
+    await waitFor(() => {
+      expect(params.setIsProcessing).toHaveBeenCalledWith(true);
+    });
+
+    view.rerender({
+      namespace: 'other-namespace',
+      chatKey: 'other-namespace/agent-test-agent',
+      activeQueryName: undefined,
+    });
+
+    expect(params.setIsProcessing).toHaveBeenLastCalledWith(false);
+    expect(params.setProcessingPhase).toHaveBeenLastCalledWith(undefined);
+    expect(params.clearActiveQuery).not.toHaveBeenCalled();
+  });
+
+  it('leaves the processing state alone when a new turn has taken over', async () => {
+    const { params } = createParams([{ role: 'user', content: 'hello' }]);
+    vi.mocked(chatService.getQueryResult).mockResolvedValue({
+      status: 'running',
+      terminal: false,
+    });
+
+    const view = renderHook(() => useResumeRunningQuery(params));
+    await waitFor(() => {
+      expect(params.onResume).toHaveBeenCalled();
+    });
+    const stopResume = vi.mocked(params.onResume).mock.calls[0][1];
+    stopResume();
+    const callsBeforeUnmount = vi.mocked(params.setIsProcessing).mock.calls
+      .length;
+
+    view.unmount();
+
+    expect(params.setIsProcessing).toHaveBeenCalledTimes(callsBeforeUnmount);
+  });
 });

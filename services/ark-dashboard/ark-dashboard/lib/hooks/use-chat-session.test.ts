@@ -2095,6 +2095,45 @@ describe('useChatSession - Namespace switch during a running query (#3999)', () 
     },
   );
 
+  it('resumes the query when a mounted chat switches to a cached namespace and back', async () => {
+    seedRunningQuery(KEY_A, 'q-in-a');
+    mockQueryLivesIn('ns-a', 'q-in-a');
+    namespaceState.namespace = 'ns-a';
+
+    const view = renderHook(
+      () => useChatSession({ name: 'test-agent', type: 'agent' }),
+      { wrapper: createWrapper() },
+    );
+    await waitFor(() => {
+      expect(view.result.current.isProcessing).toBe(true);
+    });
+
+    namespaceState.namespace = 'ns-b';
+    view.rerender();
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 1200));
+    });
+    expect(requestedNamespaces()).not.toContain('ns-b');
+    expect(view.result.current.messages).toEqual([]);
+    expect(view.result.current.isProcessing).toBe(false);
+    expect(storedSession(KEY_A)?.activeQueryName).toBe('q-in-a');
+
+    finishQuery('ns-a', 'q-in-a');
+    namespaceState.namespace = 'ns-a';
+    view.rerender();
+    await waitFor(
+      () => {
+        expect(view.result.current.messages).toEqual([
+          { role: 'user', content: 'hello' },
+          { role: 'assistant', content: 'final answer' },
+        ]);
+      },
+      { timeout: 3000 },
+    );
+    expect(view.result.current.isProcessing).toBe(false);
+    expect(storedSession(KEY_A)?.activeQueryName).toBeUndefined();
+  });
+
   it('keeps a separate chat for an agent of the same name in another namespace', async () => {
     seedRunningQuery(KEY_A, 'q-in-a');
     mockQueryLivesIn('ns-a', 'q-in-a');
