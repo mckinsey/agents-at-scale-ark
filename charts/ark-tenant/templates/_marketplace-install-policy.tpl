@@ -52,6 +52,10 @@ spec:
       apiVersions: ["v1"]
       operations: [DELETE]
       resources: [secrets]
+    - apiGroups: [""]
+      apiVersions: ["v1"]
+      operations: [CREATE]
+      resources: [serviceaccounts/token]
     - apiGroups: [coordination.k8s.io]
       apiVersions: ["v1"]
       operations: [CREATE, UPDATE, DELETE]
@@ -72,7 +76,13 @@ spec:
      or carry a token as a service account.
   */}}
   - name: isWorkload
-    expression: "request.resource.group in ['', 'batch', 'apps']"
+    expression: "request.resource.group in ['', 'batch', 'apps'] && request.subResource == ''"
+  {{- /*
+     TokenRequests. A token from one is not bound to a pod, so it carries no pod-name
+     extra and would skip every install pod rule below.
+  */}}
+  - name: isTokenRequest
+    expression: "request.resource.resource == 'serviceaccounts' && request.subResource == 'token'"
   {{- /* DELETE requests carry no object, so the rules that read object skip them. */}}
   - name: isDelete
     expression: "request.operation == 'DELETE'"
@@ -159,7 +169,7 @@ spec:
        {{ printf "%s-marketplace-installer-extra" $fullname | squote }},
        {{ printf "%s-marketplace-impersonate" $fullname | squote }},
        {{ printf "%s-marketplace-lock" $fullname | squote }}]
-  {{- /* RoleBindings of this tenant chart, which the install pod may not delete. */}}
+  {{- /* Roles and RoleBindings of this tenant chart, which the install pod may not change or delete. */}}
   - name: tenantBindings
     expression: >-
       variables.tenantRoles +
@@ -233,13 +243,15 @@ spec:
   - expression: "!variables.fromInstallPod || !variables.isWorkload || variables.isDelete || !variables.usesInstaller"
     message: {{ printf "a chart may not run workloads or mint tokens as %s" (include "ark-tenant.marketplaceInstaller.serviceAccount" $root) | quote }}
   {{- /*
-     Helm in the install pod may bind only Roles the chart creates itself, and only to
-     service accounts of this namespace or to users outside system:.
+     Helm in the install pod may not bind ClusterRoles or the tenant chart's Roles, and
+     may bind only service accounts of this namespace or users outside system:. A Role
+     that someone else created in the namespace can still be bound: the policy cannot
+     tell it apart from one the chart created.
   */}}
   - expression: >-
       !variables.fromInstallPod || variables.isDelete || object.kind != 'RoleBinding' ||
       (object.roleRef.kind == 'Role' && !(object.roleRef.name in variables.tenantRoles) && variables.safeSubjects)
-    message: "a chart may bind only its own Roles, and only to service accounts of this namespace or to users outside system:"
+    message: "a chart may not bind ClusterRoles or the tenant chart's Roles, and may bind only service accounts of this namespace or users outside system:"
   {{- /* Helm in the install pod may not create Roles with the rules safeRules refuses. */}}
   - expression: "!variables.fromInstallPod || variables.isDelete || variables.safeRules"
     message: "a chart may not create Roles over RBAC, Secrets, wildcards, pods/exec, pods/attach, pods/ephemeralcontainers, serviceaccounts/token, impersonate, escalate or bind"
@@ -256,6 +268,18 @@ spec:
        !(request.resource.group == 'rbac.authorization.k8s.io' && request.name in variables.tenantBindings) &&
        !variables.reservedOldSecret)
     message: "a chart may not delete the tenant chart's RBAC, personal secrets or whole collections"
+  {{- /* Helm in the install pod may not change the tenant chart's Roles and RoleBindings. */}}
+  - expression: >-
+      !variables.fromInstallPod || request.operation != 'UPDATE' ||
+      !(request.resource.group == 'rbac.authorization.k8s.io' && request.name in variables.tenantBindings)
+    message: "a chart may not change the tenant chart's RBAC"
+  {{- /*
+     The installer may not request tokens, for itself or for any other service account.
+     Helm never needs one, and the projected token of the install pod comes from the
+     kubelet, which asks with its node identity.
+  */}}
+  - expression: "!variables.isTokenRequest || request.userInfo.username != variables.installerUser"
+    message: "the marketplace installer may not request service account tokens"
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding
