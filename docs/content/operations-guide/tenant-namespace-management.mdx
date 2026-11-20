@@ -100,7 +100,7 @@ An `Agent` can name a `Model` in another namespace (`spec.modelRef.namespace`) a
 kubectl annotate model shared-gpt -n tenant-b ark.mckinsey.com/allowed-namespaces=tenant-a
 ```
 
-Without the annotation the admission webhook rejects the `Agent` or `Query`, and the completions executor refuses to load the target. Sharing a `Memory` across namespaces is still subject to the broker rules in the next section.
+Without the annotation the admission webhook rejects the `Agent` or `Query`, and the completions executor refuses to load the target. Sharing a `Memory` across namespaces is still subject to the broker rules in the next section. A namespace served by its own completions executor cannot use cross-namespace references at all, annotation or not: see [Per-tenant completions executor](#per-tenant-completions-executor).
 
 ## Broker storage isolation
 
@@ -117,6 +117,34 @@ The same applies to the Redis chunks backend (`backends.chunk: redis`): chunk st
 Storage is not the whole boundary. The broker authenticates no route, so any pod that can reach its Service can read and write another tenant's messages, events, and sessions whatever the Kubernetes RBAC says. Set `networkPolicy.enabled=true` on the broker chart to restrict ingress to the broker's own namespace plus the namespaces listed in `networkPolicy.allowNamespaces` — `ark-system` in practice, since the controller and the completions executor write from there while the broker runs in the tenant namespace. `allowNamespaces` admits whole namespaces rather than workloads, so listing `ark-system` opens the broker to every pod running there: the policy bounds reach, it does not identify the caller. The two policies in the repo are alternatives, not layers. A tenant that enables `networkPolicy.enabled` on `charts/ark-tenant` gets a namespace-wide policy that already covers its broker pods, on every port; the broker chart's own policy is for standalone installs, where it also scopes the rule to the broker's pod port. Enabling both buys nothing, because policies selecting the same pod combine as a union and the wider rule decides. Both are off by default, and enforcement is the CNI's job — a cluster whose CNI ignores NetworkPolicy accepts the object and restricts nothing.
 
 See [Message backend (Postgres)](/developer-guide/services/ark-broker#message-backend-postgres), [Event backend (Postgres)](/developer-guide/services/ark-broker#event-backend-postgres), and [Chunk backend (Redis)](/developer-guide/services/ark-broker#chunk-backend-redis) for backend configuration.
+
+## Per-tenant completions executor
+
+By default one completions executor in `ark-system` runs the queries of every namespace. The chart binds it to a ClusterRole that grants `get`, `list`, and `watch` on Secrets, ConfigMaps, and Services in all namespaces, so it can read model credentials and MCP headers wherever a query runs.
+
+Run a completions executor in the tenant namespace when the tenant keeps its own credentials in Secrets and its queries should run under an identity that can read only that namespace:
+
+```bash
+helm upgrade --install ark-completions \
+  oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-completions \
+  --version <ark-version> \
+  --namespace tenant-a \
+  --set namespaceScopedDiscovery=true \
+  --set executionEngine.create=true
+```
+
+- `namespaceScopedDiscovery=true` renders a Role and RoleBinding in `tenant-a` instead of the ClusterRole and ClusterRoleBinding. The rules are the same (read Ark resources, Secrets, ConfigMaps, and Services, update Memory status, create A2ATasks), limited to `tenant-a`. Broker and telemetry discovery also read only `tenant-a`. Without this value a second release would render another ClusterRole named `ark-completions`, which conflicts with the central release.
+- `executionEngine.create=true` creates an `ExecutionEngine` named `ark-completions` in `tenant-a` that points at the tenant's executor Service. Once its address resolves, the controller sends the namespace's queries to it, except those for an Agent whose `spec.executionEngine` names an `ExecutionEngine` (see [Query execution](/reference/query-execution)). Without it, the tenant's queries keep going to the central executor. Leave `executionEngine.name` at its default: the controller looks up only `ark-completions`.
+- Leave `serviceAccount.create` and `rbac.create` at their default `true`. The chart then creates an `ark-completions` ServiceAccount in `tenant-a` bound only to the Role.
+
+Running the executor in the tenant namespace has these effects:
+
+- The tenant's executor cannot read Secrets, ConfigMaps, Services, or Ark resources in other namespaces. A query fails when it needs a Model, Memory, MCPServer, or ExecutionEngine in another namespace, for example through `modelRef.namespace`, `spec.memory.namespace`, or `mcpServerRef.namespace`, even when the target allows it with the `ark.mckinsey.com/allowed-namespaces` annotation (see [Cross-namespace references](#cross-namespace-references)). Keep the resources the tenant uses in its own namespace, or let the central executor serve the namespace.
+- Broker discovery looks only in `tenant-a` and runs when the executor starts. Install the tenant's broker first (`ark install ark-tenant` installs it), or restart the executor after the broker is up.
+- The executor reads its OpenTelemetry settings from the `otel-environment-variables` ConfigMap or Secret in `tenant-a`, not from `ark-system`. To keep the executor's traces, create it in the tenant namespace in the format shown in [Per-Tenant OTEL Routing](/developer-guide/observability#per-tenant-otel-routing).
+- The controller dispatches to the tenant's executor from `ark-system`, so with `networkPolicy.enabled=true` on `ark-tenant`, add `ark-system` to `networkPolicy.allowNamespaces`.
+
+The central executor keeps its ClusterRole. It still serves every namespace that has no `ark-completions` ExecutionEngine, and it serves `tenant-a` while the ExecutionEngine has no resolved address.
 
 ## Developing with Tenants
 
