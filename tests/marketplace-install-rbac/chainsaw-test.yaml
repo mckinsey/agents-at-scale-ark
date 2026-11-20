@@ -336,6 +336,14 @@ spec:
           denied "$P" pod delete --raw "/api/v1/namespaces/$NAMESPACE/secrets"
           pod delete rolebinding probe-ok
           pod delete secret probe-plain
+          denied "$P" pod patch role ark-tenant-role --type merge -p '{"rules":[]}'
+          denied "$P" pod patch rolebinding ark-tenant-rolebinding --type merge -p '{"metadata":{"labels":{"x":"y"}}}'
+          pod patch role probe-ok --type merge -p '{"metadata":{"labels":{"x":"y"}}}'
+          kubectl -n "$NAMESPACE" get role ark-tenant-role -o jsonpath='{.rules[0].apiGroups[0]}' | grep -q ark.mckinsey.com
+          for sa in ark-marketplace-installer default; do
+            denied "$P" pod create token "$sa"
+            denied "$P" kubectl -n "$NAMESPACE" --as "$I" create token "$sa"
+          done
           kubectl -n "$NAMESPACE" get secret u-0123456789abcdef-victim victim-user-scope
           kubectl -n "$NAMESPACE" delete secret victim-user-scope
           sed 's/{name: uses-installer}/{name: impersonated-installer}/' manifests/installer-workloads/deployment.yaml \

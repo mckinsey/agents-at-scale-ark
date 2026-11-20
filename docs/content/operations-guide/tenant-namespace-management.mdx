@@ -135,7 +135,9 @@ The tenant Role lets users create Jobs and Deployments, and whoever creates a po
 - Roles with wildcards on resources or subresources, rules on RBAC, any rule on Secrets (read access would expose the namespace's personal secrets to the chart's pods), `pods/exec`, `pods/attach`, `pods/ephemeralcontainers`, `serviceaccounts/token`, or the `impersonate`, `escalate` and `bind` verbs;
 - workloads and token Secrets for the installer account;
 - Secrets named like a personal secret (`u-<16 hex>-…`) or labelled with an `ark.mckinsey.com/scope` other than `shared`.
-- deleting this chart's Roles and RoleBindings, personal secrets, or whole collections of Secrets or RoleBindings.
+- changing or deleting this chart's Roles and RoleBindings, deleting personal secrets, or deleting whole collections of Secrets or RoleBindings.
+
+A chart can still bind a Role that someone else created in the namespace, since the policy cannot tell it from one the chart created. The installer account also may not request service account tokens: a requested token is not bound to a pod and would skip the rules above.
 
 Only the ark-api service account can create, update or delete the `marketplace-install-lock` Lease; the namespace controller can also delete it when the namespace goes away. To release a stuck lock by hand, delete the policy bindings first.
 
