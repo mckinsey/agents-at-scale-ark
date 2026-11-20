@@ -12,6 +12,7 @@ class ToolResponse(BaseModel):
     labels: Optional[Dict[str, str]] = None
     annotations: Optional[Dict[str, str]] = None
     type: Optional[str] = None
+    approval: Optional[Dict[str, Any]] = None
 
 
 class ToolListResponse(PaginatedListResponse):
