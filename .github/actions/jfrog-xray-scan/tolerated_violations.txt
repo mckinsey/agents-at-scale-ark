@@ -78,3 +78,16 @@ XRAY-1156947 - CVE-2026-122146 (fflate unzipSync memory corruption)
 - No fix available: 0.8.3 is the latest published release.
 - ark-dashboard: fflate is dev-only, pulled in via @vitest/ui (devDependency, used by `npm run test:ui`). The Dockerfile runner stage copies only .next/standalone and .next/static, so test tooling never ships in the container.
 - Remove this entry once fflate publishes a patched release.
+
+XRAY-1170984 - GHSA-g36m-r6gw-cj73 (anyio PathLike command run through the shell)
+- anyio 4.5.0 through 4.16.0 run a single os.PathLike command passed to run_process() or open_process() through the shell, so a shell metacharacter in an untrusted path component is command injection.
+- No fix available: 4.16.0 is the latest published release and the advisory lists no patched version.
+- Not reachable in Ark: no Ark code calls anyio.run_process() or anyio.open_process(). The only dependency that calls open_process() is mcp's stdio client, which passes an argument list ([command, *args]), not a single PathLike, so it never takes the shell branch. watchfiles starts processes with its own multiprocessing/subprocess code, not anyio's.
+- Affects ark-api, ark-mcp, ark-sdk and the Python samples/templates transitively via fastapi, starlette, httpx, sse-starlette, mcp and watchfiles.
+- Remove this entry once anyio publishes a patched release and the lockfiles are bumped to it.
+
+XRAY-1172638 - CVE-2026-133949 (pip bundles certifi with compromised eMudhra certificates)
+- pip before 26.2.2 ships a certifi bundle that trusts compromised eMudhra intermediate certificates.
+- Not shipped by Ark: no uv.lock, requirements.txt or pyproject.toml pins pip, and the ark-api and ark-mcp images ship pip 26.1.1, not 25.1.1.
+- The source scan reports pip 25.1.1 as a direct dependency of mcp, uvloop, authlib, httptools and ark-sdk-builder, which none of them have. It most likely comes from the virtualenv that jf audit creates on the CI runner.
+- Remove this entry once the runner's Python bundles pip 26.2.2 or later, or once the scan's virtualenv upgrades pip.
