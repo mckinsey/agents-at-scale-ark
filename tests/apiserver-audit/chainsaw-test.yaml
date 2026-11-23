@@ -32,7 +32,7 @@ spec:
             content: |
               set -eu
               for i in $(seq 1 20); do
-                if kubectl logs -n ark-system deployment/ark-apiserver --since=120s 2>/dev/null \
+                if kubectl logs -n ark-system -l app.kubernetes.io/name=ark-apiserver --tail=-1 --since=120s 2>/dev/null \
                   | grep '"apiVersion":"audit.k8s.io/v1"' \
                   | grep "\"namespace\":\"$NAMESPACE\"" \
                   | grep '"name":"audit-proxied-agent"' \
@@ -56,7 +56,7 @@ spec:
               set -eu
               kubectl annotate agent audit-proxied-agent -n $NAMESPACE audit-test=touched --overwrite
               for i in $(seq 1 20); do
-                if kubectl logs -n ark-system deployment/ark-apiserver --since=120s 2>/dev/null \
+                if kubectl logs -n ark-system -l app.kubernetes.io/name=ark-apiserver --tail=-1 --since=120s 2>/dev/null \
                   | grep '"apiVersion":"audit.k8s.io/v1"' \
                   | grep "\"namespace\":\"$NAMESPACE\"" \
                   | grep '"name":"audit-proxied-agent"' \
@@ -80,7 +80,7 @@ spec:
               set -eu
               kubectl delete agent audit-proxied-agent -n $NAMESPACE
               for i in $(seq 1 20); do
-                if kubectl logs -n ark-system deployment/ark-apiserver --since=120s 2>/dev/null \
+                if kubectl logs -n ark-system -l app.kubernetes.io/name=ark-apiserver --tail=-1 --since=120s 2>/dev/null \
                   | grep '"apiVersion":"audit.k8s.io/v1"' \
                   | grep "\"namespace\":\"$NAMESPACE\"" \
                   | grep '"name":"audit-proxied-agent"' \
@@ -167,7 +167,7 @@ spec:
               # The direct path never transits the main kube-apiserver, so an audit
               # record for this name can only come from the aggregated apiserver itself.
               for i in $(seq 1 20); do
-                if kubectl logs -n ark-system deployment/ark-apiserver --since=120s 2>/dev/null \
+                if kubectl logs -n ark-system -l app.kubernetes.io/name=ark-apiserver --tail=-1 --since=120s 2>/dev/null \
                   | grep '"apiVersion":"audit.k8s.io/v1"' \
                   | grep "\"namespace\":\"$NAMESPACE\"" \
                   | grep '"name":"audit-direct-agent"' \
