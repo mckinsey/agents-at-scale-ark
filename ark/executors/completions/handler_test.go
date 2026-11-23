@@ -1586,6 +1586,7 @@ func TestProcessMessageResumptionSucceeds(t *testing.T) {
 		_, _ = w.Write([]byte(`{"id":"cmpl-1","object":"chat.completion","created":0,"model":"gpt-test","choices":[{"index":0,"message":{"role":"assistant","content":"resumed answer"},"finish_reason":"stop"}],"usage":{}}`))
 	}))
 	defer llm.Close()
+	allowTestServerBaseURLs(t)
 
 	model := &arkv1alpha1.Model{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-model", Namespace: "default"},
@@ -2058,6 +2059,7 @@ func TestProcessMessageSubTargetRejectsApproval(t *testing.T) {
 		_, _ = w.Write([]byte(`{"id":"cmpl-1","object":"chat.completion","created":0,"model":"gpt-test","choices":[{"index":0,"message":{"role":"assistant","content":"","tool_calls":[{"id":"call-1","type":"function","function":{"name":"noop","arguments":"{}"}}]},"finish_reason":"tool_calls"}],"usage":{}}`))
 	}))
 	t.Cleanup(llm.Close)
+	allowTestServerBaseURLs(t)
 
 	model := &arkv1alpha1.Model{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-model", Namespace: "default"},

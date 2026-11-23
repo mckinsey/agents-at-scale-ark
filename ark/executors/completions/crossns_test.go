@@ -36,7 +36,7 @@ func crossNamespaceModel(name string, annotations map[string]string) *arkv1alpha
 			Provider: ProviderOpenAI,
 			Config: arkv1alpha1.ModelConfig{
 				OpenAI: &arkv1alpha1.OpenAIModelConfig{
-					BaseURL: arkv1alpha1.ValueSource{Value: "http://model.example.com/v1"},
+					BaseURL: arkv1alpha1.ValueSource{Value: "https://model.example.com/v1"},
 					APIKey: arkv1alpha1.ValueSource{ValueFrom: &arkv1alpha1.ValueFromSource{
 						SecretKeyRef: &corev1.SecretKeySelector{
 							LocalObjectReference: corev1.LocalObjectReference{Name: "model-key"},

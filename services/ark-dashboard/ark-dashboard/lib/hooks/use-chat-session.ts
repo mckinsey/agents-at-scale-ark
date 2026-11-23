@@ -45,8 +45,10 @@ import type {
 } from '@/lib/types/chat-message';
 import {
   type StreamTurnEffects,
+  type StreamTurnState,
   createStreamTurnState,
   finishStreamTurn,
+  isTurnWithoutAnswer,
   processStreamChunk,
 } from '@/lib/utils/chat-stream-turn';
 import {
@@ -110,6 +112,10 @@ async function* streamUntilForceClose<T>(
 interface UseChatSessionParams {
   name: string;
   type: ChatType;
+}
+
+interface ChatTurnRequest {
+  parameters?: ApiQueryParameter[];
 }
 
 interface UseChatSessionReturn {
@@ -503,10 +509,24 @@ export function useChatSession({
 
   const pendingApprovalQueryRef = useRef<PendingApprovalQuery | null>(null);
 
+  const recoverTurnFromQueryResult = useCallback(
+    async (turn: StreamTurnState, queryName: string) => {
+      try {
+        const result = await chatService.getQueryResult(namespace, queryName);
+        if (result.status === 'done' && result.messages?.length) {
+          turn.completedQueryMessages = result.messages;
+        }
+      } catch (err) {
+        console.error('Failed to recover the query result:', err);
+      }
+    },
+    [namespace],
+  );
+
   const handleStreamChatResponse = useCallback(
     async (
       userMessage: string,
-      apiParameters?: ApiQueryParameter[],
+      turnRequest: ChatTurnRequest,
     ): Promise<boolean> => {
       chatStreamAbortControllerRef.current = new AbortController();
 
@@ -523,12 +543,14 @@ export function useChatSession({
           userMessage,
           type,
           name,
-          sessionId,
-          conversationId,
-          queryTimeout,
-          chatStreamAbortControllerRef.current.signal,
-          apiParameters,
-          outputSchemaAnnotations,
+          {
+            sessionId,
+            conversationId,
+            timeout: queryTimeout,
+            abortSignal: chatStreamAbortControllerRef.current.signal,
+            parameters: turnRequest.parameters,
+            annotations: outputSchemaAnnotations,
+          },
         );
 
       lastQueryName.current = streamQueryName;
@@ -606,6 +628,10 @@ export function useChatSession({
         });
       }
 
+      if (!leavingRef.current && isTurnWithoutAnswer(turn)) {
+        await recoverTurnFromQueryResult(turn, streamQueryName);
+      }
+
       return finishStreamTurn(turn, effects);
     },
     [
@@ -616,6 +642,7 @@ export function useChatSession({
       namespace,
       queryTimeout,
       outputSchemaAnnotations,
+      recoverTurnFromQueryResult,
       sessionId,
       setActiveQueryName,
       type,
@@ -629,7 +656,7 @@ export function useChatSession({
   const handlePollChatResponse = useCallback(
     async (
       userMessage: string,
-      apiParameters?: ApiQueryParameter[],
+      turnRequest: ChatTurnRequest,
       existingQueryName?: string,
     ): Promise<boolean> => {
       let queryName = existingQueryName;
@@ -639,11 +666,13 @@ export function useChatSession({
           userMessage,
           type,
           name,
-          sessionId,
-          conversationId,
-          queryTimeout,
-          apiParameters,
-          outputSchemaAnnotations,
+          {
+            sessionId,
+            conversationId,
+            timeout: queryTimeout,
+            parameters: turnRequest.parameters,
+            annotations: outputSchemaAnnotations,
+          },
         );
         queryName = query.name;
         invalidateQueriesList();
@@ -733,7 +762,7 @@ export function useChatSession({
     async (
       err: BrokerUnavailableError,
       userMessage: string,
-      apiParameters: ApiQueryParameter[] | undefined,
+      turnRequest: ChatTurnRequest,
     ): Promise<boolean> => {
       if (err.code === 'broker_unavailable') {
         notifyBrokerFallback();
@@ -742,7 +771,7 @@ export function useChatSession({
       try {
         return await handlePollChatResponse(
           userMessage,
-          apiParameters,
+          turnRequest,
           err.queryName || lastQueryName.current || undefined,
         );
       } catch (error_) {
@@ -770,7 +799,9 @@ export function useChatSession({
         return;
       }
 
-      const apiParameters = toApiParameters();
+      const turnRequest: ChatTurnRequest = {
+        parameters: toApiParameters(),
+      };
       clearActiveQuery();
 
       trackEvent({
@@ -796,13 +827,10 @@ export function useChatSession({
 
       try {
         if (isChatStreamingEnabled) {
-          settled = !(await handleStreamChatResponse(
-            userMessage,
-            apiParameters,
-          ));
+          settled = !(await handleStreamChatResponse(userMessage, turnRequest));
           await ensureConversationId();
         } else {
-          settled = await handlePollChatResponse(userMessage, apiParameters);
+          settled = await handlePollChatResponse(userMessage, turnRequest);
         }
       } catch (err) {
         if (leavingRef.current || isAbortError(err)) {
@@ -813,7 +841,7 @@ export function useChatSession({
         console.error('Error sending message:', err);
 
         if (isBrokerUnavailableError(err)) {
-          settled = await recoverViaPolling(err, userMessage, apiParameters);
+          settled = await recoverViaPolling(err, userMessage, turnRequest);
           return;
         }
 

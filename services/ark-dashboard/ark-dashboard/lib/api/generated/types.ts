@@ -2150,13 +2150,13 @@ export interface paths {
         };
         /**
          * List Secrets
-         * @description List all secrets in namespace using ark-sdk.
+         * @description List the shared and/or personal secrets in namespace using ark-sdk.
          */
         get: operations["list_secrets_v1_secrets_get"];
         put?: never;
         /**
          * Create Secret
-         * @description Create a new secret using ark-sdk.
+         * @description Create a new shared or personal secret using ark-sdk.
          */
         post: operations["create_secret_v1_secrets_post"];
         delete?: never;
@@ -2179,7 +2179,7 @@ export interface paths {
         get: operations["get_secret_v1_secrets__secret_name__get"];
         /**
          * Update Secret
-         * @description Update a secret using ark-sdk.
+         * @description Update a secret using ark-sdk; scope "shared" promotes a personal secret.
          */
         put: operations["update_secret_v1_secrets__secret_name__put"];
         post?: never;
@@ -4117,6 +4117,10 @@ export interface components {
             } | null;
             authorization?: components["schemas"]["MCPServerAuthorization"] | null;
             available?: components["schemas"]["AvailabilityStatus"] | null;
+            /** Labels */
+            labels?: {
+                [key: string]: string;
+            } | null;
             /** Name */
             name: string;
             /** Namespace */
@@ -4294,39 +4298,90 @@ export interface components {
             /** Namespace */
             namespace?: string | null;
         };
+        /** MemoryAddressValueFrom */
+        MemoryAddressValueFrom: {
+            configMapKeyRef?: components["schemas"]["MemoryConfigMapKeyRef"] | null;
+            secretKeyRef?: components["schemas"]["MemorySecretKeyRef"] | null;
+            serviceRef?: components["schemas"]["MemoryServiceRef"] | null;
+        };
+        /** MemoryAddressValueSource */
+        MemoryAddressValueSource: {
+            /** Value */
+            value?: string | null;
+            valueFrom?: components["schemas"]["MemoryAddressValueFrom"] | null;
+        };
+        /** MemoryConfigMapKeyRef */
+        MemoryConfigMapKeyRef: {
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /** Optional */
+            optional?: boolean | null;
+        };
         /**
          * MemoryCreateRequest
          * @description Request model for creating a memory.
          */
         MemoryCreateRequest: {
-            /** Config */
-            config?: {
-                [key: string]: unknown;
+            /** Annotations */
+            annotations?: {
+                [key: string]: string;
             } | null;
-            /** Description */
-            description?: string | null;
+            /** Labels */
+            labels?: {
+                [key: string]: string;
+            } | null;
             /** Name */
             name: string;
+            spec: components["schemas"]["MemorySpec"];
         };
         /**
          * MemoryDetailResponse
          * @description Response model for detailed memory information.
          */
         MemoryDetailResponse: {
-            /** Config */
-            config?: {
-                [key: string]: unknown;
+            /** Annotations */
+            annotations?: {
+                [key: string]: string;
             } | null;
-            /** Description */
-            description?: string | null;
+            /** Labels */
+            labels?: {
+                [key: string]: string;
+            } | null;
             /** Name */
             name: string;
             /** Namespace */
             namespace: string;
+            spec?: components["schemas"]["MemorySpecResponse"] | null;
             /** Status */
             status?: {
                 [key: string]: unknown;
             } | null;
+        };
+        /** MemoryHeader */
+        MemoryHeader: {
+            /** Name */
+            name: string;
+            value: components["schemas"]["MemoryHeaderValueSource"];
+        };
+        /** MemoryHeaderResponse */
+        MemoryHeaderResponse: {
+            /** Name */
+            name: string;
+            value: components["schemas"]["MemoryValueSourceResponse"];
+        };
+        /** MemoryHeaderValueFrom */
+        MemoryHeaderValueFrom: {
+            configMapKeyRef?: components["schemas"]["MemoryConfigMapKeyRef"] | null;
+            queryParameterRef?: components["schemas"]["MemoryQueryParameterRef"] | null;
+            secretKeyRef?: components["schemas"]["MemorySecretKeyRef"] | null;
+        };
+        /** MemoryHeaderValueSource */
+        MemoryHeaderValueSource: {
+            /** Value */
+            value?: string | null;
+            valueFrom?: components["schemas"]["MemoryHeaderValueFrom"] | null;
         };
         /**
          * MemoryListResponse
@@ -4372,13 +4427,20 @@ export interface components {
             /** Timestamp */
             timestamp?: string | null;
         };
+        /** MemoryQueryParameterRef */
+        MemoryQueryParameterRef: {
+            /** Name */
+            name: string;
+        };
         /**
          * MemoryResponse
          * @description Response model for memory list items.
          */
         MemoryResponse: {
-            /** Description */
-            description?: string | null;
+            /** Labels */
+            labels?: {
+                [key: string]: string;
+            } | null;
             /** Name */
             name: string;
             /** Namespace */
@@ -4386,17 +4448,65 @@ export interface components {
             /** Status */
             status?: string | null;
         };
+        /** MemorySecretKeyRef */
+        MemorySecretKeyRef: {
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /** Optional */
+            optional?: boolean | null;
+        };
+        /** MemoryServiceRef */
+        MemoryServiceRef: {
+            /** Name */
+            name: string;
+            /** Namespace */
+            namespace?: string | null;
+            /** Path */
+            path?: string | null;
+            /** Port */
+            port?: string | null;
+        };
+        /** MemorySpec */
+        MemorySpec: {
+            address: components["schemas"]["MemoryAddressValueSource"];
+            /** Headers */
+            headers?: components["schemas"]["MemoryHeader"][] | null;
+        };
+        /** MemorySpecResponse */
+        MemorySpecResponse: {
+            address?: components["schemas"]["MemoryValueSourceResponse"] | null;
+            /** Headers */
+            headers?: components["schemas"]["MemoryHeaderResponse"][] | null;
+        };
         /**
          * MemoryUpdateRequest
          * @description Request model for updating a memory.
          */
         MemoryUpdateRequest: {
-            /** Config */
-            config?: {
-                [key: string]: unknown;
+            /** Annotations */
+            annotations?: {
+                [key: string]: string;
             } | null;
-            /** Description */
-            description?: string | null;
+            /** Labels */
+            labels?: {
+                [key: string]: string;
+            } | null;
+            spec?: components["schemas"]["MemorySpec"] | null;
+        };
+        /** MemoryValueFrom */
+        MemoryValueFrom: {
+            configMapKeyRef?: components["schemas"]["MemoryConfigMapKeyRef"] | null;
+            queryParameterRef?: components["schemas"]["MemoryQueryParameterRef"] | null;
+            secretKeyRef?: components["schemas"]["MemorySecretKeyRef"] | null;
+            serviceRef?: components["schemas"]["MemoryServiceRef"] | null;
+        };
+        /** MemoryValueSourceResponse */
+        MemoryValueSourceResponse: {
+            /** Value */
+            value?: string | null;
+            valueFrom?: components["schemas"]["MemoryValueFrom"] | null;
         };
         /**
          * ModelConfig
@@ -4897,6 +5007,12 @@ export interface components {
             labels: string[];
             /** Name */
             name: string;
+            /**
+             * Scope
+             * @default shared
+             * @enum {string}
+             */
+            scope: "shared" | "personal";
             /** String Data */
             string_data: {
                 [key: string]: string;
@@ -4920,6 +5036,8 @@ export interface components {
             } | null;
             /** Description */
             description?: string | null;
+            /** Display Name */
+            display_name: string;
             /** Id */
             id: string;
             /**
@@ -4934,6 +5052,11 @@ export interface components {
             labels: string[];
             /** Name */
             name: string;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "shared" | "personal";
             /** Secret Length */
             secret_length: number;
             /** Type */
@@ -4962,6 +5085,8 @@ export interface components {
             } | null;
             /** Description */
             description?: string | null;
+            /** Display Name */
+            display_name: string;
             /** Id */
             id: string;
             /**
@@ -4971,6 +5096,11 @@ export interface components {
             labels: string[];
             /** Name */
             name: string;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "shared" | "personal";
         };
         /**
          * SecretUpdateRequest
@@ -4986,6 +5116,8 @@ export interface components {
              * @default []
              */
             labels: string[];
+            /** Scope */
+            scope?: ("shared" | "personal") | null;
             /** String Data */
             string_data?: {
                 [key: string]: string;
@@ -5042,6 +5174,8 @@ export interface components {
         SystemInfo: {
             /** Argo Server Configured */
             argo_server_configured: boolean;
+            /** Argo Server Version Supported */
+            argo_server_version_supported?: boolean | null;
             /** Kubernetes Version */
             kubernetes_version: string;
             /** System Version */
@@ -6021,6 +6155,8 @@ export interface operations {
                 limit?: number;
                 /** @description Cursor for pagination */
                 cursor?: number | null;
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
             };
             header?: never;
             path?: never;
@@ -9102,6 +9238,8 @@ export interface operations {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
                 namespace?: string | null;
+                /** @description Which secrets to list: shared (default), the caller's personal ones, or all of both */
+                scope?: "shared" | "personal" | "all";
             };
             header?: never;
             path?: never;

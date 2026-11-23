@@ -94,7 +94,8 @@ export function ChatPanel({
 
   const toolCallCount = messages.reduce(
     (total, msg) =>
-      total + ('tool_calls' in msg && msg.tool_calls ? msg.tool_calls.length : 0),
+      total +
+      ('tool_calls' in msg && msg.tool_calls ? msg.tool_calls.length : 0),
     0,
   );
 
@@ -233,13 +234,15 @@ export function ChatPanel({
             autoResize
             maxRows={17}
             placeholder={
-              isProcessing ? 'Processing...' : 'Type your message...'
+              isProcessing
+                ? 'Processing...'
+                : `Write here to chat with your ${type}...`
             }
             value={currentMessage}
             onChange={e => setCurrentMessage(e.target.value)}
             onKeyDown={handleKeyPress}
             disabled={isProcessing}
-            className="min-h-0 w-full resize-none border-0 bg-transparent px-0 py-1 text-sm font-normal leading-5 shadow-none hover:bg-transparent focus-visible:bg-transparent focus-visible:ring-0 disabled:bg-transparent disabled:hover:bg-transparent placeholder:text-fg-tertiary"
+            className="placeholder:text-fg-secondary min-h-0 w-full resize-none border-0 bg-transparent px-0 py-1 text-sm leading-5 font-normal shadow-none hover:bg-transparent focus-visible:bg-transparent focus-visible:ring-0 disabled:bg-transparent disabled:hover:bg-transparent"
           />
 
           <TooltipProvider>
@@ -288,7 +291,7 @@ export function ChatPanel({
                       </IconShell>
                       <span
                         className={cn(
-                          'absolute -right-0.5 -top-0.5 size-2 rounded-full',
+                          'absolute -top-0.5 -right-0.5 size-2 rounded-full',
                           debugMode ? 'bg-status-success' : 'bg-fg-disabled',
                         )}
                       />

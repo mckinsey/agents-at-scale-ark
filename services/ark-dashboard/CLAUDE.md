@@ -227,12 +227,18 @@ queryClient.invalidateQueries({ queryKey: [GET_MODEL_BY_ID_QUERY_KEY, id] });   
 **Exact-match cache APIs are the exception.** `getQueryData` and `setQueryData`
 match the whole key, so they must include the namespace or they read and write an
 entry nothing else touches — an optimistic update that silently does nothing. Pass
-the full key, as `secrets-hooks.ts` does:
+the full key, including any other argument the hook puts in it:
 
 ```typescript
-queryClient.getQueryData([GET_ALL_SECRETS_QUERY_KEY, namespace]);               // ✅ full key
-queryClient.setQueryData([GET_ALL_SECRETS_QUERY_KEY, namespace], next);         // ✅ full key
+queryClient.getQueryData([GET_ALL_MODELS_QUERY_KEY, namespace]);                    // ✅ full key
+queryClient.setQueryData([GET_ALL_MODELS_QUERY_KEY, namespace], next);              // ✅ full key
+queryClient.getQueryData([GET_ALL_SECRETS_QUERY_KEY, 'shared', namespace]);         // ✅ scope, then namespace
 ```
+
+**A hook argument that changes the response goes in the key, before the namespace.**
+`useGetAllSecrets(scope)` keys on `[GET_ALL_SECRETS_QUERY_KEY, scope, namespace]`:
+the Secrets page asks for `'all'` and the pickers keep the `'shared'` default, so
+each list has its own entry and the bare-prefix invalidation still reaches both.
 
 **Paginated lists.** `fetchAllPages` follows `continue_token` across pages, so the
 namespace must go in its `params` argument — otherwise page 1 is correct and every
@@ -253,7 +259,9 @@ Do not add a namespace to these; it would key identical data under many entries:
 - the namespaces list, and `arkconfig` — cluster-scoped
 - `api-keys` and `system-info` — the server resolves the namespace itself
 - everything under `/api/v1/broker/*` — the broker router declares no namespace
-  param at all (this covers sessions, messages, conversations, and logs)
+  param (this covers sessions, messages, conversations, and logs). The one
+  exception is the chunk watch, `/api/v1/broker/chunks?watch=true&query-id=…`,
+  which takes `namespace` to find the Query whose phase ends the stream
 
 One deliberate exception in the other direction: `files.ts` keeps sending
 `namespace` even though it proxies out of the repo, because the file-gateway may

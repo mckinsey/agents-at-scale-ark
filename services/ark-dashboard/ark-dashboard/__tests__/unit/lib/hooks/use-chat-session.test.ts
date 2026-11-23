@@ -1559,7 +1559,9 @@ describe('useChatSession', () => {
       });
 
       const lastCall = mockStartStreamChatResponse.mock.calls.at(-1);
-      expect(lastCall?.[8]).toEqual([{ name: 'muting', value: 'BANANAPHONE' }]);
+      expect(lastCall?.[4]).toMatchObject({
+        parameters: [{ name: 'muting', value: 'BANANAPHONE' }],
+      });
     });
   });
 
@@ -1600,7 +1602,7 @@ describe('useChatSession', () => {
       });
 
       const lastCall = mockStartStreamChatResponse.mock.calls.at(-1);
-      expect(lastCall?.[9]).toEqual({
+      expect(lastCall?.[4]?.annotations).toEqual({
         'executor-openai-responses.ark.mckinsey.com/output-schema': SCHEMA,
       });
     });
@@ -1625,7 +1627,7 @@ describe('useChatSession', () => {
       });
 
       const lastCall = mockStartStreamChatResponse.mock.calls.at(-1);
-      expect(lastCall?.[9]).toBeUndefined();
+      expect(lastCall?.[4]?.annotations).toBeUndefined();
     });
 
     it('does not support the override for other engines', async () => {
@@ -1719,7 +1721,7 @@ describe('useChatSession', () => {
       });
 
       const lastCall = mockStartStreamChatResponse.mock.calls.at(-1);
-      expect(lastCall?.[9]).toBeUndefined();
+      expect(lastCall?.[4]?.annotations).toBeUndefined();
     });
 
     it('treats an engine-level schema as the agent own schema', async () => {

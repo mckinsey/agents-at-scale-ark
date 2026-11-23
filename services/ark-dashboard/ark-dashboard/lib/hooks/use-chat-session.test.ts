@@ -652,7 +652,9 @@ describe('useChatSession - Conversation ID Continuity', () => {
 
     const secondCallArgs = vi.mocked(chatService.startStreamChatResponse).mock
       .calls[1];
-    expect(secondCallArgs[5]).toBe('conv-fallback');
+    expect(secondCallArgs[4]).toMatchObject({
+      conversationId: 'conv-fallback',
+    });
   });
 
   it('does not call getQuery when the stream already provides a conversationId', async () => {
@@ -834,21 +836,12 @@ describe('useChatSession - Stream force-close (#2862)', () => {
 
   it('fires chat_stream_force_closed when a terminal phase force-closes a hung stream', async () => {
     vi.mocked(chatService.startStreamChatResponse).mockImplementation(
-      async (
-        _namespace,
-        _input,
-        _targetType,
-        _targetName,
-        _sessionId,
-        _conversationId,
-        _timeout,
-        abortSignal,
-      ) => {
+      async (_namespace, _input, _targetType, _targetName, options) => {
         async function* hung(): AsyncGenerator<Record<string, unknown>> {
           yield { choices: [{ delta: { content: 'x' } }] };
           await new Promise<void>((_resolve, reject) => {
-            if (abortSignal?.aborted) return reject(makeAbortError());
-            abortSignal?.addEventListener(
+            if (options?.abortSignal?.aborted) return reject(makeAbortError());
+            options?.abortSignal?.addEventListener(
               'abort',
               () => reject(makeAbortError()),
               { once: true },
@@ -877,6 +870,103 @@ describe('useChatSession - Stream force-close (#2862)', () => {
       expect(vi.mocked(trackEvent)).toHaveBeenCalledWith(
         expect.objectContaining({ name: 'chat_stream_force_closed' }),
       );
+    });
+  });
+
+  function mockHungStreamWithoutContent(queryName: string) {
+    vi.mocked(chatService.startStreamChatResponse).mockImplementation(
+      async (_namespace, _input, _targetType, _targetName, options) => {
+        const abortSignal = options?.abortSignal;
+        async function* hung(): AsyncGenerator<Record<string, unknown>> {
+          await new Promise<void>((_resolve, reject) => {
+            if (abortSignal?.aborted) return reject(makeAbortError());
+            abortSignal?.addEventListener(
+              'abort',
+              () => reject(makeAbortError()),
+              { once: true },
+            );
+          });
+        }
+        return { queryName, chunks: hung() };
+      },
+    );
+  }
+
+  function mockTerminalPhase(phase: 'done' | 'error') {
+    vi.mocked(chatService.streamQueryStatus).mockImplementation(
+      async (_namespace, _queryName, _onUpdate, _pollInterval, onTerminal) => {
+        onTerminal?.(phase);
+        return vi.fn();
+      },
+    );
+  }
+
+  it('renders the query result when a force-closed stream delivered no answer', async () => {
+    mockHungStreamWithoutContent('q-no-content');
+    mockTerminalPhase('done');
+    vi.mocked(chatService.getQueryResult).mockResolvedValue({
+      status: 'done',
+      terminal: true,
+      response: 'TASK_OBJECT_ARTIFACT',
+      messages: [{ role: 'assistant', content: 'TASK_OBJECT_ARTIFACT' }],
+    });
+
+    const { result } = renderHook(
+      () => useChatSession({ name: 'test-agent', type: 'agent' }),
+      { wrapper: createWrapper() },
+    );
+    await act(async () => {
+      await result.current.sendMessage('please run s9-task-object');
+    });
+
+    expect(chatService.getQueryResult).toHaveBeenCalledWith(
+      'default',
+      'q-no-content',
+    );
+    expect(result.current.messages.at(-1)).toMatchObject({
+      role: 'assistant',
+      content: 'TASK_OBJECT_ARTIFACT',
+    });
+    expect(result.current.isProcessing).toBe(false);
+  });
+
+  it('does not fetch the query result when the stream delivered content', async () => {
+    vi.mocked(chatService.startStreamChatResponse).mockResolvedValueOnce({
+      queryName: 'q-with-content',
+      chunks: toAsyncIterable([
+        { choices: [{ delta: { content: 'hi' }, finish_reason: 'stop' }] },
+      ]),
+    });
+    vi.mocked(chatService.streamQueryStatus).mockResolvedValue(vi.fn());
+
+    const { result } = renderHook(
+      () => useChatSession({ name: 'test-agent', type: 'agent' }),
+      { wrapper: createWrapper() },
+    );
+    await act(async () => {
+      await result.current.sendMessage('hello');
+    });
+
+    expect(chatService.getQueryResult).not.toHaveBeenCalled();
+  });
+
+  it('shows the failure, not a recovered result, when the force-close phase is error', async () => {
+    mockHungStreamWithoutContent('q-error');
+    mockTerminalPhase('error');
+
+    const { result } = renderHook(
+      () => useChatSession({ name: 'test-agent', type: 'agent' }),
+      { wrapper: createWrapper() },
+    );
+    await act(async () => {
+      await result.current.sendMessage('hello');
+    });
+
+    expect(chatService.getQueryResult).not.toHaveBeenCalled();
+    expect(result.current.messages.at(-1)).toMatchObject({
+      role: 'assistant',
+      content: 'Query failed',
+      metadata: { status: 'failed' },
     });
   });
 
@@ -996,7 +1086,7 @@ describe('useChatSession - Resume after navigation (#3844)', () => {
   it('does not log an error when the stream is aborted by leaving the page', async () => {
     vi.mocked(chatService.startStreamChatResponse).mockImplementationOnce(
       async (...args) => {
-        const signal = args[7] as AbortSignal;
+        const signal = args[4]?.abortSignal as AbortSignal;
         return {
           queryName: 'q-leave',
           chunks: (async function* (): AsyncGenerator<Record<string, unknown>> {
@@ -1037,7 +1127,7 @@ describe('useChatSession - Resume after navigation (#3844)', () => {
     let streamSignal: AbortSignal | undefined;
     vi.mocked(chatService.startStreamChatResponse).mockImplementationOnce(
       async (...args) => {
-        const signal = args[7] as AbortSignal;
+        const signal = args[4]?.abortSignal as AbortSignal;
         streamSignal = signal;
         return {
           queryName: 'q-running',
@@ -1074,7 +1164,7 @@ describe('useChatSession - Resume after navigation (#3844)', () => {
     let streamSignal: AbortSignal | undefined;
     vi.mocked(chatService.startStreamChatResponse).mockImplementationOnce(
       async (...args) => {
-        const signal = args[7] as AbortSignal;
+        const signal = args[4]?.abortSignal as AbortSignal;
         streamSignal = signal;
         return {
           queryName: 'q-reload',

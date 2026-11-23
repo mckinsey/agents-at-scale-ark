@@ -140,6 +140,16 @@ describe('ModelConfiguratorForm - AWS Bedrock', () => {
     expect(screen.getByText('API Key Secret')).toBeInTheDocument();
     expect(screen.queryByText('API Key Secret Key')).not.toBeInTheDocument();
   });
+
+  it('lists only shared secrets in its pickers', () => {
+    renderForm(bedrockDefaults());
+
+    const calls = vi.mocked(useGetAllSecrets).mock.calls;
+    expect(calls.length).toBeGreaterThan(0);
+    for (const args of calls) {
+      expect(args).toEqual([]);
+    }
+  });
 });
 
 describe('ModelConfiguratorForm - Base URL field', () => {
@@ -221,5 +231,117 @@ describe('ModelConfiguratorForm - Base URL field', () => {
     expect(
       screen.queryByRole('button', { name: 'Move to configuration' }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe('ModelConfiguratorForm - API Key secret field', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useGetAllSecrets).mockReturnValue({
+      data: [
+        { id: 'openai-token', name: 'openai-token' },
+        { id: 'backup-token', name: 'backup-token' },
+      ],
+      isPending: false,
+      error: null,
+    } as never);
+    vi.mocked(useCreateSecret).mockImplementation(
+      (options?: { onSuccess?: (data: { name: string }) => void }) =>
+        ({
+          mutate: (variables: { name: string }) =>
+            options?.onSuccess?.({ name: variables.name }),
+          isPending: false,
+        }) as never,
+    );
+    vi.mocked(useGetAllConfigurations).mockReturnValue({
+      data: [],
+      isPending: false,
+      error: null,
+    } as never);
+  });
+
+  const apiKeyInput = () => screen.getByRole('combobox', { name: 'API Key' });
+
+  it('keeps showing a stored secret that is not in the list', () => {
+    renderForm(openaiDefaults({ secret: 'kubectl-made' }));
+
+    expect(apiKeyInput()).toHaveValue('kubectl-made');
+    expect(
+      screen.getByText(/Not in the list of Ark secrets/),
+    ).toBeInTheDocument();
+  });
+
+  it('flags a typed personal secret name, which a model cannot use', async () => {
+    const user = userEvent.setup();
+    renderForm(openaiDefaults({ secret: '' }));
+
+    await user.type(apiKeyInput(), 'u-0123456789abcdef-openai');
+    await user.tab();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /Personal secrets can be used only in the MCP server overrides/,
+    );
+    expect(
+      screen.queryByText(/Not in the list of Ark secrets/),
+    ).not.toBeInTheDocument();
+  });
+
+  it('says the secrets failed to load instead of flagging the stored secret', async () => {
+    const user = userEvent.setup();
+    vi.mocked(useGetAllSecrets).mockReturnValue({
+      data: undefined,
+      isPending: false,
+      isError: true,
+      error: null,
+    } as never);
+    renderForm(openaiDefaults({ secret: 'kubectl-made' }));
+
+    expect(
+      screen.queryByText(/Not in the list of Ark secrets/),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Clear secret' }));
+    await user.click(apiKeyInput());
+    expect(
+      await screen.findByText(/Couldn't load the Ark secrets/),
+    ).toBeInTheDocument();
+  });
+
+  it('updates the field with a typed name', async () => {
+    const user = userEvent.setup();
+    renderForm(openaiDefaults({ secret: '' }));
+
+    await user.type(apiKeyInput(), 'typed-secret');
+
+    expect(apiKeyInput()).toHaveValue('typed-secret');
+  });
+
+  it('updates the field with a name picked from the list', async () => {
+    const user = userEvent.setup();
+    renderForm(openaiDefaults({ secret: '' }));
+
+    await user.click(apiKeyInput());
+    await user.click(
+      await screen.findByRole('option', { name: 'backup-token' }),
+    );
+
+    expect(apiKeyInput()).toHaveValue('backup-token');
+  });
+
+  it('sets the field to a secret created with Add New', async () => {
+    const user = userEvent.setup();
+    renderForm(openaiDefaults({ secret: '' }));
+
+    const apiKeyFieldset = screen
+      .getByText('API Key')
+      .closest('fieldset') as HTMLElement;
+    await user.click(
+      within(apiKeyFieldset).getByRole('button', { name: 'Add New' }),
+    );
+    const dialog = await screen.findByRole('dialog');
+    await user.type(within(dialog).getByLabelText('Name'), 'fresh-secret');
+    await user.type(within(dialog).getByLabelText('Value'), 'sk-123');
+    await user.click(within(dialog).getByRole('button', { name: 'Create' }));
+
+    expect(apiKeyInput()).toHaveValue('fresh-secret');
   });
 });

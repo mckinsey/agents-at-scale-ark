@@ -28,6 +28,17 @@ from ark_sdk.labels import (
     validate_updated_tags,
 )
 from ark_sdk.impersonation_patch import apply as _apply_impersonation_patch
+from ark_sdk.secret_scope import (
+    SCOPE_LABEL,
+    SHARED_SCOPE,
+    SecretScope,
+    PersonalSecretError,
+    SecretScopeChangeError,
+    SecretScopeKind,
+    display_name,
+    scope_kind,
+    validate_secret_name,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -229,10 +240,12 @@ def _build_labels_and_annotations(
     existing_labels: Optional[Dict[str, str]] = None,
     existing_annotations: Optional[Dict[str, str]] = None,
     resource_type: Optional[str] = None,
+    system_labels: Optional[Dict[str, str]] = None,
 ) -> Tuple[Dict[str, str], Dict[str, str]]:
     """Build the labels and annotations this feature owns, preserving all others."""
     k8s_labels = strip_tag_labels(existing_labels)
     k8s_labels.update(tags_to_labels(labels))
+    k8s_labels.update(system_labels or {})
 
     annotations = {
         key: value
@@ -250,24 +263,61 @@ def _build_labels_and_annotations(
 
 
 def _to_secret_metadata(metadata) -> Dict:
-    """Extract description/alias/labels shared by all Secret client responses."""
+    """Extract the metadata shared by all Secret client responses."""
     annotations = metadata.annotations or {}
     return {
+        "display_name": display_name(metadata.name),
+        "scope": scope_kind(metadata.labels),
         "description": annotations.get(DESCRIPTION_ANNOTATION),
         "alias": annotations.get(ALIAS_ANNOTATION),
         "labels": labels_to_tags(metadata.labels),
     }
 
 
+def _scope_change_labels(
+    client_scope: SecretScope, labels: Optional[Dict[str, str]], scope: Optional[SecretScopeKind]
+) -> Optional[Dict[str, str]]:
+    """Labels that move a Secret to scope; personal secrets can be shared, never the reverse."""
+    current = scope_kind(labels)
+    if scope is None or scope == current:
+        return None
+    if scope == "shared" and current == "personal":
+        if not client_scope.includes_shared:
+            raise SecretScopeChangeError("This scope cannot share secrets")
+        return {SCOPE_LABEL: SHARED_SCOPE}
+    if scope == "personal":
+        raise SecretScopeChangeError("A shared secret cannot be made personal")
+    raise SecretScopeChangeError(f"Invalid secret scope '{scope}'")
+
+
+async def read_secret_labels(namespace: str, name: str) -> Optional[Dict[str, str]]:
+    """Read the labels of a Secret as the service account, ignoring any scope.
+
+    Returns None when the Secret does not exist. Callers use this to decide
+    whether a reference to the Secret is allowed, so it never impersonates.
+    """
+    await init_k8s()
+    async with create_api_client() as api:
+        v1 = client.CoreV1Api(api)
+        try:
+            secret = await v1.read_namespaced_secret(name=name, namespace=namespace)
+        except ApiException as e:
+            if e.status == 404:
+                return None
+            raise
+        return dict(secret.metadata.labels or {})
+
+
 class SecretClient:
     """Kubernetes Secret management client."""
 
-    def __init__(self, namespace: Optional[str] = None, impersonation: Optional['ImpersonationConfig'] = None, default_headers: Optional[Dict[str, str]] = None):
+    def __init__(self, namespace: Optional[str] = None, impersonation: Optional['ImpersonationConfig'] = None, default_headers: Optional[Dict[str, str]] = None, scope: SecretScope = SecretScope()):
         if namespace is None:
             namespace = get_context()["namespace"]
         self.namespace = namespace
         self.impersonation = impersonation
         self.default_headers = default_headers
+        self.scope = scope
 
     def _get_api_client(self, api: ApiClient) -> ApiClient:
         """Configure API client with impersonation headers if needed."""
@@ -300,15 +350,23 @@ class SecretClient:
                 total_length += len(str(value).encode('utf-8'))
         return total_length
     
+    async def _read_secret_in_scope(self, v1, name: str):
+        """Read a Secret, refusing any outside this client's scope."""
+        secret = await v1.read_namespaced_secret(name=name, namespace=self.namespace)
+        if not self.scope.contains(secret.metadata.labels):
+            raise ApiException(status=404, reason=f"Secret '{name}' not found")
+        return secret
+
     async def list_secrets(self, label_selector: Optional[str] = None):
-        """List all secrets in namespace."""
+        """List the secrets in namespace that fall within this client's scope."""
         await init_k8s()
         async with create_api_client() as api:
             self._get_api_client(api)
             v1 = client.CoreV1Api(api)
+            selectors = [self.scope.label_selector()] + ([label_selector] if label_selector else [])
             secrets = await v1.list_namespaced_secret(
                 namespace=self.namespace,
-                label_selector=label_selector
+                label_selector=",".join(selectors)
             )
             
             secret_list = []
@@ -333,8 +391,17 @@ class SecretClient:
         description: Optional[str] = None,
         alias: Optional[str] = None,
         labels: Optional[List[str]] = None,
+        personal: bool = False,
     ):
-        """Create a new secret."""
+        """Create a new secret.
+
+        A personal secret is stored as u-<owner hash>-<name> and is only
+        visible to its owner, so the scope must carry a personal scope.
+        """
+        validate_secret_name(name)
+        system_labels = self.scope.create_labels(personal=personal)
+        if personal:
+            name = self.scope.personal_name(name)
         validated_data = self.validate_and_encode_token(string_data)
         await init_k8s()
         async with create_api_client() as api:
@@ -342,7 +409,10 @@ class SecretClient:
             v1 = client.CoreV1Api(api)
 
             k8s_labels, annotations = _build_labels_and_annotations(
-                description, alias, [validate_tag(tag) for tag in (labels or [])]
+                description,
+                alias,
+                [validate_tag(tag) for tag in (labels or [])],
+                system_labels=system_labels,
             )
             secret = client.V1Secret(
                 api_version="v1",
@@ -374,10 +444,7 @@ class SecretClient:
         async with create_api_client() as api:
             self._get_api_client(api)
             v1 = client.CoreV1Api(api)
-            secret = await v1.read_namespaced_secret(
-                name=name,
-                namespace=self.namespace
-            )
+            secret = await self._read_secret_in_scope(v1, name)
 
             return {
                 "name": secret.metadata.name,
@@ -389,8 +456,18 @@ class SecretClient:
                 **_to_secret_metadata(secret.metadata),
             }
 
-    async def get_secret_value(self, name: str, key: str):
-        """Get a specific secret."""
+    async def get_secret_value(self, name: str, key: str, *, allow_personal: bool = False):
+        """Read one key of a secret, ignoring this client's scope.
+
+        Executors and MCP header resolution use this to follow secretKeyRef
+        references, which may point at secrets without Ark labels. Scoping it
+        would break those references, so only the /v1/secrets CRUD is scoped.
+
+        A personal secret raises PersonalSecretError: personal secrets resolve
+        only from the headers of a Query's mcpserver overrides. Pass
+        allow_personal=True only on that path. The decision reads the labels,
+        so the value of a refused secret never leaves this method.
+        """
         await init_k8s()
         async with create_api_client() as api:
             self._get_api_client(api)
@@ -399,6 +476,11 @@ class SecretClient:
                 name=name, 
                 namespace=self.namespace
             )
+            if not allow_personal and scope_kind(secret.metadata.labels) == "personal":
+                raise PersonalSecretError(
+                    f"Secret {name} is personal: personal secrets can only be used "
+                    "in the headers of a Query mcpserver override"
+                )
             if key not in secret.data:
                 raise ValueError(f"Invalid key {key} for secret {name}")
                 
@@ -417,11 +499,14 @@ class SecretClient:
         description: Optional[str] = None,
         alias: Optional[str] = None,
         labels: Optional[List[str]] = None,
+        scope: Optional[SecretScopeKind] = None,
     ):
         """Update an existing secret.
 
-        string_data is the one partial field: omit it to leave the secret's
-        value unchanged. description, alias and labels are a full replace,
+        string_data and scope are partial: omit them to leave the secret's
+        value and scope unchanged. scope="shared" promotes a personal secret
+        and keeps its name; making a shared secret personal raises
+        SecretScopeChangeError. description, alias and labels are a full replace,
         same contract as ConfigurationClient.update_configuration - omitting
         any of them clears it, so callers must send the complete desired
         state for those fields on every call.
@@ -431,10 +516,8 @@ class SecretClient:
             self._get_api_client(api)
             v1 = client.CoreV1Api(api)
 
-            existing_secret = await v1.read_namespaced_secret(
-                name=name,
-                namespace=self.namespace
-            )
+            existing_secret = await self._read_secret_in_scope(v1, name)
+            system_labels = _scope_change_labels(self.scope, existing_secret.metadata.labels, scope)
 
             if string_data is not None:
                 existing_secret.string_data = self.validate_and_encode_token(string_data)
@@ -446,6 +529,7 @@ class SecretClient:
                 validate_updated_tags(labels or [], existing_tags),
                 existing_labels=existing_secret.metadata.labels,
                 existing_annotations=existing_secret.metadata.annotations,
+                system_labels=system_labels,
             )
             existing_secret.metadata.labels = k8s_labels
             existing_secret.metadata.annotations = annotations
@@ -471,9 +555,16 @@ class SecretClient:
         async with create_api_client() as api:
             self._get_api_client(api)
             v1 = client.CoreV1Api(api)
+            existing = await self._read_secret_in_scope(v1, name)
             await v1.delete_namespaced_secret(
                 name=name,
-                namespace=self.namespace
+                namespace=self.namespace,
+                body=client.V1DeleteOptions(
+                    preconditions=client.V1Preconditions(
+                        uid=existing.metadata.uid,
+                        resource_version=existing.metadata.resource_version,
+                    )
+                ),
             )
             return True
 
