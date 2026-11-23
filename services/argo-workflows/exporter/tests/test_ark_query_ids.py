@@ -1,5 +1,6 @@
 import importlib.util
 import os
+import sys
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -12,7 +13,8 @@ ARK_QUERY = Path(__file__).resolve().parents[2] / "chart" / "files" / "ark-query
 def load_ark_query():
     spec = importlib.util.spec_from_file_location("ark_query", ARK_QUERY)
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    with patch.object(sys, "dont_write_bytecode", True):
+        spec.loader.exec_module(module)
     return module
 
 
