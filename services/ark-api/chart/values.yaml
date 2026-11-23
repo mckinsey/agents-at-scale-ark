@@ -68,7 +68,8 @@ app:
     - name: PROXY_MAX_UPLOAD_BYTES
       value: "1048576"
     # In-cluster Argo Server URL used to list workflows sorted by start time
-    # Requires Argo Server with --auth-mode=server; empty uses the Kubernetes API
+    # Empty uses the Kubernetes API. If Argo Server requires login (--auth-mode=client
+    # or sso), set argoServer.tokenFile to a token file, e.g. the service account token
     # Resolves in the ark-api namespace; use argo-workflows-server.<namespace> otherwise
     - name: ARGO_SERVER_URL
       value: "http://argo-workflows-server:2746"
@@ -192,6 +193,9 @@ impersonation:
   usernameClaim: email
   groupsClaim: groups
   prefix: ""
+
+argoServer:
+  tokenFile: ""
 
 # Restricts ark-api's configmap writes to the ones it owns - RBAC cannot.
 # Needs ValidatingAdmissionPolicy (Kubernetes 1.30+); skipped where absent.
