@@ -196,6 +196,10 @@ def _redact_string(s: str) -> str:
     return s
 
 
+def redact(v):
+    return _redact_value(v)
+
+
 def _redact_value(v):
     if isinstance(v, str):
         return _redact_string(v)
