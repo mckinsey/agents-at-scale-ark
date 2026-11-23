@@ -426,6 +426,31 @@ class TestAPIKeyCreationAuthorization(unittest.TestCase):
         self.assertEqual(attrs.resource, "secrets")
 
     @patch('ark_api.api.v1.api_keys.APIKeyService')
+    def test_gate_probes_supplied_namespace(self, mock_service_class):
+        """The secrets:create SSAR must be evaluated in the namespace the key targets."""
+        self.app.dependency_overrides[require_api_key_owner] = (
+            lambda: UserIdentity(username="alice@example.com", groups=[])
+        )
+
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        now = datetime.now(timezone.utc)
+        mock_response = Mock(
+            id="test-id", public_key="pk-ark-test",
+            secret_key="sk-ark-test", created_at=now, expires_at=None
+        )
+        mock_response.name = "Test Key"
+        mock_service.create_api_key = AsyncMock(return_value=mock_response)
+
+        stack, _, review_calls = _patch_ssar(can_create=True)
+        with stack:
+            response = self.client.post("/v1/api-keys?namespace=tenant-b", json={"name": "Test Key"})
+
+        self.assertEqual(response.status_code, 201)
+        mock_service_class.assert_called_once_with(namespace="tenant-b")
+        self.assertEqual(review_calls[0].spec.resource_attributes.namespace, "tenant-b")
+
+    @patch('ark_api.api.v1.api_keys.APIKeyService')
     def test_gate_active_unauthorized_owner_denies_creation(self, mock_service_class):
         """The identity denied `secrets:create` cannot obtain that access by minting a key."""
         self.app.dependency_overrides[require_api_key_owner] = (
@@ -520,6 +545,108 @@ class TestAPIKeyListDeleteScoping(unittest.TestCase):
         mock_service.delete_api_key.assert_called_once_with(
             "pk-ark-someone-elses-key", created_by="bob@example.com"
         )
+
+
+class TestAPIKeyNamespaceParameterisation(unittest.TestCase):
+    """Routes must honour an explicit namespace and default to context when omitted."""
+
+    def setUp(self):
+        from ark_api.main import app
+        self.client = TestClient(app)
+
+    @patch('ark_api.api.v1.api_keys.APIKeyService')
+    def test_create_honours_explicit_namespace(self, mock_service_class):
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        now = datetime.now(timezone.utc)
+        mock_response = Mock(
+            id="id", public_key="pk-ark-x", secret_key="sk-ark-x",
+            created_at=now, expires_at=None
+        )
+        mock_response.name = "Key"
+        mock_service.create_api_key = AsyncMock(return_value=mock_response)
+
+        response = self.client.post("/v1/api-keys?namespace=tenant-b", json={"name": "Key"})
+
+        self.assertEqual(response.status_code, 201)
+        mock_service_class.assert_called_once_with(namespace="tenant-b")
+
+    @patch('ark_api.api.v1.api_keys.APIKeyService')
+    def test_create_defaults_namespace_when_omitted(self, mock_service_class):
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        now = datetime.now(timezone.utc)
+        mock_response = Mock(
+            id="id", public_key="pk-ark-x", secret_key="sk-ark-x",
+            created_at=now, expires_at=None
+        )
+        mock_response.name = "Key"
+        mock_service.create_api_key = AsyncMock(return_value=mock_response)
+
+        response = self.client.post("/v1/api-keys", json={"name": "Key"})
+
+        self.assertEqual(response.status_code, 201)
+        mock_service_class.assert_called_once_with(namespace=None)
+
+    @patch('ark_api.api.v1.api_keys.APIKeyService')
+    def test_create_forbidden_namespace_returns_403(self, mock_service_class):
+        from kubernetes_asyncio.client.rest import ApiException
+
+        mock_service = Mock()
+        mock_service.namespace = "tenant-b"
+        mock_service_class.return_value = mock_service
+        mock_service.create_api_key = AsyncMock(
+            side_effect=ApiException(status=403, reason="Forbidden")
+        )
+
+        response = self.client.post("/v1/api-keys?namespace=tenant-b", json={"name": "Key"})
+
+        self.assertEqual(response.status_code, 403)
+        self.assertIn("tenant-b", response.json()["detail"])
+
+    @patch('ark_api.api.v1.api_keys.APIKeyService')
+    def test_list_honours_explicit_namespace(self, mock_service_class):
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.list_api_keys = AsyncMock(return_value=Mock(items=[], count=0))
+
+        response = self.client.get("/v1/api-keys?namespace=tenant-b")
+
+        self.assertEqual(response.status_code, 200)
+        mock_service_class.assert_called_once_with(namespace="tenant-b")
+
+    @patch('ark_api.api.v1.api_keys.APIKeyService')
+    def test_list_defaults_namespace_when_omitted(self, mock_service_class):
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.list_api_keys = AsyncMock(return_value=Mock(items=[], count=0))
+
+        response = self.client.get("/v1/api-keys")
+
+        self.assertEqual(response.status_code, 200)
+        mock_service_class.assert_called_once_with(namespace=None)
+
+    @patch('ark_api.api.v1.api_keys.APIKeyService')
+    def test_delete_honours_explicit_namespace(self, mock_service_class):
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.delete_api_key = AsyncMock(return_value=True)
+
+        response = self.client.delete("/v1/api-keys/pk-ark-x?namespace=tenant-b")
+
+        self.assertEqual(response.status_code, 204)
+        mock_service_class.assert_called_once_with(namespace="tenant-b")
+
+    @patch('ark_api.api.v1.api_keys.APIKeyService')
+    def test_delete_defaults_namespace_when_omitted(self, mock_service_class):
+        mock_service = Mock()
+        mock_service_class.return_value = mock_service
+        mock_service.delete_api_key = AsyncMock(return_value=True)
+
+        response = self.client.delete("/v1/api-keys/pk-ark-x")
+
+        self.assertEqual(response.status_code, 204)
+        mock_service_class.assert_called_once_with(namespace=None)
 
 
 if __name__ == '__main__':

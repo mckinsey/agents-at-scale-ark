@@ -189,7 +189,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 return self._auth_failure(request, "Invalid basic auth format")
             public_key, secret_key = credentials
 
-            api_key_data = await self.api_key_service.verify_api_key(public_key, secret_key)
+            namespace = request.query_params.get("namespace")
+            service = APIKeyService(namespace=namespace) if namespace else self.api_key_service
+
+            api_key_data = await service.verify_api_key(public_key, secret_key)
             gate_requires_owner = self.impersonation_settings.enabled and auth_mode == AuthMode.HYBRID
             # Same generic error for "no such key" and "key has no recorded owner" so a caller
             # can't distinguish a wrong secret from an orphaned key.
@@ -197,9 +200,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
             if key_rejected:
                 return self._auth_failure(
                     request,
-                    f"Invalid API key credentials or key not found in namespace {self.api_key_service.namespace}",
+                    f"Invalid API key credentials or key not found in namespace {service.namespace}",
                 )
-            logger.debug(f"Basic auth successful for key: {public_key} in namespace {self.api_key_service.namespace}")
+            logger.debug(f"Basic auth successful for key: {public_key} in namespace {service.namespace}")
             request.state.api_key = api_key_data
             return None
         except Exception as e:

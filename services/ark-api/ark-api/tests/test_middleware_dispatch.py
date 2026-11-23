@@ -398,6 +398,62 @@ class TestMiddlewareDispatchBasicAuthOwnership(unittest.IsolatedAsyncioTestCase)
         self.assertEqual(response, expected_response)
         call_next.assert_called_once()
 
+    @patch.dict(os.environ, {"AUTH_MODE": "basic"})
+    @patch("ark_api.auth.middleware.APIKeyService")
+    async def test_basic_auth_verifies_key_in_request_namespace(self, mock_api_key_svc):
+        from ark_api.auth.middleware import AuthMiddleware
+
+        default_service = mock_api_key_svc.return_value
+        default_service.verify_api_key = AsyncMock()
+
+        ns_service = MagicMock()
+        ns_service.namespace = "tenant-b"
+        ns_service.verify_api_key = AsyncMock(return_value={
+            "public_key": "pk-ark-test", "created_by": None
+        })
+
+        def _factory(*args, **kwargs):
+            return ns_service if kwargs.get("namespace") else default_service
+
+        mock_api_key_svc.side_effect = _factory
+
+        app = MagicMock()
+        middleware = AuthMiddleware(app)
+        expected_response = MagicMock()
+        call_next = AsyncMock(return_value=expected_response)
+
+        request = _make_request(headers={"authorization": _basic_auth_header()})
+        request.query_params = {"namespace": "tenant-b"}
+        response = await middleware.dispatch(request, call_next)
+
+        self.assertEqual(response, expected_response)
+        mock_api_key_svc.assert_any_call(namespace="tenant-b")
+        ns_service.verify_api_key.assert_awaited_once_with("pk-ark-test", "sk-ark-test")
+        default_service.verify_api_key.assert_not_called()
+
+    @patch.dict(os.environ, {"AUTH_MODE": "basic"})
+    @patch("ark_api.auth.middleware.APIKeyService")
+    async def test_basic_auth_defaults_to_context_namespace(self, mock_api_key_svc):
+        from ark_api.auth.middleware import AuthMiddleware
+
+        default_service = mock_api_key_svc.return_value
+        default_service.namespace = "ark-api"
+        default_service.verify_api_key = AsyncMock(return_value={
+            "public_key": "pk-ark-test", "created_by": None
+        })
+
+        app = MagicMock()
+        middleware = AuthMiddleware(app)
+        expected_response = MagicMock()
+        call_next = AsyncMock(return_value=expected_response)
+
+        request = _make_request(headers={"authorization": _basic_auth_header()})
+        request.query_params = {}
+        response = await middleware.dispatch(request, call_next)
+
+        self.assertEqual(response, expected_response)
+        default_service.verify_api_key.assert_awaited_once_with("pk-ark-test", "sk-ark-test")
+
 
 if __name__ == "__main__":
     unittest.main()
