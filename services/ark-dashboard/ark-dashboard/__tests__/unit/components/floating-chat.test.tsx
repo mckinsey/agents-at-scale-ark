@@ -10,6 +10,7 @@ import {
 } from '@/atoms/experimental-features';
 import { lastConversationIdAtom } from '@/atoms/internal-states';
 import FloatingChat from '@/components/floating-chat';
+import { buildChatKey } from '@/lib/hooks/use-chat-session';
 import type { QueryDetailResponse } from '@/lib/services';
 import { chatService } from '@/lib/services';
 
@@ -1190,7 +1191,7 @@ describe('FloatingChat', () => {
       expect(storedHistory).not.toBe(null);
 
       const parsedHistory = JSON.parse(storedHistory!);
-      const chatKey = 'agent-Test Agent';
+      const chatKey = buildChatKey('default', 'agent', 'Test Agent');
       expect(parsedHistory[chatKey]).toBeDefined();
       expect(parsedHistory[chatKey].messages).toHaveLength(2);
       expect(parsedHistory[chatKey].messages[0].content).toBe('Test message');
@@ -1437,7 +1438,7 @@ describe('FloatingChat', () => {
       const storedHistoryBefore = sessionStorage.getItem('agent-chat-history');
       expect(storedHistoryBefore).not.toBe(null);
       const parsedHistoryBefore = JSON.parse(storedHistoryBefore!);
-      const chatKey = 'agent-Test Agent';
+      const chatKey = buildChatKey('default', 'agent', 'Test Agent');
       expect(parsedHistoryBefore[chatKey].messages).toHaveLength(2);
 
       const clearButton = screen.getByRole('button', { name: /new chat/i });

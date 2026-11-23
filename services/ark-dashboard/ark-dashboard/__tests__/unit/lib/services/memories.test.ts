@@ -89,7 +89,10 @@ describe('memoriesService', () => {
   describe('create', () => {
     it('posts into the namespace and adds an id', async () => {
       const post = vi.spyOn(apiClient, 'post').mockResolvedValue(DETAIL);
-      const request = { name: 'session-memory' };
+      const request = {
+        name: 'session-memory',
+        spec: { address: { value: 'http://ark-broker:8080' } },
+      };
 
       const result = await memoriesService.create(NAMESPACE, request);
 
@@ -104,15 +107,19 @@ describe('memoriesService', () => {
     it('puts into the namespace and adds an id', async () => {
       const put = vi.spyOn(apiClient, 'put').mockResolvedValue(DETAIL);
 
+      const updates = {
+        spec: { address: { value: 'http://other-broker:8080' } },
+      };
+
       const result = await memoriesService.update(
         NAMESPACE,
         'session-memory',
-        { description: 'updated' },
+        updates,
       );
 
       expect(put).toHaveBeenCalledWith(
         '/api/v1/memories/session-memory',
-        { description: 'updated' },
+        updates,
         { params: { namespace: NAMESPACE } },
       );
       expect(result).toEqual({ ...DETAIL, id: 'session-memory' });
