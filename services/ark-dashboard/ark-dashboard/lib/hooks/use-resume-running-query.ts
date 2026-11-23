@@ -15,6 +15,7 @@ export const RESUME_POLL_INTERVAL_MS = 1000;
 
 interface ResumeRun {
   stopped: boolean;
+  owner: boolean;
 }
 
 interface UseResumeRunningQueryParams {
@@ -94,6 +95,7 @@ function finishResumedQuery(
 async function resumeActiveQuery(
   params: UseResumeRunningQueryParams,
   run: ResumeRun,
+  takeOverReleasedProcessing: boolean,
 ): Promise<void> {
   const {
     namespace,
@@ -105,12 +107,14 @@ async function resumeActiveQuery(
     onResume,
     restorePendingApproval,
   } = params;
-  if (!queryName || isProcessing) return;
+  if (!queryName || (isProcessing && !takeOverReleasedProcessing)) return;
 
   onResume(queryName, () => {
     run.stopped = true;
+    run.owner = false;
   });
   setIsProcessing(true);
+  run.owner = true;
   updateChatMessages(withoutFailedMessages);
 
   while (!run.stopped) {
@@ -125,6 +129,7 @@ async function resumeActiveQuery(
     }
 
     if (result.terminal) {
+      run.owner = false;
       finishResumedQuery(params, result, queryName);
       return;
     }
@@ -133,6 +138,7 @@ async function resumeActiveQuery(
       result.status === 'input-required' &&
       (await hasRestoredApproval(restorePendingApproval, queryName))
     ) {
+      run.owner = false;
       setIsProcessing(false);
       setProcessingPhase(undefined);
       return;
@@ -152,13 +158,22 @@ export function useResumeRunningQuery(
   });
 
   const { namespace, chatKey } = params;
+  const releasedProcessingRef = useRef(false);
 
   useEffect(() => {
     if (!namespace) return;
-    const run: ResumeRun = { stopped: false };
-    void resumeActiveQuery(paramsRef.current, run);
+    const run: ResumeRun = { stopped: false, owner: false };
+    const takeOverReleasedProcessing = releasedProcessingRef.current;
+    releasedProcessingRef.current = false;
+    void resumeActiveQuery(paramsRef.current, run, takeOverReleasedProcessing);
     return () => {
       run.stopped = true;
+      if (run.owner) {
+        run.owner = false;
+        releasedProcessingRef.current = true;
+        paramsRef.current.setIsProcessing(false);
+        paramsRef.current.setProcessingPhase(undefined);
+      }
     };
   }, [namespace, chatKey]);
 }
