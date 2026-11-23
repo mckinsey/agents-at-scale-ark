@@ -195,12 +195,15 @@ class TestSignedInWritesNeedImpersonation(IdentityGateTestCase):
 
         self.assert_denied_before_kubernetes(response, IMPERSONATION_DISABLED_DETAIL)
 
-    def test_a_blank_username_is_not_an_identity(self):
+    def test_a_blank_username_is_rejected_at_authentication(self):
         client = self.client_for(SSO_WITH_IMPERSONATION)
 
         response = client.post(WF, json=RUN, headers=bearer("blank"))
 
-        self.assert_denied_before_kubernetes(response, NO_USER_IDENTITY_DETAIL)
+        self.assertEqual(response.status_code, 401, response.text)
+        self.assertIn("empty", response.json()["detail"].lower())
+        self.assertEqual(self.k8s.identities, [])
+        self.k8s.dynamic_client_cls.assert_not_called()
 
     def test_writes_with_impersonation_reach_kubernetes_as_the_user(self):
         for env in (SSO_WITH_IMPERSONATION, HYBRID_WITH_IMPERSONATION):

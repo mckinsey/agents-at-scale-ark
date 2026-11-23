@@ -32,7 +32,7 @@ spec:
             --set argo-workflows.crds.full=false \
             --set minio.enabled=false \
             --set httpRoute.argo.enabled=false \
-            | kubectl apply -f -
+            | kubectl apply --server-side --force-conflicts -f -
         env:
         - name: NAMESPACE
           value: ($namespace)
