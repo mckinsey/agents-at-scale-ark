@@ -96,6 +96,40 @@ devspace dev
 kubectl get tenant   # check Minio tenant status
 ```
 
+### Sending workflow runs to an observability tool
+
+The optional exporter sends each workflow run to an OpenTelemetry backend such as Langfuse or Phoenix. Each run becomes one trace named `argo.workflow.<name>`, with one `argo.step.<step>` span per step. A step span carries its timings, status, input and output parameters, and the last lines of its log. When a step calls Ark through the `ark-query` template, the Query's agent and LLM spans appear under that step. All spans of a run share the session `wf-<workflow-name>`.
+
+The exporter reads runs through ark-api, which redacts credentials in parameters, messages and logs before they leave the cluster. The Argo UI and `kubectl logs` still show the original logs.
+
+Enable it:
+
+```bash
+helm upgrade --install argo-workflows \
+  oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/argo-workflows \
+  --set exporter.enabled=true \
+  --set "exporter.namespaces={default,team-a}"
+```
+
+The exporter sends to the endpoint in each namespace's `otel-environment-variables` Secret, the same Secret Ark uses for its own traces. Installing Langfuse or Phoenix from the marketplace creates it.
+
+| Value | Description |
+|-------|-------------|
+| `exporter.enabled` | Deploys the exporter. Default `false`. |
+| `exporter.namespaces` | Namespaces to watch. Defaults to the release namespace. |
+| `exporter.arkApiUrl` | ark-api address. Defaults to `ark-api` in the release namespace. |
+| `exporter.arkApiKeySecret` | Secret with `ARK_API_PUBLIC_KEY` and `ARK_API_SECRET_KEY`, for ark-api in basic auth mode. |
+| `exporter.tracesEndpoint` | Fallback OTLP traces URL for namespaces without the Secret. |
+| `exporter.logLines` | Log lines to send per step. Default `50`. |
+| `exporter.pollIntervalSeconds` | How often to check for finished steps. Default `15`. |
+| `exporter.lookbackSeconds` | On start, ignore workflows that finished earlier than this. Default `3600`. |
+
+Notes:
+
+- Steps are sent when they finish, not while they run.
+- A step's log comes from its pod. If the pod is already deleted, for example by `podGC`, the step is sent without its log.
+- Credential redaction is pattern based. Steps should not print secrets.
+
 ### Adding the `ark-query` template to an existing Argo installation
 
 The Ark `argo-workflows` chart ships a reusable `ark-query` `WorkflowTemplate`, a canonical building block that submits an Ark `Query` and returns its structured outputs. This can be referenced with `templateRef: {name: ark-query, template: query}`. The chart installs it automatically, so the steps above already give you everything. If you run your **own** Argo Workflows (installed separately from the Ark chart), add just this template.

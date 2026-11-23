@@ -69,6 +69,28 @@ argo-workflows:
         memory: "256Mi"
         cpu: "200m"
 
+exporter:
+  enabled: false
+  image:
+    repository: ghcr.io/mckinsey/agents-at-scale-ark/argo-workflows-exporter
+    tag: ""
+    pullPolicy: IfNotPresent
+  namespaces: []
+  arkApiUrl: ""
+  arkApiKeySecret: ""
+  otelSecretName: otel-environment-variables
+  tracesEndpoint: ""
+  pollIntervalSeconds: 15
+  lookbackSeconds: 3600
+  logLines: 50
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "10m"
+    limits:
+      memory: "256Mi"
+      cpu: "200m"
+
 # Additional role bindings. For development, we are generally installing argo
 # into an existing tenant namespace (such as 'default'). So we can bind the
 # argo workflow to the tenant service account.
