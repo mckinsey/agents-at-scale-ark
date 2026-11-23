@@ -492,14 +492,7 @@ The aggregated apiserver enforces the same access control as the rest of the clu
 
 ## Availability and multi-replica behaviour
 
-The chart defaults to a single replica. Understand what that means before running it in production: when the aggregated apiserver is unavailable, the `ark.mckinsey.com` APIService goes unavailable, which degrades kube-apiserver API discovery and the garbage-collection and namespace controllers **cluster-wide** — a standard Kubernetes aggregation-layer failure mode, not something specific to Ark. A single replica is therefore a cluster-wide single point of failure during pod restarts, node drains, and crashes.
-
-For production, run two replicas and enable the disruption budget:
-
-```bash
---set replicas=2 --set podDisruptionBudget.enabled=true
-```
-
+The chart defaults to two replicas, a PodDisruptionBudget (`minAvailable: 1`) and a `topologySpread` rule that prefers different nodes. When the aggregated apiserver is unavailable, the `ark.mckinsey.com` APIService goes unavailable, which degrades kube-apiserver API discovery and the garbage-collection and namespace controllers **cluster-wide** — a standard Kubernetes aggregation-layer failure mode, not something specific to Ark. A single replica is a cluster-wide single point of failure during pod restarts, node drains, and crashes, so do not lower `replicas` to 1 in production.
 How multiple replicas behave:
 
 - **API serving is active-active.** Every replica serves reads and writes directly against Postgres; the Service load-balances across them. Killing any one pod leaves the APIService available.
