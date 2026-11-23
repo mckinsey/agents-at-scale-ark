@@ -150,9 +150,16 @@ export function ToolApprovalsSection({
                       items={ON_TIMEOUT_ITEMS}
                       value={effective?.onTimeout ?? undefined}
                       disabled={disabled}
-                      onValueChange={(value: unknown) =>
-                        writeOverride({ onTimeout: String(value) })
-                      }>
+                      onValueChange={(value: unknown) => {
+                        // Base UI emits onValueChange even when the selection
+                        // echoes the displayed value. Persist only a genuine
+                        // change so the dropdown never copies the Tool's own
+                        // onTimeout into the agent spec.
+                        const next = String(value);
+                        if (next === (effective?.onTimeout ?? undefined))
+                          return;
+                        writeOverride({ onTimeout: next });
+                      }}>
                       <SelectTrigger id={onTimeoutId}>
                         <SelectValue placeholder="Select" />
                       </SelectTrigger>

@@ -193,5 +193,68 @@ describe('ToolApprovalsSection', () => {
 
       expect(screen.getByLabelText('Timeout')).toHaveValue('10m');
     });
+
+    it('writes only the timeout, not the Tool onTimeout, when the timeout alone changes', async () => {
+      const onApprovalChange = vi.fn();
+      const user = userEvent.setup();
+      renderSection({
+        getToolApproval: () => undefined,
+        getEffectiveToolApproval: () => ({
+          required: true,
+          onTimeout: 'reject',
+        }),
+        isToolApprovalEnforced: () => true,
+        onApprovalChange,
+      });
+
+      await user.type(screen.getByLabelText('Timeout'), '5');
+
+      expect(onApprovalChange).toHaveBeenLastCalledWith('write-file', {
+        timeout: '5',
+      });
+      for (const [, approval] of onApprovalChange.mock.calls) {
+        expect(approval).not.toHaveProperty('onTimeout');
+      }
+    });
+
+    it('ignores the on-timeout dropdown echoing the Tool default', async () => {
+      const onApprovalChange = vi.fn();
+      const user = userEvent.setup({ pointerEventsCheck: 0 });
+      renderSection({
+        getToolApproval: () => undefined,
+        getEffectiveToolApproval: () => ({
+          required: true,
+          onTimeout: 'reject',
+        }),
+        isToolApprovalEnforced: () => true,
+        onApprovalChange,
+      });
+
+      await user.click(screen.getByLabelText('On timeout'));
+      await user.click(await screen.findByRole('option', { name: 'reject' }));
+
+      expect(onApprovalChange).not.toHaveBeenCalled();
+    });
+
+    it('writes an on-timeout override when a different value is picked', async () => {
+      const onApprovalChange = vi.fn();
+      const user = userEvent.setup({ pointerEventsCheck: 0 });
+      renderSection({
+        getToolApproval: () => undefined,
+        getEffectiveToolApproval: () => ({
+          required: true,
+          onTimeout: 'reject',
+        }),
+        isToolApprovalEnforced: () => true,
+        onApprovalChange,
+      });
+
+      await user.click(screen.getByLabelText('On timeout'));
+      await user.click(await screen.findByRole('option', { name: 'proceed' }));
+
+      expect(onApprovalChange).toHaveBeenCalledWith('write-file', {
+        onTimeout: 'proceed',
+      });
+    });
   });
 });
