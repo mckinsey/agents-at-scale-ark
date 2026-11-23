@@ -1,7 +1,8 @@
 """Workflow listing through Argo Server, sorted by start time newest first.
 
-Argo Server is called without credentials (--auth-mode=server) and reads with
-its own service account, so callers must authorize against Kubernetes RBAC first.
+Argo Server is called with the token in ARGO_SERVER_TOKEN_FILE when set, and
+otherwise without credentials (--auth-mode=server), reading with its own service
+account. Either way callers must authorize against Kubernetes RBAC first.
 """
 import logging
 import os
@@ -14,6 +15,7 @@ import httpx
 logger = logging.getLogger(__name__)
 
 ARGO_SERVER_URL_ENV = "ARGO_SERVER_URL"
+ARGO_SERVER_TOKEN_FILE_ENV = "ARGO_SERVER_TOKEN_FILE"
 ARGO_SERVER_TIMEOUT_SECONDS = 10.0
 
 WORKFLOW_NAME_FILTER_PATTERN = re.compile(r"[a-z0-9.-]+")
@@ -31,6 +33,14 @@ def get_argo_server_url() -> str:
     return os.getenv(ARGO_SERVER_URL_ENV, "").rstrip("/")
 
 
+def _auth_headers() -> dict:
+    token_file = os.getenv(ARGO_SERVER_TOKEN_FILE_ENV, "")
+    if not token_file:
+        return {}
+    with open(token_file) as f:
+        return {"Authorization": f"Bearer {f.read().strip()}"}
+
+
 async def get_argo_server_version(base_url: str) -> Optional[str]:
     """Fetch the Argo Server version string, or None if it cannot be determined.
 
@@ -41,7 +51,7 @@ async def get_argo_server_version(base_url: str) -> Optional[str]:
     url = f"{base_url}/api/v1/version"
     try:
         async with httpx.AsyncClient(timeout=ARGO_SERVER_TIMEOUT_SECONDS) as http_client:
-            response = await http_client.get(url)
+            response = await http_client.get(url, headers=_auth_headers())
         response.raise_for_status()
         data = response.json()
     except (httpx.HTTPError, httpx.InvalidURL, ValueError) as e:
@@ -129,7 +139,7 @@ async def list_workflows(
     url = f"{base_url}/api/v1/workflows/{quote(namespace, safe='')}"
     try:
         async with httpx.AsyncClient(timeout=ARGO_SERVER_TIMEOUT_SECONDS) as http_client:
-            response = await http_client.get(url, params=params)
+            response = await http_client.get(url, params=params, headers=_auth_headers())
         response.raise_for_status()
         body = response.json()
     except (httpx.HTTPError, ValueError) as e:
@@ -146,3 +156,79 @@ async def list_workflows(
 
 def _started_at(workflow: dict) -> str:
     return (workflow.get("status") or {}).get("startedAt") or ""
+
+
+async def find_archived_workflow_uid(
+    base_url: str,
+    namespace: str,
+    workflow_name: str,
+) -> Optional[str]:
+    url = f"{base_url}/api/v1/archived-workflows"
+    params = {
+        "namespace": namespace,
+        "listOptions.fieldSelector": f"metadata.name={workflow_name}",
+        "nameFilter": "Exact",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=ARGO_SERVER_TIMEOUT_SECONDS) as http_client:
+            response = await http_client.get(url, params=params, headers=_auth_headers())
+        response.raise_for_status()
+        body = response.json()
+    except (httpx.HTTPError, ValueError) as e:
+        logger.warning(f"Argo Server archived workflow lookup failed for {workflow_name}: {e}")
+        return None
+    items = body.get("items") or []
+    if not items:
+        return None
+    return (items[0].get("metadata") or {}).get("uid") or None
+
+
+async def get_workflow_log(
+    base_url: str,
+    namespace: str,
+    workflow_name: str,
+    node_id: str,
+    container: str = "main",
+    archived_uid: Optional[str] = None,
+) -> Optional[str]:
+    """Fetch a workflow node's ARCHIVED log through Argo Server's artifact endpoint.
+
+    When the pod is gone, the live pod-log streaming endpoint serves nothing, so
+    we read the ``{container}-logs`` artifact (e.g. from S3) that ``archiveLogs:
+    true`` uploaded for the node. This is the durable fallback for the Kubernetes
+    pod-log API, which only sees logs the kubelet still retains on the node.
+
+    Returns the raw log text, or None when Argo Server has no archived log for
+    the node (so the caller can degrade to the "pod deleted" message).
+    """
+    artifact = f"{container}-logs"
+    if archived_uid:
+        workflow_path = f"archived-workflows/{quote(archived_uid, safe='')}"
+    else:
+        workflow_path = f"workflows/{quote(workflow_name, safe='')}"
+    url = (
+        f"{base_url}/artifact-files/{quote(namespace, safe='')}"
+        f"/{workflow_path}"
+        f"/{quote(node_id, safe='')}/outputs/{quote(artifact, safe='')}"
+    )
+    try:
+        async with httpx.AsyncClient(timeout=ARGO_SERVER_TIMEOUT_SECONDS) as http_client:
+            response = await http_client.get(url, headers=_auth_headers())
+        response.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        # A 404 just means nothing was archived for this node — the normal case
+        # for workflows that ran before archiveLogs was enabled. Don't shout.
+        if e.response.status_code == 404:
+            logger.debug(f"No archived log for {workflow_name}/{node_id}")
+        else:
+            logger.warning(
+                f"Argo Server archived-log fetch failed for {workflow_name}/{node_id}: {e}"
+            )
+        return None
+    except httpx.HTTPError as e:
+        logger.warning(
+            f"Argo Server archived-log fetch failed for {workflow_name}/{node_id}: {e}"
+        )
+        return None
+
+    return response.text
