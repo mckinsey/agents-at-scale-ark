@@ -28,19 +28,19 @@ type fairScheduler struct {
 	// max is the global concurrency bound (MaxConcurrentQueries).
 	max int
 	// keyExpiry drops a queued key that has not retried for this long, so a key
-	// missed by every removal path cannot keep its namespace waiting forever.
+	// missed by every removal path stops counting toward its namespace's share.
+	// Expiry is checked on scheduler calls: on an idle pool, an expired key is
+	// dropped and counted in the expiry metric on the next call.
 	keyExpiry time.Duration
 
 	inFlight    int
 	perNS       map[string]int
 	queued      map[string]map[types.NamespacedName]time.Time
 	lastAttempt map[string]time.Time
-	lastPrune   time.Time
+	nextExpiry  time.Time
 
 	now func() time.Time
 }
-
-const queuedKeyPruneInterval = time.Second
 
 func newFairScheduler(maxConcurrent int, keyExpiry time.Duration) *fairScheduler {
 	return &fairScheduler{
@@ -110,6 +110,9 @@ func (s *fairScheduler) forget(key types.NamespacedName) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	if _, queued := s.queued[key.Namespace][key]; !queued {
+		return
+	}
 	s.forgetLocked(key)
 	s.publishLocked(key.Namespace)
 }
@@ -181,6 +184,9 @@ func (s *fairScheduler) markQueuedLocked(key types.NamespacedName, now time.Time
 		s.queued[key.Namespace] = keys
 	}
 	keys[key] = now
+	if deadline := now.Add(s.keyExpiry); s.nextExpiry.IsZero() || deadline.Before(s.nextExpiry) {
+		s.nextExpiry = deadline
+	}
 }
 
 func (s *fairScheduler) forgetLocked(key types.NamespacedName) {
@@ -196,15 +202,20 @@ func (s *fairScheduler) forgetLocked(key types.NamespacedName) {
 }
 
 func (s *fairScheduler) pruneQueuedLocked(now time.Time) {
-	if !s.lastPrune.IsZero() && now.Sub(s.lastPrune) < queuedKeyPruneInterval {
+	if s.nextExpiry.IsZero() || !now.After(s.nextExpiry) {
 		return
 	}
-	s.lastPrune = now
+	var next time.Time
 	for ns, keys := range s.queued {
 		for key, seen := range keys {
-			if now.Sub(seen) > s.keyExpiry {
+			deadline := seen.Add(s.keyExpiry)
+			if now.After(deadline) {
 				delete(keys, key)
 				queryFairnessWaitExpiredTotal.WithLabelValues(ns).Inc()
+				continue
+			}
+			if next.IsZero() || deadline.Before(next) {
+				next = deadline
 			}
 		}
 		if len(keys) == 0 {
@@ -212,6 +223,7 @@ func (s *fairScheduler) pruneQueuedLocked(now time.Time) {
 			delete(s.lastAttempt, ns)
 		}
 	}
+	s.nextExpiry = next
 }
 
 func (s *fairScheduler) observeRetryLocked(ns string, now time.Time) {

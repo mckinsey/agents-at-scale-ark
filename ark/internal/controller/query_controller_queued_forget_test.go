@@ -39,35 +39,49 @@ func newQueuedForgetReconciler(t *testing.T, objs ...client.Object) (*QueryRecon
 
 func newQueuedForgetQuery(phase string) *arkv1alpha1.Query {
 	q := &arkv1alpha1.Query{
-		ObjectMeta: metav1.ObjectMeta{Name: "queued-query", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "queued-query",
+			Namespace:  "default",
+			Finalizers: []string{finalizer},
+		},
 		Spec: arkv1alpha1.QuerySpec{
 			Target: &arkv1alpha1.QueryTarget{Type: "agent", Name: "test-agent"},
 			TTL:    &metav1.Duration{Duration: time.Hour},
 		},
 	}
 	q.Status.Phase = phase
+	q.Status.Conditions = []metav1.Condition{{
+		Type:               "Completed",
+		Status:             metav1.ConditionFalse,
+		Reason:             "QueryNotStarted",
+		LastTransitionTime: metav1.Now(),
+	}}
 	return q
+}
+
+func reconcileQuery(t *testing.T, r *QueryReconciler, key types.NamespacedName) ctrl.Result {
+	t.Helper()
+	result, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: key})
+	require.NoError(t, err)
+	return result
 }
 
 func TestQueuedQueryForgotten_WhenDeleted(t *testing.T) {
 	r, key := newQueuedForgetReconciler(t)
 
-	_, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: key})
+	reconcileQuery(t, r, key)
 
-	require.NoError(t, err)
 	assert.NotContains(t, r.sched.queued, "default")
 }
 
 func TestQueuedQueryForgotten_WhenBeingDeleted(t *testing.T) {
-	r, key := newQueuedForgetReconciler(t)
 	q := newQueuedForgetQuery(statusQueued)
 	now := metav1.Now()
 	q.DeletionTimestamp = &now
+	r, key := newQueuedForgetReconciler(t, q)
 
-	result, err := r.handleFinalizer(context.Background(), q)
+	reconcileQuery(t, r, key)
 
-	require.NoError(t, err)
-	require.NotNil(t, result)
 	assert.NotContains(t, r.sched.queued, key.Namespace)
 }
 
@@ -76,9 +90,10 @@ func TestQueuedQueryForgotten_WhenCanceled(t *testing.T) {
 	q.Spec.Cancel = true
 	r, key := newQueuedForgetReconciler(t, q)
 
-	_, err := r.handleQueryExecution(context.Background(), ctrl.Request{NamespacedName: key}, *q)
+	result := reconcileQuery(t, r, key)
+	require.True(t, result.Requeue, "cancel requeues so the terminal phase is reconciled")
+	reconcileQuery(t, r, key)
 
-	require.NoError(t, err)
 	assert.NotContains(t, r.sched.queued, key.Namespace)
 }
 
@@ -88,18 +103,37 @@ func TestQueuedQueryForgotten_WhenTimedOutInQueue(t *testing.T) {
 	q.CreationTimestamp = metav1.NewTime(time.Now().Add(-time.Minute))
 	r, key := newQueuedForgetReconciler(t, q)
 
-	_, err := r.handleQueryExecution(context.Background(), ctrl.Request{NamespacedName: key}, *q)
+	result := reconcileQuery(t, r, key)
+	require.True(t, result.Requeue, "a pre-execution timeout requeues so the terminal phase is reconciled")
+	reconcileQuery(t, r, key)
 
-	require.NoError(t, err)
 	assert.NotContains(t, r.sched.queued, key.Namespace)
 }
 
 func TestQueuedQueryForgotten_WhenTerminal(t *testing.T) {
-	q := newQueuedForgetQuery(statusDone)
-	r, key := newQueuedForgetReconciler(t, q)
+	r, key := newQueuedForgetReconciler(t, newQueuedForgetQuery(statusDone))
 
-	_, err := r.handleQueryExecution(context.Background(), ctrl.Request{NamespacedName: key}, *q)
+	reconcileQuery(t, r, key)
 
-	require.NoError(t, err)
 	assert.NotContains(t, r.sched.queued, key.Namespace)
+}
+
+func TestQueuedQueryForgotten_WhenInAnyPhasePastPreExecution(t *testing.T) {
+	r, key := newQueuedForgetReconciler(t, newQueuedForgetQuery(statusInputRequired))
+
+	reconcileQuery(t, r, key)
+
+	assert.NotContains(t, r.sched.queued, key.Namespace, "a phase with no explicit removal path still drops the key")
+}
+
+func TestQueuedQueryKept_WhileWaitingForCapacity(t *testing.T) {
+	for _, phase := range []string{"", statusPending, statusQueued} {
+		t.Run("phase="+phase, func(t *testing.T) {
+			r, key := newQueuedForgetReconciler(t, newQueuedForgetQuery(phase))
+
+			reconcileQuery(t, r, key)
+
+			assert.Contains(t, r.sched.queued, key.Namespace, "a query still waiting for a slot stays queued")
+		})
+	}
 }

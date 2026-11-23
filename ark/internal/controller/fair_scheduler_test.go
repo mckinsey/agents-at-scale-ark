@@ -306,20 +306,62 @@ func TestFairScheduler_RetryingKeyDoesNotExpire(t *testing.T) {
 	assert.Zero(t, waitExpired("alive-tenant"))
 }
 
-func TestFairScheduler_PruneRunsAtMostOncePerInterval(t *testing.T) {
+func TestFairScheduler_ExpiredKeyIsNeverCounted(t *testing.T) {
+	s, clock := newTestScheduler(2)
+	start := *clock
+	busy1 := types.NamespacedName{Namespace: "exact-busy", Name: "q1"}
+	busy2 := types.NamespacedName{Namespace: "exact-busy", Name: "q2"}
+
+	require.True(t, s.tryAcquire(busy1))
+	require.True(t, s.tryAcquire(busy2))
+	assert.False(t, s.tryAcquire(nsKey("exact-tenant")))
+	s.release("exact-busy")
+	s.release("exact-busy")
+
+	*clock = start.Add(time.Minute)
+	require.True(t, s.tryAcquire(busy1))
+	assert.Contains(t, s.queued, "exact-tenant", "a key is not expired at exactly the expiry")
+
+	*clock = start.Add(time.Minute + time.Millisecond)
+	assert.True(t, s.tryAcquire(busy2), "a key expired 1ms ago no longer reserves a free slot")
+	assert.Equal(t, float64(1), waitExpired("exact-tenant"))
+	assert.NotContains(t, s.queued, "exact-tenant")
+}
+
+func TestFairScheduler_RefreshedKeyIsKeptPastItsFirstDeadline(t *testing.T) {
+	s, clock := newTestScheduler(1)
+	start := *clock
+
+	require.True(t, s.tryAcquire(nsKey("refresh-busy")))
+	assert.False(t, s.tryAcquire(nsKey("refresh-tenant")))
+	*clock = start.Add(50 * time.Second)
+	assert.False(t, s.tryAcquire(nsKey("refresh-tenant")))
+
+	*clock = start.Add(time.Minute + time.Millisecond)
+	assert.False(t, s.tryAcquire(nsKey("refresh-other")))
+	assert.Contains(t, s.queued, "refresh-tenant", "the retried key is kept when its first deadline passes")
+	assert.Zero(t, waitExpired("refresh-tenant"))
+	assert.Equal(t, start.Add(50*time.Second+time.Minute), s.nextExpiry)
+
+	*clock = start.Add(50*time.Second + time.Minute + time.Millisecond)
+	assert.False(t, s.tryAcquire(nsKey("refresh-other")))
+	assert.NotContains(t, s.queued, "refresh-tenant", "the key expires one expiry after its last retry")
+	assert.Equal(t, float64(1), waitExpired("refresh-tenant"))
+}
+
+func TestFairScheduler_ForgetOfUnqueuedKeyHasNoSideEffects(t *testing.T) {
 	s, clock := newTestScheduler(1)
 
-	require.True(t, s.tryAcquire(nsKey("rate-busy")))
-	assert.False(t, s.tryAcquire(nsKey("rate-tenant")))
-
+	require.True(t, s.tryAcquire(nsKey("noop-busy")))
+	assert.False(t, s.tryAcquire(nsKey("noop-tenant")))
 	*clock = clock.Add(time.Minute + time.Millisecond)
-	s.lastPrune = clock.Add(-queuedKeyPruneInterval / 2)
-	s.forget(nsKey("unrelated"))
-	assert.Contains(t, s.queued, "rate-tenant", "a prune within the interval must be skipped")
 
-	*clock = clock.Add(queuedKeyPruneInterval)
-	s.forget(nsKey("unrelated"))
-	assert.NotContains(t, s.queued, "rate-tenant", "the next prune after the interval drops the expired key")
+	s.forget(nsKey("noop-unqueued"))
+	assert.Contains(t, s.queued, "noop-tenant", "forgetting a key that is not queued does not prune or publish")
+
+	s.forget(nsKey("noop-tenant"))
+	assert.NotContains(t, s.queued, "noop-tenant")
+	assert.Zero(t, waitExpired("noop-tenant"), "a forgotten key is not counted as expired")
 }
 
 func TestFairScheduler_LargeBacklogWithSlowRetriesKeepsQuietShare(t *testing.T) {

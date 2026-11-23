@@ -184,6 +184,10 @@ func (r *QueryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
+	if !isPreExecutionPhase(obj.Status.Phase) || !obj.DeletionTimestamp.IsZero() {
+		r.forgetQueued(req.NamespacedName)
+	}
+
 	// Garbage-collect the Query once it has been in a terminal phase for
 	// longer than its TTL. TTL is measured from completion, not creation,
 	// so long-running or queued queries are never reaped mid-flight.
@@ -259,8 +263,6 @@ func (r *QueryReconciler) handleFinalizer(ctx context.Context, obj *arkv1alpha1.
 		return nil, nil
 	}
 
-	r.forgetQueued(types.NamespacedName{Name: obj.Name, Namespace: obj.Namespace})
-
 	if controllerutil.ContainsFinalizer(obj, finalizer) {
 		if err := r.finalize(ctx, obj); err != nil {
 			log := logf.FromContext(ctx)
@@ -300,7 +302,6 @@ func (r *QueryReconciler) patchFinalizers(ctx context.Context, obj *arkv1alpha1.
 func (r *QueryReconciler) handleQueryExecution(ctx context.Context, req ctrl.Request, obj arkv1alpha1.Query) (ctrl.Result, error) {
 	if obj.Spec.Cancel && !isTerminalPhase(obj.Status.Phase) {
 		r.cleanupExistingOperation(req.NamespacedName)
-		r.forgetQueued(req.NamespacedName)
 		if err := r.updateStatus(ctx, &obj, statusCanceled); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -313,7 +314,6 @@ func (r *QueryReconciler) handleQueryExecution(ctx context.Context, req ctrl.Req
 	// Enforces per-round pre-execution wall-SLO.
 	if isPreExecutionPhase(obj.Status.Phase) && remainingBudget(&obj) <= 0 {
 		r.cleanupExistingOperation(req.NamespacedName)
-		r.forgetQueued(req.NamespacedName)
 		if err := r.failQueryOnTimeout(ctx, &obj, reasonTimedOutInQueue, preExecutionTimeoutMessage(obj.Status.Phase)); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -323,7 +323,6 @@ func (r *QueryReconciler) handleQueryExecution(ctx context.Context, req ctrl.Req
 
 	switch obj.Status.Phase {
 	case statusDone, statusError, statusCanceled:
-		r.forgetQueued(req.NamespacedName)
 		remaining := ttlRemaining(&obj)
 		if remaining == 0 {
 			return ctrl.Result{}, nil
