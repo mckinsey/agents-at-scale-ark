@@ -104,6 +104,7 @@
     "proxy-addr": "^2.0.8",
     "source-map-js": "^1.2.2",
     "follow-redirects": "^1.16.1",
-    "body-parser": "^2.4.0"
+    "body-parser": "^2.4.0",
+    "parse5": "^8.1.1"
   }
 }
