@@ -42,9 +42,9 @@ The **messages**, **operation events**, and **sessions** stores can each opt in 
 
 When using the default etcd-backed storage, scalability is bounded by the cluster's etcd capacity. For deployments with a high volume of resources, the [PostgreSQL storage backend](/operations-guide/postgres-storage-backend) provides more headroom. PostgreSQL connection pooling is configured with sensible defaults (max open connections, idle connection management, connection lifetime limits) and can be tuned for higher throughput.
 
-In load tests on a Kind cluster, a `LIST` of 2,000 objects of 10 KB took 1.68 s (P50) on PostgreSQL and 0.71 s on etcd. The aggregated apiserver has no watch cache, so every `LIST` reads all rows from PostgreSQL.
+In load tests on a Kind cluster, a `LIST` of 2,000 objects of 10 KB took 1.68 s (P50) on PostgreSQL and 0.71 s on etcd. The aggregated apiserver has no watch cache, so every `LIST` reads all rows from PostgreSQL. That `LIST` had no `resourceVersion`; informers send `resourceVersion=0`, which is faster.
 
-Adding apiserver replicas makes writes and watches slower, because each replica with watches re-reads the last 500 resource versions of that kind on every change notification. Load: 20 updates per second, 10 watchers, 30 seconds.
+Replicas share load only with aggregator routing (see [Replicas](#replicas)). With routing off, a second replica gets no watches, so it adds no re-reads and shares no load. With routing on, reads scale, but writes and watches get slower: on every change notification, each replica with watches re-reads the rows of that kind among the last 500 resource versions. `resource_version` is one sequence for all kinds, so the window is 500 versions overall, filtered by kind; with the single kind in this benchmark, the two are the same. The table was measured with routing on. Load: 20 updates per second, 10 watchers, 30 seconds.
 
 | | 1 replica | 3 replicas |
 |---|---|---|
@@ -54,17 +54,17 @@ Adding apiserver replicas makes writes and watches slower, because each replica 
 | Update latency P50 (100 KB) | 57 ms | 745 ms |
 | Watch lag P50 (100 KB) | 246 ms | 2.2 s |
 
-Change notifications run inside the write transaction and serialize commits on a PostgreSQL lock. With 32 concurrent clients, PostgreSQL did 4,948 commits per second without notifications and 298 with them. This limit applies to the PostgreSQL instance, whatever the replica count.
+Change notifications run inside the write transaction and serialize commits on a PostgreSQL lock. With 32 concurrent clients, each inserting one row (pgbench), PostgreSQL did 4,948 commits per second without notifications and 298 with them. This limit applies to the PostgreSQL instance, whatever the replica count.
 
 These numbers come from a shared laptop. Compare the ratios, not the absolute values.
 
 #### Replicas
 
-Extra replicas share load only when kube-apiserver runs with `--enable-aggregator-routing=true`. Without it, kube-apiserver reaches the APIService through the Service ClusterIP over one HTTP/2 connection, and kube-proxy pins that connection to one pod. With three replicas, one pod served 3,000 requests and the other two served none. With the flag, the split was 507, 515 and 478. Managed clusters often do not allow the flag. Without it, extra replicas add availability, not capacity.
+Extra replicas share load only when requests reach them. kube-apiserver reaches the APIService through the Service ClusterIP over one HTTP/2 connection, and kube-proxy pins that connection to one pod. On Kind, with three replicas and a single kube-apiserver, one pod served 3,000 requests and the other two served none. With `--enable-aggregator-routing=true`, the split was 507, 515 and 478. With several kube-apiserver instances, each holds its own connection, so replicas can get load without the flag. Check requests per pod on your cluster instead of assuming. If one pod takes all the requests, extra replicas add availability, not capacity.
 
 #### Memory
 
-A `LIST` holds all rows in memory before encoding, so the peak is about four times the response size. In a load test, a single unpaginated `LIST` of 2,000 Queries of 100 KB was OOM-killed at a 256Mi limit, and so was a `LIST` paginated at 250. With a 2Gi limit the peak was 790Mi. Size `resources.limits.memory` from the largest `LIST` you expect.
+A `LIST` holds all rows in memory before encoding, so the peak is about four times the response size, for each concurrent unpaginated `LIST`. In a load test, a single unpaginated `LIST` of 2,000 Queries of 100 KB was OOM-killed at a 256Mi limit, and peaked at 790Mi with a 2Gi limit. The same `LIST` paginated at 250 peaked at 207Mi at 256Mi with no OOM, because the limit reaches the SQL query. Two such unpaginated `LIST`s at once were OOM-killed at 1Gi. Paginate large `LIST`s, and size `resources.limits.memory` from about four times the response, times the number of concurrent unpaginated `LIST`s.
 
 See [Core Architecture → Storage backends](/reference/core-architecture#storage-backends) for the trade-off and [PostgreSQL Storage Backend](/operations-guide/postgres-storage-backend) for setup.
 
