@@ -1,0 +1,228 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: api-keys-namespace
+  labels:
+    requires-images: "true"
+spec:
+  description: >
+    #3622: the /v1/api-keys routes accept a namespace query parameter like
+    every other ark-api resource route. Deploys a real ark-api from this
+    build's image and checks that a key with no parameter lands in ark-api's
+    own namespace, that a namespace ark-api's ServiceAccount cannot reach
+    answers 403, that granting that ServiceAccount Secret access lets a key be
+    created and isolated in the second namespace, and that in AUTH_MODE=basic
+    the key authenticates only when the request names the namespace it lives in.
+  timeouts:
+    apply: 120s
+    assert: 120s
+    exec: 180s
+
+  steps:
+  - name: install-ark-api-open
+    try:
+    - script:
+        timeout: 240s
+        content: |
+          helm upgrade --install ark-api ../../services/ark-api/chart \
+            --namespace "$NAMESPACE" \
+            ${ARK_API_IMAGE:+--set app.image.repository=${ARK_API_IMAGE}} \
+            ${ARK_API_IMAGE_TAG:+--set app.image.tag=${ARK_API_IMAGE_TAG}} \
+            --wait --timeout=180s
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - script:
+        content: |
+          kubectl -n $NAMESPACE get pods -o wide
+          kubectl -n $NAMESPACE logs -l app=ark-api --tail=200 || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    cleanup:
+    - script:
+        content: |
+          helm uninstall ark-api --namespace $NAMESPACE --wait --timeout=120s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: setup-second-namespace-and-curl
+    try:
+    - script:
+        content: |
+          set -eu
+          kubectl create namespace "${NAMESPACE}-keys"
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - apply:
+        resource:
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: api-keys-curl
+          spec:
+            containers:
+              - name: curl
+                image: curlimages/curl:8.11.1
+                command: ["sleep", "900"]
+            restartPolicy: Never
+            terminationGracePeriodSeconds: 0
+    - wait:
+        apiVersion: v1
+        kind: Pod
+        name: api-keys-curl
+        timeout: 120s
+        for:
+          condition:
+            name: Ready
+            value: 'True'
+    cleanup:
+    - script:
+        content: |
+          kubectl delete namespace "${NAMESPACE}-keys" --wait=false || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: default-namespace-create-and-forbidden-elsewhere
+    try:
+    - script:
+        timeout: 90s
+        content: |
+          set -eu
+          BASE="http://ark-api.$NAMESPACE.svc.cluster.local/v1/api-keys"
+
+          # No namespace -> stored in ark-api's own namespace
+          CODE=$(kubectl exec api-keys-curl -n "$NAMESPACE" -- \
+            curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE" \
+            -H 'Content-Type: application/json' -d '{"name":"home-key"}')
+          echo "POST (no namespace) -> $CODE"
+          [ "$CODE" = "201" ] || { echo "FAIL: expected 201"; exit 1; }
+          kubectl get secrets -n "$NAMESPACE" --field-selector type=ark.mckinsey.com/api-key -o name \
+            | grep -q api-key || { echo "FAIL: key not stored in $NAMESPACE"; exit 1; }
+
+          # Target a namespace ark-api's ServiceAccount cannot reach -> clean 403
+          CODE=$(kubectl exec api-keys-curl -n "$NAMESPACE" -- \
+            curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE?namespace=${NAMESPACE}-keys" \
+            -H 'Content-Type: application/json' -d '{"name":"blocked"}')
+          echo "POST ?namespace=${NAMESPACE}-keys (no RBAC) -> $CODE"
+          [ "$CODE" = "403" ] || { echo "FAIL: expected 403 before RBAC grant"; exit 1; }
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - script:
+        content: |
+          kubectl -n $NAMESPACE logs -l app=ark-api --tail=100 || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: grant-rbac-and-create-in-second-namespace
+    try:
+    - script:
+        timeout: 120s
+        content: |
+          set -eu
+          # Grant the ark-api ServiceAccount Secret access in the second namespace.
+          kubectl -n "${NAMESPACE}-keys" create role ark-api-secrets \
+            --verb=create,get,list,patch,delete --resource=secrets
+          kubectl -n "${NAMESPACE}-keys" create rolebinding ark-api-secrets \
+            --role=ark-api-secrets --serviceaccount="${NAMESPACE}:ark-api-sa"
+
+          # Create a key in the second namespace; retry while RBAC propagates.
+          BASE="http://ark-api.$NAMESPACE.svc.cluster.local/v1/api-keys"
+          PK=""
+          for _ in $(seq 1 30); do
+            RESP=$(kubectl exec api-keys-curl -n "$NAMESPACE" -- \
+              curl -s -X POST "$BASE?namespace=${NAMESPACE}-keys" \
+              -H 'Content-Type: application/json' -d '{"name":"tenant-key"}')
+            PK=$(echo "$RESP" | jq -r '.public_key // empty')
+            [ -n "$PK" ] && break
+            sleep 2
+          done
+          [ -n "$PK" ] || { echo "FAIL: key not created in ${NAMESPACE}-keys: $RESP"; exit 1; }
+          echo "created key $PK in ${NAMESPACE}-keys"
+
+          # Persist the credentials for the auth step (lives with the test namespace).
+          SK=$(echo "$RESP" | jq -r '.secret_key')
+          kubectl create secret generic apikey-creds -n "$NAMESPACE" \
+            --from-literal=pk="$PK" --from-literal=sk="$SK"
+
+          # Isolation: the key is in the second namespace only.
+          kubectl get secrets -n "${NAMESPACE}-keys" --field-selector type=ark.mckinsey.com/api-key -o name \
+            | grep -q api-key || { echo "FAIL: key not stored in ${NAMESPACE}-keys"; exit 1; }
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - script:
+        content: |
+          kubectl -n $NAMESPACE logs -l app=ark-api --tail=100 || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: switch-to-basic-auth
+    try:
+    - script:
+        timeout: 240s
+        content: |
+          helm upgrade --install ark-api ../../services/ark-api/chart \
+            --namespace "$NAMESPACE" \
+            ${ARK_API_IMAGE:+--set app.image.repository=${ARK_API_IMAGE}} \
+            ${ARK_API_IMAGE_TAG:+--set app.image.tag=${ARK_API_IMAGE_TAG}} \
+            -f manifests/ark-api-basic-values.yaml \
+            --wait --timeout=180s
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - script:
+        content: |
+          kubectl -n $NAMESPACE get pods -o wide
+          kubectl -n $NAMESPACE logs -l app=ark-api --tail=200 || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: authenticate-in-key-namespace
+    try:
+    - script:
+        timeout: 90s
+        content: |
+          set -eu
+          PK=$(kubectl get secret apikey-creds -n "$NAMESPACE" -o jsonpath='{.data.pk}' | base64 -d)
+          SK=$(kubectl get secret apikey-creds -n "$NAMESPACE" -o jsonpath='{.data.sk}' | base64 -d)
+          BASE="http://ark-api.$NAMESPACE.svc.cluster.local/v1/api-keys"
+
+          # Correct namespace -> middleware resolves the key there -> 200
+          CODE=$(kubectl exec api-keys-curl -n "$NAMESPACE" -- \
+            curl -s -o /dev/null -w '%{http_code}' -u "$PK:$SK" "$BASE?namespace=${NAMESPACE}-keys")
+          echo "GET ?namespace=${NAMESPACE}-keys -> $CODE"
+          [ "$CODE" = "200" ] || { echo "FAIL: expected 200"; exit 1; }
+
+          # No namespace -> looks in ark-api's own namespace, key absent -> 401
+          CODE=$(kubectl exec api-keys-curl -n "$NAMESPACE" -- \
+            curl -s -o /dev/null -w '%{http_code}' -u "$PK:$SK" "$BASE")
+          echo "GET (no namespace) -> $CODE"
+          [ "$CODE" = "401" ] || { echo "FAIL: expected 401 when the namespace is omitted"; exit 1; }
+
+          # No credentials -> 401
+          CODE=$(kubectl exec api-keys-curl -n "$NAMESPACE" -- \
+            curl -s -o /dev/null -w '%{http_code}' "$BASE?namespace=${NAMESPACE}-keys")
+          echo "GET (no credentials) -> $CODE"
+          [ "$CODE" = "401" ] || { echo "FAIL: expected 401 without credentials"; exit 1; }
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - script:
+        content: |
+          kubectl -n $NAMESPACE logs -l app=ark-api --tail=100 || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)

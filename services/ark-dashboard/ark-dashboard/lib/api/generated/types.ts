@@ -315,21 +315,26 @@ export interface paths {
         };
         /**
          * List Api Keys
-         * @description List all active API keys in the current namespace (without secret keys).
+         * @description List all active API keys in the namespace (without secret keys).
          *     API keys are namespace-scoped for tenant isolation.
          *
+         *     Args:
+         *         namespace: Namespace to list keys from (defaults to current context)
+         *
          *     Returns:
-         *         APIKeyListResponse: List of API keys in the current namespace
+         *         APIKeyListResponse: List of API keys in the namespace
          */
         get: operations["list_api_keys_v1_api_keys_get"];
         put?: never;
         /**
          * Create Api Key
          * @description Create a new API key for service-to-service authentication.
-         *     API keys are namespace-scoped for tenant isolation and stored in the current namespace.
+         *     API keys are namespace-scoped for tenant isolation and stored in the
+         *     supplied namespace, or the current context namespace when omitted.
          *
          *     Args:
          *         body: API key creation request
+         *         namespace: Namespace to store the key in (defaults to current context)
          *
          *     Returns:
          *         APIKeyCreateResponse: The created API key with secret (only shown once)
@@ -353,11 +358,12 @@ export interface paths {
         post?: never;
         /**
          * Delete Api Key
-         * @description Soft delete an API key in the current namespace by marking it as inactive.
+         * @description Soft delete an API key in the namespace by marking it as inactive.
          *     API keys are namespace-scoped for tenant isolation.
          *
          *     Args:
          *         public_key: The public key of the API key to delete
+         *         namespace: Namespace the key lives in (defaults to current context)
          */
         delete: operations["delete_api_key_v1_api_keys__public_key__delete"];
         options?: never;
@@ -5785,7 +5791,10 @@ export interface operations {
     };
     list_api_keys_v1_api_keys_get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -5801,11 +5810,23 @@ export interface operations {
                     "application/json": components["schemas"]["APIKeyListResponse"];
                 };
             };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
         };
     };
     create_api_key_v1_api_keys_post: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -5838,7 +5859,10 @@ export interface operations {
     };
     delete_api_key_v1_api_keys__public_key__delete: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
             header?: never;
             path: {
                 public_key: string;
