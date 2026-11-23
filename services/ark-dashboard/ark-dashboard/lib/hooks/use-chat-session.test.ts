@@ -2134,6 +2134,65 @@ describe('useChatSession - Namespace switch during a running query (#3999)', () 
     expect(storedSession(KEY_A)?.activeQueryName).toBeUndefined();
   });
 
+  it('resumes the query of the target chat when switching away from a busy chat', async () => {
+    globalThis.sessionStorage.setItem(
+      'agent-chat-history',
+      JSON.stringify({
+        [KEY_A]: {
+          sessionId: 'chat-test-agent-a',
+          messages: [{ role: 'user', content: 'question in a' }],
+          activeQueryName: 'q-in-a',
+        },
+        [KEY_B]: {
+          sessionId: 'chat-test-agent-b',
+          messages: [{ role: 'user', content: 'question in b' }],
+          activeQueryName: 'q-in-b',
+        },
+      }),
+    );
+    vi.mocked(chatService.getQueryResult).mockImplementation(
+      async (ns: string, name: string): Promise<ChatResponse> => {
+        if (ns === 'ns-b' && name === 'q-in-b') {
+          return {
+            status: 'done',
+            terminal: true,
+            messages: [{ role: 'assistant', content: 'answer in b' }],
+          };
+        }
+        if (ns === 'ns-a' && name === 'q-in-a') {
+          return { status: 'running', terminal: false };
+        }
+        return { status: 'unknown', terminal: true, notFound: true };
+      },
+    );
+    namespaceState.namespace = 'ns-a';
+
+    const view = renderHook(
+      () => useChatSession({ name: 'test-agent', type: 'agent' }),
+      { wrapper: createWrapper() },
+    );
+    await waitFor(() => {
+      expect(view.result.current.isProcessing).toBe(true);
+    });
+
+    namespaceState.namespace = 'ns-b';
+    view.rerender();
+
+    await waitFor(
+      () => {
+        expect(view.result.current.messages).toEqual([
+          { role: 'user', content: 'question in b' },
+          { role: 'assistant', content: 'answer in b' },
+        ]);
+      },
+      { timeout: 3000 },
+    );
+    expect(chatService.getQueryResult).toHaveBeenCalledWith('ns-b', 'q-in-b');
+    expect(view.result.current.isProcessing).toBe(false);
+    expect(storedSession(KEY_B)?.activeQueryName).toBeUndefined();
+    expect(storedSession(KEY_A)?.activeQueryName).toBe('q-in-a');
+  });
+
   it('keeps a separate chat for an agent of the same name in another namespace', async () => {
     seedRunningQuery(KEY_A, 'q-in-a');
     mockQueryLivesIn('ns-a', 'q-in-a');

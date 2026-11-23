@@ -95,6 +95,7 @@ function finishResumedQuery(
 async function resumeActiveQuery(
   params: UseResumeRunningQueryParams,
   run: ResumeRun,
+  takeOverReleasedProcessing: boolean,
 ): Promise<void> {
   const {
     namespace,
@@ -106,7 +107,7 @@ async function resumeActiveQuery(
     onResume,
     restorePendingApproval,
   } = params;
-  if (!queryName || isProcessing) return;
+  if (!queryName || (isProcessing && !takeOverReleasedProcessing)) return;
 
   onResume(queryName, () => {
     run.stopped = true;
@@ -157,15 +158,19 @@ export function useResumeRunningQuery(
   });
 
   const { namespace, chatKey } = params;
+  const releasedProcessingRef = useRef(false);
 
   useEffect(() => {
     if (!namespace) return;
     const run: ResumeRun = { stopped: false, owner: false };
-    void resumeActiveQuery(paramsRef.current, run);
+    const takeOverReleasedProcessing = releasedProcessingRef.current;
+    releasedProcessingRef.current = false;
+    void resumeActiveQuery(paramsRef.current, run, takeOverReleasedProcessing);
     return () => {
       run.stopped = true;
       if (run.owner) {
         run.owner = false;
+        releasedProcessingRef.current = true;
         paramsRef.current.setIsProcessing(false);
         paramsRef.current.setProcessingPhase(undefined);
       }

@@ -356,4 +356,96 @@ describe('useResumeRunningQuery', () => {
 
     expect(params.setIsProcessing).toHaveBeenCalledTimes(callsBeforeUnmount);
   });
+
+  it('resumes the next chat after releasing the processing state of the previous one', async () => {
+    const { params } = createParams([{ role: 'user', content: 'hello' }]);
+    vi.mocked(chatService.getQueryResult).mockResolvedValue({
+      status: 'running',
+      terminal: false,
+    });
+
+    const view = renderHook(
+      ({ namespace, chatKey, activeQueryName, isProcessing }) =>
+        useResumeRunningQuery({
+          ...params,
+          namespace,
+          chatKey,
+          activeQueryName,
+          isProcessing,
+        }),
+      {
+        initialProps: {
+          namespace: 'test-namespace',
+          chatKey: 'test-namespace/agent-test-agent',
+          activeQueryName: 'q1',
+          isProcessing: false,
+        },
+      },
+    );
+    await waitFor(() => {
+      expect(chatService.getQueryResult).toHaveBeenCalledWith(
+        'test-namespace',
+        'q1',
+      );
+    });
+
+    view.rerender({
+      namespace: 'other-namespace',
+      chatKey: 'other-namespace/agent-test-agent',
+      activeQueryName: 'q2',
+      isProcessing: true,
+    });
+
+    await waitFor(() => {
+      expect(chatService.getQueryResult).toHaveBeenCalledWith(
+        'other-namespace',
+        'q2',
+      );
+    });
+    expect(params.setIsProcessing).toHaveBeenLastCalledWith(true);
+  });
+
+  it('does not resume the next chat while a new turn owns the processing state', async () => {
+    const { params } = createParams([{ role: 'user', content: 'hello' }]);
+    vi.mocked(chatService.getQueryResult).mockResolvedValue({
+      status: 'running',
+      terminal: false,
+    });
+
+    const view = renderHook(
+      ({ namespace, chatKey, activeQueryName, isProcessing }) =>
+        useResumeRunningQuery({
+          ...params,
+          namespace,
+          chatKey,
+          activeQueryName,
+          isProcessing,
+        }),
+      {
+        initialProps: {
+          namespace: 'test-namespace',
+          chatKey: 'test-namespace/agent-test-agent',
+          activeQueryName: 'q1',
+          isProcessing: false,
+        },
+      },
+    );
+    await waitFor(() => {
+      expect(params.onResume).toHaveBeenCalled();
+    });
+    vi.mocked(params.onResume).mock.calls[0][1]();
+
+    view.rerender({
+      namespace: 'other-namespace',
+      chatKey: 'other-namespace/agent-test-agent',
+      activeQueryName: 'q2',
+      isProcessing: true,
+    });
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    expect(chatService.getQueryResult).not.toHaveBeenCalledWith(
+      'other-namespace',
+      'q2',
+    );
+  });
 });
