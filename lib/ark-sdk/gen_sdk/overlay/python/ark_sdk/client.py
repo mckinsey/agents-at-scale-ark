@@ -39,6 +39,8 @@ def set_default_user_agent(user_agent: str):
 def _build_headers(impersonation: Optional[ImpersonationConfig] = None) -> Optional[dict]:
     if impersonation is None:
         return None
+    if not impersonation.username or not impersonation.username.strip():
+        raise ValueError("Impersonation requires a non-empty username")
     headers = {"Impersonate-User": impersonation.username}
     if impersonation.groups:
         # impersonation_patch turns this list into one Impersonate-Group header
