@@ -216,8 +216,8 @@ pool_value() {
 check_contains "apiserver pool defaults to 40"          'value: "40"' "$(pool_value "$as_default")"
 as_pool="$(render_apiserver --set postgresql.maxOpenConns=80)"
 check_contains "apiserver pool override reaches the env" 'value: "80"' "$(pool_value "$as_pool")"
-for bad_pool in 0 -5 abc; do
-    check_render_fails "apiserver rejects maxOpenConns=$bad_pool" 'postgresql.maxOpenConns must be a positive integer' \
+for bad_pool in 0 -5 abc 7.5 true 99999999999; do
+    check_render_fails "apiserver rejects maxOpenConns=$bad_pool" "at '/postgresql/maxOpenConns'" \
         render_apiserver --set "postgresql.maxOpenConns=$bad_pool"
 done
 

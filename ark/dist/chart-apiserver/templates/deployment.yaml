@@ -53,7 +53,7 @@ spec:
               value: {{ .Values.apiserver.port | quote }}
             {{- include "ark-apiserver.postgresEnv" . | nindent 12 }}
             - name: ARK_POSTGRES_MAX_OPEN_CONNS
-              value: {{ include "ark-apiserver.maxOpenConns" . | quote }}
+              value: {{ .Values.postgresql.maxOpenConns | int | quote }}
             {{- if .Values.certManager.enabled }}
             - name: ARK_APISERVER_TLS_CERT_FILE
               value: /etc/ark/apiserver-tls/tls.crt
