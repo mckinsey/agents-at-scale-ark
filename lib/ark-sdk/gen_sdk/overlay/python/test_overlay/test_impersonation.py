@@ -42,6 +42,28 @@ class TestBuildHeaders(unittest.TestCase):
         headers = _build_headers(config)
         self.assertEqual(headers["Impersonate-Group"], ["a,system:masters", "cn=devs,ou=groups,dc=corp"])
 
+    def test_empty_username_raises(self):
+        for username in ["", "   ", "\t"]:
+            with self.subTest(username=username), self.assertRaises(ValueError):
+                _build_headers(ImpersonationConfig(username=username, groups=["team-a"]))
+
+
+class TestApplyImpersonationHeaders(unittest.TestCase):
+
+    def test_sets_headers_for_valid_username(self):
+        from ark_sdk.k8s import apply_impersonation_headers
+
+        api = MagicMock()
+        apply_impersonation_headers(api, ImpersonationConfig(username="jane@acme.com", groups=["team-a"]))
+        api.set_default_header.assert_any_call("Impersonate-User", "jane@acme.com")
+
+    def test_empty_username_raises(self):
+        from ark_sdk.k8s import apply_impersonation_headers
+
+        for username in ["", "   ", "\t"]:
+            with self.subTest(username=username), self.assertRaises(ValueError):
+                apply_impersonation_headers(MagicMock(), ImpersonationConfig(username=username))
+
 
 class TestGetClientImpersonation(unittest.TestCase):
 

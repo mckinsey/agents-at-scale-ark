@@ -1,6 +1,11 @@
 import unittest
 
-from ark_api.auth.middleware import ReservedIdentityError, _extract_claim, _extract_user_identity
+from ark_api.auth.middleware import (
+    EmptyIdentityError,
+    ReservedIdentityError,
+    _extract_claim,
+    _extract_user_identity,
+)
 from ark_api.auth.impersonation_config import ImpersonationSettings
 from ark_api.models.auth import UserIdentity
 
@@ -79,6 +84,24 @@ class TestExtractUserIdentity(unittest.TestCase):
         payload = {"email": "jane@acme.com", "groups": "single-group"}
         identity = _extract_user_identity(payload, self._settings())
         self.assertEqual(identity.groups, ["single-group"])
+
+    def test_empty_username_rejected(self):
+        for username in ["", "   ", "\t", "\n", " \t "]:
+            with self.subTest(username=username), self.assertRaises(EmptyIdentityError):
+                _extract_user_identity({"email": username}, self._settings())
+
+    def test_empty_username_rejected_before_prefix(self):
+        with self.assertRaises(EmptyIdentityError):
+            _extract_user_identity({"email": ""}, self._settings(prefix="oidc:"))
+
+    def test_empty_username_rejected_even_with_groups(self):
+        payload = {"email": "", "groups": ["team-a"]}
+        with self.assertRaises(EmptyIdentityError):
+            _extract_user_identity(payload, self._settings())
+
+    def test_empty_username_allowed_when_disabled(self):
+        identity = _extract_user_identity({"email": ""}, self._settings(enabled=False))
+        self.assertEqual(identity.username, "")
 
     def test_reserved_username_rejected(self):
         payload = {"email": "system:serviceaccount:ns:sa", "groups": ["team-a"]}
