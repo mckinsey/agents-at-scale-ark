@@ -209,6 +209,13 @@ check_contains "apiserver memory limit is 1Gi"                 'memory: 1Gi'    
 as_optout="$(render_apiserver --set podDisruptionBudget.enabled=false --set topologySpread.enabled=false)"
 check_absent   "apiserver pdb can be disabled"                 'kind: PodDisruptionBudget'       "$as_optout"
 check_absent   "apiserver spread can be disabled"              'topologySpreadConstraints'       "$as_optout"
+check_contains "apiserver spread ignores tainted nodes"        'nodeTaintsPolicy: Honor'         "$as_default"
+
+as_single="$(render_apiserver --set replicas=1)"
+check_absent   "apiserver pdb skipped with one replica"        'kind: PodDisruptionBudget'       "$as_single"
+
+as_reused="$(render_apiserver --set topologySpread=null --set podDisruptionBudget=null)"
+check_absent   "apiserver renders without new default keys"    'topologySpreadConstraints'       "$as_reused"
 
 echo ""
 if [[ "$FAILED" -eq 0 ]]; then

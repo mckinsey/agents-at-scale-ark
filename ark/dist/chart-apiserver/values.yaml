@@ -45,6 +45,7 @@ topologySpread:
   maxSkew: 1
   topologyKey: kubernetes.io/hostname
   whenUnsatisfiable: ScheduleAnyway
+  nodeTaintsPolicy: Honor
 
 livenessProbe:
   initialDelaySeconds: 60

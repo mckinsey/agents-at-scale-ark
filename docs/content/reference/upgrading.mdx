@@ -267,6 +267,15 @@ kubectl get queries -A -o jsonpath='{range .items[?(@.spec.memory.namespace)]}{.
 
 References within the same namespace, including an explicit `namespace` equal to the object's own, are unchanged.
 
+### Aggregated Apiserver Defaults to Two Replicas
+
+The `ark-apiserver` chart now runs two replicas, a `PodDisruptionBudget` (`minAvailable: 1`) and a `topologySpread` rule (`ScheduleAnyway` on `kubernetes.io/hostname`). Requests per pod go from `10m`/`128Mi` to `100m`/`256Mi` and limits from `500m`/`256Mi` to `1`/`1Gi`, so the total request goes from `10m`/`128Mi` to `200m`/`512Mi`. Check that the cluster has the capacity before upgrading.
+
+- Releases that set `replicas: 1` keep one pod and get no `PodDisruptionBudget`.
+- `helm upgrade --reuse-values` skips the `PodDisruptionBudget` and the spread rule, because reused values do not include the new keys. Pass `--reset-then-reuse-values` to pick them up.
+- On a single-node cluster both pods land on the same node. `kubectl drain` never finishes there, because the replacement pod stays `Pending` on the cordoned node. Drain with `--disable-eviction`.
+- With `topologySpread.whenUnsatisfiable=DoNotSchedule`, `nodeTaintsPolicy: Honor` keeps tainted nodes, such as control planes, from counting as empty domains and blocking a rollout.
+
 ## v0.1.73
 
 ### Revoked and Expired API Keys Are Deleted After 90 Days
