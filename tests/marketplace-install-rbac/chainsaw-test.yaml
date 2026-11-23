@@ -1,0 +1,524 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: marketplace-install-rbac
+spec:
+  description: >
+    #3968: the opt-in marketplace install objects of the ark-tenant chart.
+    The chart refuses to render them without the ValidatingAdmissionPolicy
+    API. Only the listed installers may create marketplaceinstalls. The
+    installer service account is admin of its namespace but cannot change
+    the Namespace, and only ark-api can impersonate it or hold the install
+    lock. The namespace policy stops anyone else from running workloads or
+    minting tokens as that service account, and stops helm inside the install
+    pod from granting RBAC beyond the chart's own Roles or creating reserved
+    Secrets. The protection holds across upgrades, rollback, uninstall and
+    reinstall.
+  timeouts:
+    exec: 180s
+
+  steps:
+  - name: render-guard
+    try:
+    - script:
+        content: |
+          set -eu
+          C=../../charts/ark-tenant
+          VAP=admissionregistration.k8s.io/v1/ValidatingAdmissionPolicy
+          if helm template t "$C" -n x | grep -q ark-marketplace-installer; then
+            echo "flag off must render no marketplace install objects"; exit 1
+          fi
+          if out=$(helm template t "$C" -n x --set marketplaceInstall.enabled=true 2>&1); then
+            echo "flag on without the VAP API must fail"; exit 1
+          fi
+          echo "$out" | grep -q "ValidatingAdmissionPolicy API"
+          helm template t "$C" -n x --set marketplaceInstall.enabled=true --api-versions "$VAP" \
+            | grep -q "name: ark-marketplace-installer$"
+          helm template t "$C" -n x --set marketplaceInstall.enabled=true \
+            --set marketplaceInstall.assumeAdmissionPolicyApi=true \
+            | grep -q "name: ark-marketplace-installer$"
+          if out=$(helm template t "$C" -n x --set marketplaceInstall.enabled=true --api-versions "$VAP" \
+            --set marketplaceInstall.arkApiServiceAccount.namespace=x 2>&1); then
+            echo "an ark-api service account in the tenant namespace must fail"; exit 1
+          fi
+          echo "$out" | grep -q "must live outside the tenant namespace"
+          if helm template t "$C" -n x --set marketplaceInstall.enabled=true --api-versions "$VAP" \
+            -s templates/marketplace-install.yaml | grep -A3 "kind: RoleBinding" | grep -q "name: t-ark-tenant-marketplace-installer$"; then
+            echo "no installers must render no installer RoleBinding"; exit 1
+          fi
+          echo ok
+
+  - name: install-tenant
+    try:
+    - script:
+        timeout: 180s
+        content: |
+          helm install ark-tenant ../../charts/ark-tenant \
+            --namespace "$NAMESPACE" \
+            --values manifests/tenant-values.yaml \
+            --wait --timeout=120s
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    - assert:
+        resource:
+          apiVersion: v1
+          kind: ServiceAccount
+          metadata:
+            name: ark-marketplace-installer
+    cleanup:
+    - script:
+        content: |
+          helm uninstall ark-tenant --namespace "$NAMESPACE" --wait --timeout=120s || true
+          kubectl delete validatingadmissionpolicybinding,validatingadmissionpolicy \
+            "ark-marketplace-installer-sa-$NAMESPACE-bootstrap" --ignore-not-found
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: policy-contract
+    try:
+    - script:
+        content: |
+          set -eu
+          for n in "ark-marketplace-installer-sa-$NAMESPACE" "ark-marketplace-installer-sa-$NAMESPACE-bootstrap"; do
+            kubectl get validatingadmissionpolicy "$n" -o json | jq -e --arg ns "$NAMESPACE" '
+              .spec.failurePolicy == "Fail" and
+              ((.spec.matchConstraints.excludeResourceRules // []) | length) == 0 and
+              (.spec.matchConstraints.objectSelector // {}) == {} and
+              ((.spec.matchConstraints.namespaceSelector // {}) as $s
+                | $s == {} or $s.matchLabels["kubernetes.io/metadata.name"] == $ns)' >/dev/null \
+              || { echo "policy $n breaks the checks of the ark-api capability"; exit 1; }
+            kubectl get validatingadmissionpolicybinding "$n" -o json | jq -e --arg ns "$NAMESPACE" '
+              .spec.policyName == .metadata.name and
+              (.spec.validationActions | index("Deny")) != null and
+              ((.spec.matchResources.resourceRules // []) | length) == 0 and
+              ((.spec.matchResources.excludeResourceRules // []) | length) == 0 and
+              (.spec.matchResources.objectSelector // {}) == {} and
+              .spec.matchResources.namespaceSelector.matchLabels["kubernetes.io/metadata.name"] == $ns' >/dev/null \
+              || { echo "binding $n breaks the checks of the ark-api capability"; exit 1; }
+          done
+          echo ok
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: installer-sa-protected
+    try:
+    - script:
+        content: |
+          set -eu
+          . manifests/expect.sh
+          P=ark-marketplace-installer-sa-$NAMESPACE
+          W=manifests/installer-workloads
+          wait_enforced "$NAMESPACE"
+          for f in job cronjob deployment token-secret; do
+            denied "$P" kubectl -n "$NAMESPACE" --as carol create -f "$W/$f.yaml"
+          done
+          for f in replicationcontroller pod pod-legacy-field job deployment statefulset; do
+            denied "$P" kubectl -n "$NAMESPACE" create -f "$W/$f.yaml"
+          done
+          sed 's/ark-marketplace-installer/default/' "$W/deployment.yaml" | kubectl -n "$NAMESPACE" --as carol create -f -
+          denied "$P" kubectl -n "$NAMESPACE" --as carol patch deployment uses-installer --type merge \
+            -p '{"spec":{"template":{"spec":{"serviceAccountName":"ark-marketplace-installer"}}}}'
+          sed 's/ark-marketplace-installer/default/' "$W/cronjob.yaml" | kubectl -n "$NAMESPACE" --as carol create -f -
+          denied "$P" kubectl -n "$NAMESPACE" --as carol patch cronjob uses-installer --type merge \
+            -p '{"spec":{"jobTemplate":{"spec":{"template":{"spec":{"serviceAccountName":"ark-marketplace-installer"}}}}}}'
+          sed 's/ark-marketplace-installer/default/' "$W/job.yaml" | kubectl -n "$NAMESPACE" --as carol create -f -
+          kubectl -n "$NAMESPACE" wait job/uses-installer --for=condition=Complete --timeout=120s
+          echo ok
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: policies-per-namespace
+    try:
+    - script:
+        timeout: 180s
+        content: |
+          set -eu
+          . manifests/expect.sh
+          NB="$NAMESPACE-b"
+          kubectl create namespace "$NB"
+          helm install ark-tenant ../../charts/ark-tenant --namespace "$NB" \
+            --values manifests/tenant-values.yaml --wait --timeout=120s
+          wait_enforced "$NB"
+          denied "ark-marketplace-installer-sa-$NB" kubectl -n "$NB" create -f manifests/installer-workloads/pod.yaml
+          kubectl -n "$NB" --as system:serviceaccount:default:ark-api-sa create -f manifests/lock-lease.yaml
+          helm uninstall ark-tenant --namespace "$NB" --wait --timeout=120s
+          denied "ark-marketplace-installer-sa-$NAMESPACE" kubectl -n "$NAMESPACE" create -f manifests/installer-workloads/pod.yaml
+          kubectl delete namespace "$NB" --wait --timeout=120s
+          echo ok
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    cleanup:
+    - script:
+        content: |
+          helm uninstall ark-tenant --namespace "$NAMESPACE-b" --wait --timeout=120s || true
+          kubectl delete validatingadmissionpolicybinding,validatingadmissionpolicy \
+            "ark-marketplace-installer-sa-$NAMESPACE-b-bootstrap" --ignore-not-found
+          kubectl delete namespace "$NAMESPACE-b" --ignore-not-found --wait=false
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: installer-role
+    try:
+    - script:
+        content: |
+          set -eu
+          . manifests/ssar.sh
+          expect_can true alice "$NAMESPACE" ark.mckinsey.com marketplaceinstalls create
+          expect_can false bob "$NAMESPACE" ark.mckinsey.com marketplaceinstalls create
+          expect_can false carol "$NAMESPACE" ark.mckinsey.com marketplaceinstalls create
+          expect_can false alice "$NAMESPACE" apps deployments create
+          expect_can false alice "$NAMESPACE-b" ark.mckinsey.com marketplaceinstalls create
+          echo ok
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: installer-permissions
+    try:
+    - script:
+        content: |
+          set -eu
+          . manifests/ssar.sh
+          I="system:serviceaccount:$NAMESPACE:ark-marketplace-installer"
+          expect_can false "$I" "$NAMESPACE" "" namespaces patch "$NAMESPACE"
+          expect_can false "$I" "$NAMESPACE" "" namespaces delete "$NAMESPACE"
+          expect_can false "$I" "$NAMESPACE" "" resourcequotas create
+          expect_can true "$I" "$NAMESPACE" apps deployments create
+          expect_can true "$I" "$NAMESPACE" rbac.authorization.k8s.io rolebindings create
+          expect_can true "$I" "$NAMESPACE" ark.mckinsey.com agents create
+          expect_can true "$I" "$NAMESPACE" "" events create
+          expect_can true "$I" "$NAMESPACE" gateway.networking.k8s.io httproutes create
+          expect_can false "$I" "$NAMESPACE-b" apps deployments create
+          if out=$(kubectl label namespace "$NAMESPACE" pod-security.kubernetes.io/enforce=privileged --as "$I" 2>&1); then
+            echo "the installer must not label its namespace"; exit 1
+          fi
+          echo "$out" | grep -q forbidden
+          echo ok
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: impersonated-install-job
+    try:
+    - script:
+        timeout: 240s
+        content: |
+          set -eu
+          I="system:serviceaccount:$NAMESPACE:ark-marketplace-installer"
+          for j in install-ok install-orphan install-background; do
+            sed "s/{name: uses-installer}/{name: $j}/" manifests/installer-workloads/job.yaml \
+              | kubectl -n "$NAMESPACE" --as "$I" create -f -
+          done
+          for j in install-ok install-orphan install-background; do
+            kubectl -n "$NAMESPACE" wait "job/$j" --for=condition=Complete --timeout=120s
+          done
+          sed -e 's/{name: uses-installer}/{name: installer-running}/' -e 's/replicas: 0/replicas: 1/' \
+            manifests/installer-workloads/deployment.yaml | kubectl -n "$NAMESPACE" --as "$I" create -f -
+          kubectl -n "$NAMESPACE" rollout status deployment/installer-running --timeout=120s
+          kubectl -n "$NAMESPACE" delete deployment installer-running --cascade=foreground --wait --timeout=60s
+          kubectl -n "$NAMESPACE" delete job install-orphan --cascade=orphan --wait --timeout=60s
+          kubectl -n "$NAMESPACE" delete job install-background --cascade=background --wait --timeout=60s
+          for _ in $(seq 1 60); do
+            refs=$(kubectl -n "$NAMESPACE" get pods -l job-name=install-orphan -o jsonpath='{.items[*].metadata.ownerReferences}')
+            left=$(kubectl -n "$NAMESPACE" get pods -l job-name=install-background -o name)
+            if [ -z "$refs" ] && [ -z "$left" ]; then
+              kubectl -n "$NAMESPACE" delete pods -l job-name=install-orphan --wait --timeout=60s
+              echo ok
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "garbage collection of the installer pods did not finish"
+          kubectl -n "$NAMESPACE" get pods -o yaml
+          exit 1
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: ark-api-permissions
+    try:
+    - script:
+        content: |
+          set -eu
+          . manifests/ssar.sh
+          . manifests/expect.sh
+          P="ark-marketplace-installer-sa-$NAMESPACE"
+          A="system:serviceaccount:default:ark-api-sa"
+          I="system:serviceaccount:$NAMESPACE:ark-marketplace-installer"
+          expect_can true "$A" "$NAMESPACE" "" serviceaccounts impersonate ark-marketplace-installer
+          expect_can false "$A" "$NAMESPACE" "" serviceaccounts impersonate default
+          expect_can false "$A" "$NAMESPACE" "" serviceaccounts impersonate ark-tenant
+          expect_can true "$A" "$NAMESPACE" coordination.k8s.io leases create
+          expect_can true "$A" "$NAMESPACE" coordination.k8s.io leases get marketplace-install-lock
+          expect_can true "$A" "$NAMESPACE" coordination.k8s.io leases update marketplace-install-lock
+          expect_can true "$A" "$NAMESPACE" coordination.k8s.io leases delete marketplace-install-lock
+          expect_can false "$A" "$NAMESPACE" coordination.k8s.io leases delete other-lease
+          expect_can false "$A" "$NAMESPACE" apps deployments create
+          denied "$P" kubectl -n "$NAMESPACE" --as "$I" create -f manifests/lock-lease.yaml
+          denied "$P" kubectl -n "$NAMESPACE" create -f manifests/lock-lease.yaml
+          kubectl -n "$NAMESPACE" --as "$A" create -f manifests/lock-lease.yaml
+          denied "$P" kubectl -n "$NAMESPACE" --as "$I" annotate lease marketplace-install-lock x=y
+          denied "$P" kubectl -n "$NAMESPACE" --as "$I" delete lease marketplace-install-lock
+          denied "$P" kubectl -n "$NAMESPACE" --as "$I" delete --raw "/apis/coordination.k8s.io/v1/namespaces/$NAMESPACE/leases"
+          kubectl -n "$NAMESPACE" --as "$A" get lease marketplace-install-lock -o json \
+            | jq '.spec.holderIdentity = "ark-api"' | kubectl -n "$NAMESPACE" --as "$A" replace -f -
+          kubectl -n "$NAMESPACE" --as "$A" delete lease marketplace-install-lock
+          sed 's/name: marketplace-install-lock/name: other-lease/' manifests/lock-lease.yaml \
+            | kubectl -n "$NAMESPACE" --as "$I" create -f -
+          kubectl -n "$NAMESPACE" --as "$I" annotate lease other-lease x=y
+          kubectl -n "$NAMESPACE" --as "$I" delete lease other-lease
+          echo ok
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: install-pod-rules
+    try:
+    - script:
+        timeout: 240s
+        content: |
+          set -eu
+          . manifests/expect.sh
+          if ! kubectl options | grep -q -- '--as-user-extra'; then
+            echo "this step needs kubectl 1.35 or later for --as-user-extra"
+            kubectl version --client
+            exit 1
+          fi
+          P="ark-marketplace-installer-sa-$NAMESPACE"
+          I="system:serviceaccount:$NAMESPACE:ark-marketplace-installer"
+          B=manifests/install-pod
+          pod() { kubectl -n "$NAMESPACE" --as "$I" --as-user-extra authentication.kubernetes.io/pod-name=install-pod "$@"; }
+          refused() { if pod "$@" >/dev/null 2>&1; then echo "expected a refusal: $*"; exit 1; fi; }
+          kubectl -n "$NAMESPACE" apply -f manifests/install-pod-probe.yaml --as "$I"
+          kubectl -n "$NAMESPACE" wait job/install-pod-probe --for=condition=Complete --timeout=180s
+          pod create -f "$B/role-ok.yaml"
+          pod create rolebinding probe-ok --role=probe-ok --serviceaccount="$NAMESPACE:default"
+          pod create rolebinding probe-user --role=probe-ok --user=dave
+          denied "$P" pod create rolebinding probe-admin --clusterrole=admin --serviceaccount="$NAMESPACE:default"
+          denied "$P" pod create rolebinding probe-group --role=probe-ok --group=devs
+          denied "$P" pod create rolebinding probe-foreign --role=probe-ok --serviceaccount=kube-system:default
+          denied "$P" pod create rolebinding probe-system --role=probe-ok --user=system:kube-proxy
+          for r in role marketplace-installer-extra marketplace-impersonate marketplace-lock marketplace-installer; do
+            denied "$P" pod create rolebinding "probe-$r" --role="ark-tenant-$r" --user=carol
+          done
+          for f in wildcard rbac secret-read secret-create secret-patch secret-delete subresource-wildcard exec attach token impersonate escalate bind; do
+            denied "$P" pod create -f "$B/role-$f.yaml"
+          done
+          for f in ephemeral any-group any-resource any-verb any-subresource pods-subresources serviceaccounts-subresources; do
+            refused create -f "$B/role-$f.yaml"
+          done
+          denied "$P" pod create -f "$B/deployment-installer.yaml"
+          pod create -f "$B/deployment-default.yaml"
+          denied "$P" pod create -f manifests/installer-workloads/token-secret.yaml
+          for f in reserved-name user-scope; do
+            denied "$P" pod create -f "$B/secret-$f.yaml"
+          done
+          for f in unanchored-name shared plain; do
+            pod create -f "$B/secret-$f.yaml"
+          done
+          denied "$P" pod create -f manifests/lock-lease.yaml
+          kubectl -n "$NAMESPACE" create secret generic u-0123456789abcdef-victim --from-literal=k=v
+          kubectl -n "$NAMESPACE" create secret generic victim-user-scope --from-literal=k=v
+          kubectl -n "$NAMESPACE" label secret victim-user-scope ark.mckinsey.com/scope=user-0123456789abcdef
+          for b in rolebinding marketplace-installer-admin marketplace-impersonate; do
+            denied "$P" pod delete rolebinding "ark-tenant-$b"
+          done
+          denied "$P" pod delete role ark-tenant-marketplace-lock
+          denied "$P" pod delete --raw "/apis/rbac.authorization.k8s.io/v1/namespaces/$NAMESPACE/rolebindings"
+          denied "$P" pod delete secret u-0123456789abcdef-victim
+          denied "$P" pod delete secret victim-user-scope
+          denied "$P" pod delete --raw "/api/v1/namespaces/$NAMESPACE/secrets"
+          pod delete rolebinding probe-ok
+          pod delete secret probe-plain
+          denied "$P" pod patch role ark-tenant-role --type merge -p '{"rules":[]}'
+          denied "$P" pod patch rolebinding ark-tenant-rolebinding --type merge -p '{"metadata":{"labels":{"x":"y"}}}'
+          pod patch role probe-ok --type merge -p '{"metadata":{"labels":{"x":"y"}}}'
+          kubectl -n "$NAMESPACE" get role ark-tenant-role -o jsonpath='{.rules[0].apiGroups[0]}' | grep -q ark.mckinsey.com
+          for sa in ark-marketplace-installer default; do
+            denied "$P" pod create token "$sa"
+            denied "$P" kubectl -n "$NAMESPACE" --as "$I" create token "$sa"
+          done
+          kubectl -n "$NAMESPACE" get secret u-0123456789abcdef-victim victim-user-scope
+          kubectl -n "$NAMESPACE" delete secret victim-user-scope
+          sed 's/{name: uses-installer}/{name: impersonated-installer}/' manifests/installer-workloads/deployment.yaml \
+            | kubectl -n "$NAMESPACE" --as "$I" create -f -
+          echo ok
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: bootstrap-follows-upgrades
+    try:
+    - script:
+        timeout: 300s
+        content: |
+          set -eu
+          . manifests/expect.sh
+          C=../../charts/ark-tenant
+          NC="$NAMESPACE-c"
+          kubectl create namespace "$NC"
+          helm install ark-tenant "$C" --namespace "$NC" --values manifests/tenant-values.yaml \
+            --set marketplaceInstall.enabled=false --wait --timeout=120s
+          helm upgrade ark-tenant "$C" --namespace "$NC" --values manifests/tenant-values.yaml --wait --timeout=120s
+          kubectl get validatingadmissionpolicy "ark-marketplace-installer-sa-$NC-bootstrap"
+          kubectl get validatingadmissionpolicy "ark-marketplace-installer-sa-$NC"
+          wait_enforced "$NC"
+          helm uninstall ark-tenant --namespace "$NC" --wait --timeout=120s
+          A2="system:serviceaccount:default:ark-api-sa-2"
+          helm upgrade ark-tenant "$C" --namespace "$NAMESPACE" --reuse-values \
+            --set marketplaceInstall.arkApiServiceAccount.name=ark-api-sa-2 --wait --timeout=120s
+          for _ in $(seq 1 30); do
+            if kubectl -n "$NAMESPACE" --as "$A2" create -f manifests/lock-lease.yaml >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+          kubectl -n "$NAMESPACE" --as "$A2" delete lease marketplace-install-lock
+          helm upgrade ark-tenant "$C" --namespace "$NAMESPACE" --reuse-values \
+            --set marketplaceInstall.arkApiServiceAccount.name=ark-api-sa --wait --timeout=120s
+          echo ok
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    cleanup:
+    - script:
+        content: |
+          helm uninstall ark-tenant --namespace "$NAMESPACE-c" --wait --timeout=120s || true
+          kubectl delete validatingadmissionpolicybinding,validatingadmissionpolicy \
+            "ark-marketplace-installer-sa-$NAMESPACE-c-bootstrap" --ignore-not-found
+          kubectl delete namespace "$NAMESPACE-c" --ignore-not-found --wait=false
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: refuses-existing-installer-workloads
+    try:
+    - script:
+        timeout: 300s
+        content: |
+          set -eu
+          C=../../charts/ark-tenant
+          ND="$NAMESPACE-d"
+          kubectl create namespace "$ND"
+          helm install ark-tenant "$C" --namespace "$ND" --values manifests/tenant-values.yaml \
+            --set marketplaceInstall.enabled=false --wait --timeout=120s
+          kubectl -n "$ND" --as carol create -f manifests/installer-workloads/deployment.yaml
+          if out=$(helm upgrade ark-tenant "$C" --namespace "$ND" --values manifests/tenant-values.yaml 2>&1); then
+            echo "turning the flag on over a workload that uses the installer service account must fail"; exit 1
+          fi
+          echo "$out" | grep -q "Deployment/uses-installer"
+          echo "$out" | grep -q "ReplicaSet/uses-installer-"
+          if kubectl -n "$ND" get serviceaccount ark-marketplace-installer >/dev/null 2>&1; then
+            echo "a refused upgrade must not create the installer service account"; exit 1
+          fi
+          kubectl -n "$ND" delete deployment uses-installer --cascade=foreground --wait --timeout=60s
+          helm upgrade ark-tenant "$C" --namespace "$ND" --values manifests/tenant-values.yaml --wait --timeout=120s
+          kubectl -n "$ND" get serviceaccount ark-marketplace-installer
+          echo ok
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    cleanup:
+    - script:
+        content: |
+          helm uninstall ark-tenant --namespace "$NAMESPACE-d" --wait --timeout=120s || true
+          kubectl delete validatingadmissionpolicybinding,validatingadmissionpolicy \
+            "ark-marketplace-installer-sa-$NAMESPACE-d-bootstrap" --ignore-not-found
+          kubectl delete namespace "$NAMESPACE-d" --ignore-not-found --wait=false
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: upgrade-keeps-policy
+    try:
+    - script:
+        timeout: 240s
+        content: |
+          set -eu
+          C=../../charts/ark-tenant
+          LOG=$(mktemp)
+          STOP="$LOG.stop"
+          (
+            i=0
+            while [ "$i" -lt 400 ] && [ ! -f "$STOP" ]; do
+              sed 's/{name: uses-installer}/{generateName: race-}/' manifests/installer-workloads/job.yaml \
+                | kubectl -n "$NAMESPACE" --as carol create -f - >/dev/null 2>&1 && echo LEAK
+              i=$((i + 1))
+            done
+            echo "attempts=$i"
+          ) > "$LOG" &
+          helm upgrade ark-tenant "$C" --namespace "$NAMESPACE" --reuse-values \
+            --set-json 'marketplaceInstall.extraRules=[]' --wait --timeout=120s
+          . manifests/ssar.sh
+          expect_can false "system:serviceaccount:$NAMESPACE:ark-marketplace-installer" "$NAMESPACE" gateway.networking.k8s.io httproutes create
+          helm upgrade ark-tenant "$C" --namespace "$NAMESPACE" --values manifests/tenant-values.yaml --wait --timeout=120s
+          touch "$STOP"
+          wait
+          cat "$LOG"
+          rm -f "$STOP"
+          if grep -q LEAK "$LOG"; then echo "a Job with the installer service account got through"; rm -f "$LOG"; exit 1; fi
+          if [ "$(sed -n 's/^attempts=//p' "$LOG")" -lt 5 ]; then echo "the create loop did not overlap the upgrades"; exit 1; fi
+          if kubectl -n "$NAMESPACE" get jobs -o name | grep -q '/race-'; then
+            echo "found a Job from the create loop"; exit 1
+          fi
+          echo ok
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: uninstall-leaves-bootstrap
+    try:
+    - script:
+        timeout: 240s
+        content: |
+          set -eu
+          . manifests/expect.sh
+          P="ark-marketplace-installer-sa-$NAMESPACE"
+          helm uninstall ark-tenant --namespace "$NAMESPACE" --wait --timeout=120s
+          if kubectl get validatingadmissionpolicy "$P" >/dev/null 2>&1; then echo "release policy must go on uninstall"; exit 1; fi
+          kubectl get validatingadmissionpolicy "$P-bootstrap"
+          kubectl get validatingadmissionpolicybinding "$P-bootstrap"
+          kubectl -n "$NAMESPACE" create serviceaccount ark-marketplace-installer
+          eventually_denied_by "$P-bootstrap" kubectl -n "$NAMESPACE" create -f manifests/installer-workloads/pod.yaml
+          kubectl -n "$NAMESPACE" delete serviceaccount ark-marketplace-installer
+          kubectl -n "$NAMESPACE" delete job install-ok install-pod-probe --cascade=foreground --wait --timeout=90s
+          kubectl -n "$NAMESPACE" delete deployment impersonated-installer --cascade=foreground --wait --timeout=90s
+          helm install ark-tenant ../../charts/ark-tenant --namespace "$NAMESPACE" \
+            --values manifests/tenant-values.yaml --wait --timeout=120s
+          wait_enforced "$NAMESPACE"
+          kubectl get validatingadmissionpolicy "$P"
+          echo ok
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: rollback-restores-policy
+    try:
+    - script:
+        timeout: 240s
+        content: |
+          set -eu
+          . manifests/expect.sh
+          C=../../charts/ark-tenant
+          P="ark-marketplace-installer-sa-$NAMESPACE"
+          REV=$(helm status ark-tenant --namespace "$NAMESPACE" -o json | jq '.version')
+          helm upgrade ark-tenant "$C" --namespace "$NAMESPACE" --reuse-values \
+            --set marketplaceInstall.enabled=false --wait --timeout=120s
+          if kubectl get validatingadmissionpolicy "$P" >/dev/null 2>&1; then echo "policy must go with the flag"; exit 1; fi
+          if kubectl -n "$NAMESPACE" get serviceaccount ark-marketplace-installer >/dev/null 2>&1; then echo "service account must go with the flag"; exit 1; fi
+          kubectl delete validatingadmissionpolicybinding,validatingadmissionpolicy "$P-bootstrap"
+          wait_released "$NAMESPACE"
+          helm rollback ark-tenant "$REV" --namespace "$NAMESPACE" --wait --timeout=120s
+          kubectl get validatingadmissionpolicy "$P"
+          kubectl get validatingadmissionpolicybinding "$P"
+          kubectl -n "$NAMESPACE" get serviceaccount ark-marketplace-installer
+          wait_enforced "$NAMESPACE"
+          denied_by "$P" kubectl -n "$NAMESPACE" create -f manifests/installer-workloads/pod.yaml
+          echo ok
+        env:
+        - name: NAMESPACE
+          value: ($namespace)

@@ -1,0 +1,12 @@
+apiVersion: batch/v1
+kind: Job
+metadata: {name: uses-installer}
+spec:
+  template:
+    spec:
+      serviceAccountName: ark-marketplace-installer
+      restartPolicy: Never
+      containers:
+      - name: c
+        image: curlimages/curl:8.11.1
+        command: ["true"]

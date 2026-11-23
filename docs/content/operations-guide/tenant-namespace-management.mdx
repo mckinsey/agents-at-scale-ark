@@ -118,6 +118,71 @@ Storage is not the whole boundary. The broker authenticates no route, so any pod
 
 See [Message backend (Postgres)](/developer-guide/services/ark-broker#message-backend-postgres), [Event backend (Postgres)](/developer-guide/services/ark-broker#event-backend-postgres), and [Chunk backend (Redis)](/developer-guide/services/ark-broker#chunk-backend-redis) for backend configuration.
 
+## Marketplace installs (opt-in)
+
+Set `marketplaceInstall.enabled=true` on `ark-tenant` to prepare a tenant namespace for installing marketplace items from the dashboard. The flag is off by default, and with it off the chart renders the same objects as before.
+
+With the flag on, the chart creates:
+
+- the `ark-marketplace-installer` service account, which installs run as. It is bound to the `admin` ClusterRole in this namespace and to a Role with every verb on `ark.mckinsey.com`, `create` and `patch` on `events`, and the rules in `marketplaceInstall.extraRules` (`httproutes` by default);
+- Roles that let the ark-api service account, `marketplaceInstall.arkApiServiceAccount`, impersonate the installer account and manage the `marketplace-install-lock` Lease, and nothing else;
+- a Role with `create` on `marketplaceinstalls` in group `ark.mckinsey.com`, bound to the subjects in `marketplaceInstall.installers`. The list is empty by default, so nobody can install until you add someone. The permission lives outside the tenant Role because RBAC only adds permissions: in the tenant Role every user of the namespace would get it;
+- a ValidatingAdmissionPolicy and binding named `ark-marketplace-installer-sa-<namespace>`, plus a copy with a `-bootstrap` suffix created as a `pre-install` and `pre-upgrade` hook. The copy exists before the installer account on the first install, and also when an upgrade turns the flag on; every upgrade recreates it with the current values.
+
+The tenant Role lets users create Jobs and Deployments, and whoever creates a pod chooses its service account. Without the policy, any tenant user could run a pod as an admin of the namespace. The policy lets only the installer account itself and the Kubernetes controllers run workloads as that account, and only the installer account create token Secrets for it. Requests that helm sends from inside the install pod carry the `authentication.kubernetes.io/pod-name` extra of the pod token, and for those the policy also refuses:
+
+- RoleBindings to a ClusterRole, to this chart's Roles, to a Group, to a service account of another namespace or to a `system:` user;
+- Roles with wildcards on resources or subresources, rules on RBAC, any rule on Secrets (read access would expose the namespace's personal secrets to the chart's pods), `pods/exec`, `pods/attach`, `pods/ephemeralcontainers`, `serviceaccounts/token`, or the `impersonate`, `escalate` and `bind` verbs;
+- workloads and token Secrets for the installer account;
+- Secrets named like a personal secret (`u-<16 hex>-…`) or labelled with an `ark.mckinsey.com/scope` other than `shared`.
+- changing or deleting this chart's Roles and RoleBindings, deleting personal secrets, or deleting whole collections of Secrets or RoleBindings.
+
+A chart can still bind a Role that someone else created in the namespace, since the policy cannot tell it from one the chart created. The installer account also may not request service account tokens: a requested token is not bound to a pod and would skip the rules above.
+
+Only the ark-api service account can create, update or delete the `marketplace-install-lock` Lease; the namespace controller can also delete it when the namespace goes away. To release a stuck lock by hand, delete the policy bindings first.
+
+A user in `installers` can install any catalogue item, and a chart can create any namespaced object, so treat installers as admins of the namespace. Objects a chart created stay after you remove the user from the list.
+
+Requirements:
+
+- Kubernetes 1.31 or later. With the flag on, the chart fails when the ValidatingAdmissionPolicy API is missing, so it never creates the installer account without its policy.
+- Installing `ark-tenant` with the flag needs rights on cluster-scoped objects for the policy and its binding. With Argo CD, add both kinds to the cluster resource whitelist of the AppProject.
+- `marketplaceInstall.arkApiServiceAccount` must name the service account ark-api runs as, and ark-api must run outside the tenant namespace. The default is `ark-api-sa` in `default`. The chart refuses a service account in the tenant namespace: tenant users can run pods as any service account of their namespace, and this one may impersonate the installer. A tenant that runs its own ark-api, as in the setup above, cannot turn on dashboard installs.
+- No workload in the namespace may already use `ark-marketplace-installer` when you turn the flag on. The policy only checks objects as they are created or updated, so a Deployment created earlier with that service account, which could not run while the account was missing, would start with its permissions. `helm install` and `helm upgrade` refuse to turn the flag on while such objects exist and list them; reinstalling over a namespace where earlier install Jobs remain refuses too. Offline renders and Argo CD cannot run that check, so run it yourself first:
+
+  ```bash
+  kubectl get pods,replicationcontrollers,jobs,cronjobs,deployments,replicasets,statefulsets,daemonsets -n tenant-a -o json \
+    | jq -r '.items[] | select([.spec | .. | objects | (.serviceAccountName, .serviceAccount) | strings] | index("ark-marketplace-installer")) | .kind + "/" + .metadata.name'
+  ```
+
+- Offline renders (`helm template`, kustomize `helmCharts`) cannot see the cluster API. Pass `--api-versions admissionregistration.k8s.io/v1/ValidatingAdmissionPolicy` or set `marketplaceInstall.assumeAdmissionPolicyApi=true`. Argo CD passes the cluster's API versions and needs neither.
+
+```bash
+helm upgrade --install ark-tenant oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-tenant \
+  -n tenant-a \
+  --set marketplaceInstall.enabled=true \
+  --set 'marketplaceInstall.installers[0].kind=User' \
+  --set 'marketplaceInstall.installers[0].apiGroup=rbac.authorization.k8s.io' \
+  --set 'marketplaceInstall.installers[0].name=alice@example.com'
+```
+
+Check who can install with a SelfSubjectAccessReview. `kubectl auth can-i` is unreliable for `marketplaceinstalls`, which has no API behind it.
+
+```bash
+kubectl create --as alice@example.com --validate=false -o jsonpath='{.status.allowed}' -f - <<'EOF2'
+apiVersion: authorization.k8s.io/v1
+kind: SelfSubjectAccessReview
+spec:
+  resourceAttributes:
+    namespace: tenant-a
+    group: ark.mckinsey.com
+    resource: marketplaceinstalls
+    verb: create
+EOF2
+```
+
+`helm uninstall ark-tenant` and deleting the namespace both leave the `-bootstrap` policy and binding behind. They match only that namespace and do no harm. Remove them with `kubectl delete validatingadmissionpolicybinding,validatingadmissionpolicy ark-marketplace-installer-sa-<namespace>-bootstrap`.
+
 ## Developing with Tenants
 
 During development, use devspace to deploy into a tenant namespace:
