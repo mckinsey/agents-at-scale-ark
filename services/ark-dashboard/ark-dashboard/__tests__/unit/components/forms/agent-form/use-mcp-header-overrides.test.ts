@@ -34,6 +34,22 @@ describe('useMcpHeaderOverrides', () => {
     expect(result.current.rows).toHaveLength(2);
     expect(result.current.toPayload()).toEqual(overrides);
     expect(JSON.parse(snapshot)).toEqual(overrides);
+
+    let payload: AgentOverride[] | null = null;
+    act(() => {
+      payload = result.current.validate(() => []);
+    });
+    expect(payload).toEqual(overrides);
+
+    const id = result.current.rows[0].id;
+    act(() => result.current.updateRow(id, { value: 'changed' }));
+    act(() => {
+      payload = result.current.validate(() => []);
+    });
+    expect(payload).toBeNull();
+    expect(result.current.errors).toEqual({
+      [id]: { nameError: 'Not a header of github' },
+    });
   });
 
   it('removes the rows of a server whose tools are deselected', () => {

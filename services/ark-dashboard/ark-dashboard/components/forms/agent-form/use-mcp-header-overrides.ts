@@ -23,10 +23,14 @@ export function useMcpHeaderOverrides() {
   );
   const [errors, setErrors] = useState<Record<string, McpHeaderRowError>>({});
   const previousServersRef = useRef<string[] | null>(null);
+  const loadedRowsRef = useRef<Map<string, string>>(new Map());
   const [loadVersion, setLoadVersion] = useState(0);
 
   const load = useCallback((overrides: AgentOverride[] | null | undefined) => {
     const loaded = splitMcpOverrides(overrides);
+    loadedRowsRef.current = new Map(
+      loaded.rows.map(row => [row.id, JSON.stringify(row)]),
+    );
     previousServersRef.current = null;
     setLoadVersion(version => version + 1);
     setState(loaded);
@@ -91,6 +95,7 @@ export function useMcpHeaderOverrides() {
         state.lockedHeaders,
         namesForServer,
         serverIssueFor,
+        row => loadedRowsRef.current.get(row.id) === JSON.stringify(row),
       );
       setErrors(nextErrors);
       return Object.keys(nextErrors).length > 0
