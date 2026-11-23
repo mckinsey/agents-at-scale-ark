@@ -114,6 +114,14 @@ interface UseChatSessionParams {
   type: ChatType;
 }
 
+export function buildChatKey(
+  namespace: string,
+  type: ChatType,
+  name: string,
+): string {
+  return `${namespace}/${type}-${name}`;
+}
+
 interface ChatTurnRequest {
   parameters?: ApiQueryParameter[];
 }
@@ -170,7 +178,7 @@ export function useChatSession({
   const [lastConversationId, setLastConversationId] = useAtom(
     lastConversationIdAtom,
   );
-  const chatKey = `${type}-${name}`;
+  const chatKey = buildChatKey(namespace, type, name);
 
   const pendingSessionIdRef = useRef<string | null>(null);
 
