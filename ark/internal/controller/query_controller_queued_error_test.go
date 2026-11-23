@@ -50,15 +50,15 @@ func TestHandleRunningPhase_QueuedUpdateError_ReturnsError(t *testing.T) {
 		Client:               c,
 		Scheme:               c.Scheme(),
 		MaxConcurrentQueries: 1,
-		sched:                newFairScheduler(1, queryFairnessWaitWindow),
+		sched:                newFairScheduler(1, queryFairnessQueuedKeyExpiry),
 	}
-	require.True(t, r.sched.tryAcquire(q.Namespace), "pre-condition: saturate the pool so handleRunningPhase hits the queued-write branch")
+	require.True(t, r.sched.tryAcquire(nsKey(q.Namespace)), "pre-condition: saturate the pool so handleRunningPhase hits the queued-write branch")
 
 	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: q.Name, Namespace: q.Namespace}}
 	_, err := r.handleRunningPhase(context.Background(), req, *q)
 
 	require.Error(t, err, "handleRunningPhase must surface a queued-write failure so the reconciler retries")
-	assert.False(t, r.sched.tryAcquire(q.Namespace), "capacity-full branch must not acquire a new slot; the pre-acquired slot is still held")
+	assert.False(t, r.sched.tryAcquire(nsKey(q.Namespace)), "capacity-full branch must not acquire a new slot; the pre-acquired slot is still held")
 }
 
 func TestHandleRunningPhase_RunningUpdateError_ReleasesSemaphore(t *testing.T) {
@@ -77,14 +77,14 @@ func TestHandleRunningPhase_RunningUpdateError_ReleasesSemaphore(t *testing.T) {
 		Client:               c,
 		Scheme:               c.Scheme(),
 		MaxConcurrentQueries: 1,
-		sched:                newFairScheduler(1, queryFairnessWaitWindow),
+		sched:                newFairScheduler(1, queryFairnessQueuedKeyExpiry),
 	}
 
 	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: q.Name, Namespace: q.Namespace}}
 	_, err := r.handleRunningPhase(context.Background(), req, *q)
 
 	require.Error(t, err, "handleRunningPhase must surface a running-write failure so the reconciler retries")
-	assert.True(t, r.sched.tryAcquire(q.Namespace), "slot must be released on running-write error to prevent a permanent leak")
+	assert.True(t, r.sched.tryAcquire(nsKey(q.Namespace)), "slot must be released on running-write error to prevent a permanent leak")
 }
 
 func TestFailQueryOnTimeout_StatusUpdateError_Propagates(t *testing.T) {

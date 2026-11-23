@@ -5,6 +5,8 @@ package controller
 import (
 	"sync"
 	"time"
+
+	"k8s.io/apimachinery/pkg/types"
 )
 
 // fairScheduler bounds concurrent Query executions globally while giving each
@@ -17,59 +19,63 @@ import (
 // the gate those attempts consult — it does not own an ordering queue. Fairness
 // comes from capping each namespace at its current share; when a slot frees and
 // the entitled tenant isn't the one attempting acquisition, tenants already at
-// their share are denied and the slot waits at most one requeue delay for the
-// entitled tenant to cycle. A quiet tenant's wait is therefore bounded by the
-// requeue delay, not by another tenant's backlog size.
+// their share are denied and the slot waits for the entitled tenant to cycle.
+// A namespace counts as waiting for as long as it has queued Query keys, so its
+// share does not depend on how quickly those keys are retried (issue #3458).
 type fairScheduler struct {
 	mu sync.Mutex
 
 	// max is the global concurrency bound (MaxConcurrentQueries).
 	max int
-	// window is how long a denied acquisition keeps a namespace counted as
-	// "active" (waiting) after its last attempt, so a tenant that stops
-	// requeuing ages out of the fair-share divisor.
-	window time.Duration
+	// keyExpiry drops a queued key that has not retried for this long, so a key
+	// missed by every removal path cannot keep its namespace waiting forever.
+	keyExpiry time.Duration
 
 	inFlight    int
 	perNS       map[string]int
-	waitingSeen map[string]time.Time
-	expiredSeen map[string]time.Time
+	queued      map[string]map[types.NamespacedName]time.Time
+	lastAttempt map[string]time.Time
+	lastPrune   time.Time
 
 	now func() time.Time
 }
 
-const waitExpiredHorizon = time.Minute
+const queuedKeyPruneInterval = time.Second
 
-func newFairScheduler(maxConcurrent int, window time.Duration) *fairScheduler {
+func newFairScheduler(maxConcurrent int, keyExpiry time.Duration) *fairScheduler {
 	return &fairScheduler{
 		max:         maxConcurrent,
-		window:      window,
+		keyExpiry:   keyExpiry,
 		perNS:       make(map[string]int),
-		waitingSeen: make(map[string]time.Time),
-		expiredSeen: make(map[string]time.Time),
+		queued:      make(map[string]map[types.NamespacedName]time.Time),
+		lastAttempt: make(map[string]time.Time),
 		now:         time.Now,
 	}
 }
 
-// tryAcquire grants a slot to ns if the global bound has room and ns is below
-// its current fair share. On denial it records ns as waiting (so it counts
-// toward the share divisor) and returns false; the caller requeues.
-func (s *fairScheduler) tryAcquire(ns string) bool {
+// tryAcquire grants a slot to the Query key if the global bound has room and
+// its namespace is below its current fair share. On denial it records the key
+// as queued (so its namespace counts toward the share divisor) and returns
+// false; the caller requeues.
+func (s *fairScheduler) tryAcquire(key types.NamespacedName) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	ns := key.Namespace
 	now := s.now()
+	s.pruneQueuedLocked(now)
 	s.observeRetryLocked(ns, now)
+	defer s.recordAttemptLocked(ns, now)
 
 	if s.inFlight >= s.max {
-		s.markWaitingLocked(ns, now)
+		s.markQueuedLocked(key, now)
 		s.publishLocked(ns)
 		return false
 	}
 
-	share := s.shareLocked(ns, now)
-	if s.perNS[ns] >= share && s.anyOtherWaitingBelowShareLocked(ns, share) {
-		s.markWaitingLocked(ns, now)
+	share := s.shareLocked(ns)
+	if s.perNS[ns] >= share && s.freeSlotsReservedForOthersLocked(ns, share) {
+		s.markQueuedLocked(key, now)
 		queryFairnessDeniedTotal.WithLabelValues(ns).Inc()
 		s.publishLocked(ns)
 		return false
@@ -77,7 +83,7 @@ func (s *fairScheduler) tryAcquire(ns string) bool {
 
 	s.inFlight++
 	s.perNS[ns]++
-	delete(s.waitingSeen, ns)
+	s.forgetLocked(key)
 	s.publishLocked(ns)
 	return true
 }
@@ -100,10 +106,18 @@ func (s *fairScheduler) release(ns string) {
 	s.publishLocked(ns)
 }
 
+func (s *fairScheduler) forget(key types.NamespacedName) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.forgetLocked(key)
+	s.publishLocked(key.Namespace)
+}
+
 // shareLocked is the per-namespace cap for the current active-tenant count,
 // clamped to at least 1 so a namespace can always make progress.
-func (s *fairScheduler) shareLocked(ns string, now time.Time) int {
-	active := s.countActiveLocked(ns, now)
+func (s *fairScheduler) shareLocked(ns string) int {
+	active := s.countActiveLocked(ns)
 	share := s.max / active
 	if share < 1 {
 		share = 1
@@ -111,15 +125,23 @@ func (s *fairScheduler) shareLocked(ns string, now time.Time) int {
 	return share
 }
 
-// anyOtherWaitingBelowShareLocked reports whether some namespace other than ns
-// is actively waiting (denied within the window) and still below its share, and
-// is therefore entitled to the next freed slot. A tenant already at its share
-// may exceed it only when this returns false, so the floor-division remainder
-// (max mod active) is handed out on demand instead of being stranded, while a
-// slot is still reserved for a tenant that actually has work waiting.
-func (s *fairScheduler) anyOtherWaitingBelowShareLocked(ns string, share int) bool {
-	for k := range s.waitingSeen {
-		if k != ns && s.perNS[k] < share {
+// freeSlotsReservedForOthersLocked reports whether every free slot is needed by
+// namespaces other than ns that are below their share: each reserves as many
+// slots as it has queued Query keys, up to its remaining share. A tenant
+// already at its share may exceed it only when this returns false, so the
+// floor-division remainder (max mod active) and slots a waiting tenant has no
+// queued Query for are handed out on demand instead of being stranded.
+func (s *fairScheduler) freeSlotsReservedForOthersLocked(ns string, share int) bool {
+	free := s.max - s.inFlight
+	reserved := 0
+	for k, keys := range s.queued {
+		if k == ns {
+			continue
+		}
+		if room := share - s.perNS[k]; room > 0 {
+			reserved += min(room, len(keys))
+		}
+		if reserved >= free {
 			return true
 		}
 	}
@@ -127,25 +149,24 @@ func (s *fairScheduler) anyOtherWaitingBelowShareLocked(ns string, share int) bo
 }
 
 // countActiveLocked returns the number of namespaces currently competing for
-// the pool: those with in-flight work, plus those that attempted and were
-// denied within the window, plus ns itself. Stale waiting entries are pruned.
-// Computed arithmetically (no set allocation) since it runs on every acquire.
-func (s *fairScheduler) countActiveLocked(ns string, now time.Time) int {
-	s.pruneWaitingLocked(now)
+// the pool: those with in-flight work, plus those with queued Query keys, plus
+// ns itself. Computed arithmetically (no set allocation) since it runs on every
+// acquire.
+func (s *fairScheduler) countActiveLocked(ns string) int {
 	active := s.activeTenantsLocked()
 	if _, inFlight := s.perNS[ns]; !inFlight {
-		if _, waiting := s.waitingSeen[ns]; !waiting {
+		if _, waiting := s.queued[ns]; !waiting {
 			active++
 		}
 	}
 	return active
 }
 
-// activeTenantsLocked counts namespaces holding a slot plus those with a
-// (non-pruned) waiting mark not already counted. Allocation-free.
+// activeTenantsLocked counts namespaces holding a slot plus those with queued
+// Query keys not already counted. Allocation-free.
 func (s *fairScheduler) activeTenantsLocked() int {
 	active := len(s.perNS)
-	for k := range s.waitingSeen {
+	for k := range s.queued {
 		if _, inFlight := s.perNS[k]; !inFlight {
 			active++
 		}
@@ -153,48 +174,65 @@ func (s *fairScheduler) activeTenantsLocked() int {
 	return active
 }
 
-func (s *fairScheduler) pruneWaitingLocked(now time.Time) {
-	for k, seen := range s.waitingSeen {
-		if now.Sub(seen) > s.window {
-			delete(s.waitingSeen, k)
-			s.expiredSeen[k] = seen
-		}
+func (s *fairScheduler) markQueuedLocked(key types.NamespacedName, now time.Time) {
+	keys, ok := s.queued[key.Namespace]
+	if !ok {
+		keys = make(map[types.NamespacedName]time.Time)
+		s.queued[key.Namespace] = keys
 	}
-	for k, seen := range s.expiredSeen {
-		if now.Sub(seen) > waitExpiredHorizon {
-			delete(s.expiredSeen, k)
+	keys[key] = now
+}
+
+func (s *fairScheduler) forgetLocked(key types.NamespacedName) {
+	keys, ok := s.queued[key.Namespace]
+	if !ok {
+		return
+	}
+	delete(keys, key)
+	if len(keys) == 0 {
+		delete(s.queued, key.Namespace)
+		delete(s.lastAttempt, key.Namespace)
+	}
+}
+
+func (s *fairScheduler) pruneQueuedLocked(now time.Time) {
+	if !s.lastPrune.IsZero() && now.Sub(s.lastPrune) < queuedKeyPruneInterval {
+		return
+	}
+	s.lastPrune = now
+	for ns, keys := range s.queued {
+		for key, seen := range keys {
+			if now.Sub(seen) > s.keyExpiry {
+				delete(keys, key)
+				queryFairnessWaitExpiredTotal.WithLabelValues(ns).Inc()
+			}
+		}
+		if len(keys) == 0 {
+			delete(s.queued, ns)
+			delete(s.lastAttempt, ns)
 		}
 	}
 }
 
 func (s *fairScheduler) observeRetryLocked(ns string, now time.Time) {
-	s.pruneWaitingLocked(now)
-	if seen, waiting := s.waitingSeen[ns]; waiting {
-		queryFairnessRetryGapSeconds.Observe(now.Sub(seen).Seconds())
-		return
+	if last, ok := s.lastAttempt[ns]; ok {
+		queryFairnessRetryGapSeconds.Observe(now.Sub(last).Seconds())
 	}
-	seen, expired := s.expiredSeen[ns]
-	if !expired {
-		return
-	}
-	delete(s.expiredSeen, ns)
-	if now.Sub(seen) > waitExpiredHorizon {
-		return
-	}
-	queryFairnessRetryGapSeconds.Observe(now.Sub(seen).Seconds())
-	queryFairnessWaitExpiredTotal.WithLabelValues(ns).Inc()
 }
 
-func (s *fairScheduler) markWaitingLocked(ns string, now time.Time) {
-	s.waitingSeen[ns] = now
+func (s *fairScheduler) recordAttemptLocked(ns string, now time.Time) {
+	if _, waiting := s.queued[ns]; waiting {
+		s.lastAttempt[ns] = now
+		return
+	}
+	delete(s.lastAttempt, ns)
 }
 
-// publishLocked prunes stale waiting marks, then updates the changed namespace's
-// in-flight gauge and the active-tenant gauge. Pruning here (rather than only on
-// the non-saturated acquire path) keeps the active-tenant gauge accurate on the
-// release and denial paths and bounds waitingSeen under sustained saturation.
+// publishLocked prunes expired queued keys, then updates the changed
+// namespace's in-flight gauge and the active-tenant gauge. Pruning here keeps
+// the active-tenant gauge accurate on the release path too.
 func (s *fairScheduler) publishLocked(ns string) {
-	s.pruneWaitingLocked(s.now())
+	s.pruneQueuedLocked(s.now())
 	if n := s.perNS[ns]; n > 0 {
 		queryInflightGauge.WithLabelValues(ns).Set(float64(n))
 	} else {

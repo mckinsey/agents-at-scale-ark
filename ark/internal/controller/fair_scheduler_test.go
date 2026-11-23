@@ -3,6 +3,7 @@
 package controller
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -10,26 +11,31 @@ import (
 	dto "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 // newTestScheduler builds a scheduler with a controllable clock so the waiting
 // window can be exercised deterministically.
 func newTestScheduler(maxConcurrent int) (*fairScheduler, *time.Time) {
 	clock := time.Unix(0, 0)
-	s := newFairScheduler(maxConcurrent, 500*time.Millisecond)
+	s := newFairScheduler(maxConcurrent, time.Minute)
 	s.now = func() time.Time { return clock }
 	return s, &clock
+}
+
+func nsKey(ns string) types.NamespacedName {
+	return types.NamespacedName{Namespace: ns, Name: "q"}
 }
 
 func TestFairScheduler_GlobalBound(t *testing.T) {
 	s, _ := newTestScheduler(2)
 
-	require.True(t, s.tryAcquire("a"))
-	require.True(t, s.tryAcquire("a"))
-	assert.False(t, s.tryAcquire("a"), "third acquire must be denied once the global bound is reached")
+	require.True(t, s.tryAcquire(nsKey("a")))
+	require.True(t, s.tryAcquire(nsKey("a")))
+	assert.False(t, s.tryAcquire(nsKey("a")), "third acquire must be denied once the global bound is reached")
 
 	s.release("a")
-	assert.True(t, s.tryAcquire("a"), "a slot must be grantable again after release")
+	assert.True(t, s.tryAcquire(nsKey("a")), "a slot must be grantable again after release")
 }
 
 // The marquee invariant: once a second tenant appears, the busy tenant is held
@@ -39,29 +45,29 @@ func TestFairScheduler_QuietTenantNotStarved(t *testing.T) {
 	s, _ := newTestScheduler(2)
 
 	// Busy tenant fills the pool while it's the only active tenant.
-	require.True(t, s.tryAcquire("busy"))
-	require.True(t, s.tryAcquire("busy"))
+	require.True(t, s.tryAcquire(nsKey("busy")))
+	require.True(t, s.tryAcquire(nsKey("busy")))
 
 	// Quiet tenant arrives, is denied (pool full) but now counts as active.
-	assert.False(t, s.tryAcquire("quiet"))
+	assert.False(t, s.tryAcquire(nsKey("quiet")))
 
 	// A busy slot frees. With two active tenants the share is 1, so the freed
 	// slot goes to the quiet tenant, and the busy tenant cannot reclaim it.
 	s.release("busy")
-	assert.True(t, s.tryAcquire("quiet"), "quiet tenant must get the freed slot")
-	assert.False(t, s.tryAcquire("busy"), "busy tenant must be held at its fair share of 1")
+	assert.True(t, s.tryAcquire(nsKey("quiet")), "quiet tenant must get the freed slot")
+	assert.False(t, s.tryAcquire(nsKey("busy")), "busy tenant must be held at its fair share of 1")
 }
 
 func TestFairScheduler_EqualSplitAcrossTenants(t *testing.T) {
 	s, _ := newTestScheduler(4)
 
-	require.True(t, s.tryAcquire("a"))
-	require.True(t, s.tryAcquire("b"))
-	require.True(t, s.tryAcquire("a"))
-	require.True(t, s.tryAcquire("b"))
+	require.True(t, s.tryAcquire(nsKey("a")))
+	require.True(t, s.tryAcquire(nsKey("b")))
+	require.True(t, s.tryAcquire(nsKey("a")))
+	require.True(t, s.tryAcquire(nsKey("b")))
 
-	assert.False(t, s.tryAcquire("a"), "a is at its share of 2")
-	assert.False(t, s.tryAcquire("b"), "b is at its share of 2")
+	assert.False(t, s.tryAcquire(nsKey("a")), "a is at its share of 2")
+	assert.False(t, s.tryAcquire(nsKey("b")), "b is at its share of 2")
 	assert.Equal(t, 2, s.perNS["a"])
 	assert.Equal(t, 2, s.perNS["b"])
 }
@@ -72,17 +78,17 @@ func TestFairScheduler_RemainderNotStranded(t *testing.T) {
 	s, _ := newTestScheduler(4)
 
 	// Three backlogged tenants each reach the share of 1 (4/3 floored).
-	require.True(t, s.tryAcquire("a"))
-	require.True(t, s.tryAcquire("b"))
-	require.True(t, s.tryAcquire("c"))
+	require.True(t, s.tryAcquire(nsKey("a")))
+	require.True(t, s.tryAcquire(nsKey("b")))
+	require.True(t, s.tryAcquire(nsKey("c")))
 
 	// One slot remains. No tenant is waiting below its share, so the leftover
 	// slot is grantable rather than stranded behind the fairness check.
-	assert.True(t, s.tryAcquire("a"), "the remainder slot must be grantable, not stranded")
+	assert.True(t, s.tryAcquire(nsKey("a")), "the remainder slot must be grantable, not stranded")
 	assert.Equal(t, 4, s.inFlight)
 
 	// The pool is now full: the next attempt is refused by the global bound.
-	assert.False(t, s.tryAcquire("b"), "further acquires are refused only by the global cap")
+	assert.False(t, s.tryAcquire(nsKey("b")), "further acquires are refused only by the global cap")
 }
 
 // A busy tenant must be able to use spare capacity that quiet, low-demand
@@ -92,81 +98,133 @@ func TestFairScheduler_BusyTenantUsesSpareLeftByQuietTenant(t *testing.T) {
 	s, _ := newTestScheduler(4)
 
 	// Quiet tenant takes a single slot and stops asking (no waiting mark).
-	require.True(t, s.tryAcquire("quiet"))
+	require.True(t, s.tryAcquire(nsKey("quiet")))
 
 	// Busy tenant is not throttled to its notional share of 2: it fills every
 	// remaining slot because "quiet" has no pending demand.
-	require.True(t, s.tryAcquire("busy"))
-	require.True(t, s.tryAcquire("busy"))
-	assert.True(t, s.tryAcquire("busy"), "busy must claim the slot quiet is not asking for")
+	require.True(t, s.tryAcquire(nsKey("busy")))
+	require.True(t, s.tryAcquire(nsKey("busy")))
+	assert.True(t, s.tryAcquire(nsKey("busy")), "busy must claim the slot quiet is not asking for")
 	assert.Equal(t, 3, s.perNS["busy"])
 	assert.Equal(t, 4, s.inFlight)
 }
 
 func TestFairScheduler_ShareExpandsAsTenantsDrain(t *testing.T) {
-	s, clock := newTestScheduler(4)
+	s, _ := newTestScheduler(4)
 
-	require.True(t, s.tryAcquire("a"))
-	require.True(t, s.tryAcquire("b"))
-	require.True(t, s.tryAcquire("a"))
-	require.True(t, s.tryAcquire("b"))
+	require.True(t, s.tryAcquire(nsKey("a")))
+	require.True(t, s.tryAcquire(nsKey("b")))
+	require.True(t, s.tryAcquire(nsKey("a")))
+	require.True(t, s.tryAcquire(nsKey("b")))
 
-	// b drains completely and stops competing.
+	// b drains completely and stops competing; it has no queued Queries, so a
+	// is then the only active tenant and may use the whole pool.
 	s.release("b")
 	s.release("b")
 
-	// b's waiting mark ages out; a is then the only active tenant and may use
-	// the whole pool.
-	*clock = clock.Add(time.Second)
-	assert.True(t, s.tryAcquire("a"))
-	assert.True(t, s.tryAcquire("a"))
+	assert.True(t, s.tryAcquire(nsKey("a")))
+	assert.True(t, s.tryAcquire(nsKey("a")))
 	assert.Equal(t, 4, s.perNS["a"])
 }
 
 // The active-tenant count must return to zero once everything drains and the
-// waiting marks age out, on the release/denial paths too — not only when a
-// later non-saturated acquire happens to prune.
+// waiting tenant's queued Query is forgotten, on the forget path too — not only
+// when a later acquire happens.
 func TestFairScheduler_ActiveTenantsClearAfterDrain(t *testing.T) {
 	s, clock := newTestScheduler(2)
 
-	// a fills the pool; b is denied at the global cap and left waiting.
-	require.True(t, s.tryAcquire("a"))
-	require.True(t, s.tryAcquire("a"))
-	assert.False(t, s.tryAcquire("b"))
+	// a fills the pool; b is denied at the global cap and left queued.
+	require.True(t, s.tryAcquire(nsKey("a")))
+	require.True(t, s.tryAcquire(nsKey("a")))
+	assert.False(t, s.tryAcquire(nsKey("b")))
 
-	// a drains completely. b never acquired, so only its waiting mark remains.
+	// a drains completely. b never acquired, so only its queued key remains,
+	// and it keeps b active however long b takes to retry.
 	s.release("a")
 	s.release("a")
-
-	// Before the window elapses b still counts as active.
+	*clock = clock.Add(2 * time.Second)
 	assert.Equal(t, 1, s.activeTenantsLocked())
 
-	// Past the window a release must prune b, dropping the active count to zero
-	// with nothing running.
-	*clock = clock.Add(time.Second)
-	s.publishLocked("a")
+	// Forgetting b's key drops the active count to zero with nothing running.
+	s.forget(nsKey("b"))
 	assert.Equal(t, 0, s.activeTenantsLocked())
-	assert.Empty(t, s.waitingSeen)
+	assert.Empty(t, s.queued)
 }
 
-func TestFairScheduler_WaitingEntryAgesOut(t *testing.T) {
+// The #3458 scenario: a waiting tenant whose retries are slower than the old 1s
+// window keeps its reservation, so the saturating tenant cannot reclaim it.
+func TestFairScheduler_SlowRetryingTenantKeepsItsShare(t *testing.T) {
 	s, clock := newTestScheduler(4)
 
-	// a takes the whole pool as the sole active tenant.
 	for i := 0; i < 4; i++ {
-		require.True(t, s.tryAcquire("a"))
+		require.True(t, s.tryAcquire(nsKey("a")))
 	}
-	// b is denied (pool full) and recorded as waiting.
-	assert.False(t, s.tryAcquire("b"))
+	assert.False(t, s.tryAcquire(nsKey("b")))
 
-	s.release("a") // a=3, one slot free
+	s.release("a")
+	*clock = clock.Add(2 * time.Second)
+	assert.False(t, s.tryAcquire(nsKey("a")), "a must not reclaim the slot while b still has a queued Query")
+	assert.True(t, s.tryAcquire(nsKey("b")), "b must get the slot reserved for it")
+}
 
-	// While b is still fresh, two tenants are active (share 2) and a is over it.
-	assert.False(t, s.tryAcquire("a"), "a must yield the free slot while b is actively waiting")
+func TestFairScheduler_ForgottenTenantReleasesReservation(t *testing.T) {
+	s, _ := newTestScheduler(4)
 
-	// b goes quiet past the window; a reclaims the free slot.
-	*clock = clock.Add(time.Second)
-	assert.True(t, s.tryAcquire("a"), "a must reclaim capacity once b ages out of the active set")
+	for i := 0; i < 4; i++ {
+		require.True(t, s.tryAcquire(nsKey("a")))
+	}
+	assert.False(t, s.tryAcquire(nsKey("b")))
+	s.release("a")
+
+	s.forget(nsKey("b"))
+	assert.True(t, s.tryAcquire(nsKey("a")), "a must reclaim capacity once b has no queued Queries")
+}
+
+func TestFairScheduler_NamespaceWaitsWhileAnyKeyIsQueued(t *testing.T) {
+	s, _ := newTestScheduler(2)
+
+	require.True(t, s.tryAcquire(nsKey("busy")))
+	require.True(t, s.tryAcquire(nsKey("busy")))
+	first := types.NamespacedName{Namespace: "multi", Name: "first"}
+	second := types.NamespacedName{Namespace: "multi", Name: "second"}
+	assert.False(t, s.tryAcquire(first))
+	assert.False(t, s.tryAcquire(second))
+
+	s.forget(first)
+	assert.Contains(t, s.queued, "multi")
+
+	s.release("busy")
+	assert.False(t, s.tryAcquire(nsKey("busy")), "multi still has a queued Query, so its reservation holds")
+
+	s.forget(second)
+	assert.NotContains(t, s.queued, "multi")
+	assert.True(t, s.tryAcquire(nsKey("busy")))
+}
+
+func TestFairScheduler_HoldsOnlyAsManySlotsAsQueuedQueries(t *testing.T) {
+	s, clock := newTestScheduler(4)
+
+	for i := 0; i < 4; i++ {
+		require.True(t, s.tryAcquire(nsKey("held-busy")))
+	}
+	require.False(t, s.tryAcquire(nsKey("held-quiet")))
+	s.release("held-busy")
+	s.release("held-busy")
+
+	*clock = clock.Add(250 * time.Millisecond)
+	assert.True(t, s.tryAcquire(nsKey("held-busy")), "busy must get the free slot that quiet has no queued Query for")
+	assert.False(t, s.tryAcquire(nsKey("held-busy")), "the last free slot stays reserved for quiet's one queued Query")
+
+	*clock = clock.Add(8 * time.Second)
+	assert.True(t, s.tryAcquire(nsKey("held-quiet")))
+}
+
+func TestFairScheduler_ForgetUnknownKeyIsNoop(t *testing.T) {
+	s, _ := newTestScheduler(1)
+
+	s.forget(nsKey("never-seen"))
+	assert.Empty(t, s.queued)
+	assert.True(t, s.tryAcquire(nsKey("never-seen")))
 }
 
 func retryGapSnapshot(t *testing.T) (uint64, float64) {
@@ -180,116 +238,129 @@ func waitExpired(ns string) float64 {
 	return testutil.ToFloat64(queryFairnessWaitExpiredTotal.WithLabelValues(ns))
 }
 
-func TestFairScheduler_RetryWithinWindowRecordsGapOnly(t *testing.T) {
+func TestFairScheduler_RetryGapRecordedForWaitingNamespace(t *testing.T) {
 	s, clock := newTestScheduler(1)
 
-	require.True(t, s.tryAcquire("gap-busy"))
-	require.False(t, s.tryAcquire("gap-waiting"))
+	require.True(t, s.tryAcquire(nsKey("gap-busy")))
+	count, _ := retryGapSnapshot(t)
+	require.False(t, s.tryAcquire(nsKey("gap-waiting")))
+	afterFirst, _ := retryGapSnapshot(t)
+	assert.Equal(t, count, afterFirst, "the first attempt has no previous attempt to measure from")
 
-	count, sum := retryGapSnapshot(t)
 	*clock = clock.Add(200 * time.Millisecond)
-	assert.False(t, s.tryAcquire("gap-waiting"))
+	_, sum := retryGapSnapshot(t)
+	assert.False(t, s.tryAcquire(nsKey("gap-waiting")))
 
 	newCount, newSum := retryGapSnapshot(t)
 	assert.Equal(t, count+1, newCount)
 	assert.InDelta(t, 0.2, newSum-sum, 1e-9)
-	assert.Zero(t, waitExpired("gap-waiting"))
 }
 
-func TestFairScheduler_RetryAfterWindowCountsExpiry(t *testing.T) {
+func TestFairScheduler_NoRetryGapAfterNamespaceLeaves(t *testing.T) {
 	s, clock := newTestScheduler(1)
 
-	require.True(t, s.tryAcquire("exp-busy"))
-	require.False(t, s.tryAcquire("exp-waiting"))
-
-	*clock = clock.Add(time.Second)
-	s.release("exp-busy")
-	require.Contains(t, s.expiredSeen, "exp-waiting")
-
-	count, sum := retryGapSnapshot(t)
-	assert.True(t, s.tryAcquire("exp-waiting"))
-
-	newCount, newSum := retryGapSnapshot(t)
-	assert.Equal(t, float64(1), waitExpired("exp-waiting"))
-	assert.Equal(t, count+1, newCount)
-	assert.InDelta(t, 1.0, newSum-sum, 1e-9)
-	assert.NotContains(t, s.expiredSeen, "exp-waiting")
-}
-
-func TestFairScheduler_GrantedTenantLeavingIsNotCountedAsExpired(t *testing.T) {
-	s, clock := newTestScheduler(1)
-
-	require.True(t, s.tryAcquire("left-busy"))
-	require.False(t, s.tryAcquire("left-tenant"))
+	require.True(t, s.tryAcquire(nsKey("left-busy")))
+	require.False(t, s.tryAcquire(nsKey("left-tenant")))
 	s.release("left-busy")
-	require.True(t, s.tryAcquire("left-tenant"))
+	require.True(t, s.tryAcquire(nsKey("left-tenant")))
 	s.release("left-tenant")
+	assert.NotContains(t, s.lastAttempt, "left-tenant")
 
-	*clock = clock.Add(2 * time.Second)
-	require.True(t, s.tryAcquire("left-other"))
-	s.release("left-other")
-	assert.Empty(t, s.expiredSeen)
-
-	require.True(t, s.tryAcquire("left-tenant"))
+	*clock = clock.Add(30 * time.Second)
+	count, _ := retryGapSnapshot(t)
+	require.True(t, s.tryAcquire(nsKey("left-tenant")))
+	newCount, _ := retryGapSnapshot(t)
+	assert.Equal(t, count, newCount, "a namespace returning with new work is not a retry")
 	assert.Zero(t, waitExpired("left-tenant"))
 }
 
-func TestFairScheduler_ReturnAfterHorizonIsNotCountedAsExpired(t *testing.T) {
-	s, clock := newTestScheduler(1)
+func TestFairScheduler_QueuedKeyExpiresAfterSafetyExpiry(t *testing.T) {
+	s, clock := newTestScheduler(4)
 
-	require.True(t, s.tryAcquire("late-busy"))
-	require.False(t, s.tryAcquire("late-tenant"))
+	for i := 0; i < 4; i++ {
+		require.True(t, s.tryAcquire(nsKey("leak-busy")))
+	}
+	assert.False(t, s.tryAcquire(nsKey("leak-tenant")))
+	s.release("leak-busy")
 
-	*clock = clock.Add(time.Second)
-	s.release("late-busy")
-	require.Contains(t, s.expiredSeen, "late-tenant")
-
-	*clock = clock.Add(2 * waitExpiredHorizon)
-	require.True(t, s.tryAcquire("late-tenant"))
-	assert.Zero(t, waitExpired("late-tenant"))
-	assert.NotContains(t, s.expiredSeen, "late-tenant")
-}
-
-func TestFairScheduler_ExpiredEntriesArePrunedAfterHorizon(t *testing.T) {
-	s, clock := newTestScheduler(1)
-
-	require.True(t, s.tryAcquire("prune-busy"))
-	require.False(t, s.tryAcquire("prune-tenant"))
-
-	*clock = clock.Add(time.Second)
-	s.release("prune-busy")
-	require.Contains(t, s.expiredSeen, "prune-tenant")
-
-	*clock = clock.Add(2 * waitExpiredHorizon)
-	require.True(t, s.tryAcquire("prune-other"))
-	s.release("prune-other")
-	assert.Empty(t, s.expiredSeen)
-}
-
-func TestFairScheduler_SlowRetryWithoutInterveningPruneCountsExpiryOnce(t *testing.T) {
-	s, clock := newTestScheduler(2)
-
-	require.True(t, s.tryAcquire("slow-busy"))
-	require.True(t, s.tryAcquire("slow-busy"))
-	require.False(t, s.tryAcquire("slow-waiting"))
-
-	*clock = clock.Add(100 * time.Millisecond)
-	s.release("slow-busy")
-
-	count, sum := retryGapSnapshot(t)
-	*clock = clock.Add(2 * time.Second)
-	require.True(t, s.tryAcquire("slow-waiting"))
-
-	newCount, newSum := retryGapSnapshot(t)
-	assert.Equal(t, float64(1), waitExpired("slow-waiting"))
-	assert.Equal(t, count+1, newCount)
-	assert.InDelta(t, 2.1, newSum-sum, 1e-9)
-	assert.NotContains(t, s.expiredSeen, "slow-waiting")
-
-	s.release("slow-waiting")
 	*clock = clock.Add(30 * time.Second)
-	require.True(t, s.tryAcquire("slow-waiting"))
-	assert.Equal(t, float64(1), waitExpired("slow-waiting"))
-	finalCount, _ := retryGapSnapshot(t)
-	assert.Equal(t, newCount, finalCount)
+	assert.False(t, s.tryAcquire(nsKey("leak-busy")), "before the expiry the queued key still holds the reservation")
+	assert.Zero(t, waitExpired("leak-tenant"))
+
+	*clock = clock.Add(time.Minute)
+	assert.True(t, s.tryAcquire(nsKey("leak-busy")), "after the expiry the leaked key no longer holds the reservation")
+	assert.Equal(t, float64(1), waitExpired("leak-tenant"))
+	assert.NotContains(t, s.queued, "leak-tenant")
+	assert.NotContains(t, s.lastAttempt, "leak-tenant")
+}
+
+func TestFairScheduler_RetryingKeyDoesNotExpire(t *testing.T) {
+	s, clock := newTestScheduler(1)
+
+	require.True(t, s.tryAcquire(nsKey("alive-busy")))
+	for i := 0; i < 5; i++ {
+		assert.False(t, s.tryAcquire(nsKey("alive-tenant")))
+		*clock = clock.Add(30 * time.Second)
+	}
+	assert.Contains(t, s.queued, "alive-tenant")
+	assert.Zero(t, waitExpired("alive-tenant"))
+}
+
+func TestFairScheduler_PruneRunsAtMostOncePerInterval(t *testing.T) {
+	s, clock := newTestScheduler(1)
+
+	require.True(t, s.tryAcquire(nsKey("rate-busy")))
+	assert.False(t, s.tryAcquire(nsKey("rate-tenant")))
+
+	*clock = clock.Add(time.Minute + time.Millisecond)
+	s.lastPrune = clock.Add(-queuedKeyPruneInterval / 2)
+	s.forget(nsKey("unrelated"))
+	assert.Contains(t, s.queued, "rate-tenant", "a prune within the interval must be skipped")
+
+	*clock = clock.Add(queuedKeyPruneInterval)
+	s.forget(nsKey("unrelated"))
+	assert.NotContains(t, s.queued, "rate-tenant", "the next prune after the interval drops the expired key")
+}
+
+func TestFairScheduler_LargeBacklogWithSlowRetriesKeepsQuietShare(t *testing.T) {
+	s, clock := newTestScheduler(4)
+
+	for i := 0; i < 4; i++ {
+		require.True(t, s.tryAcquire(nsKey("backlog-busy")))
+	}
+	for i := 0; i < 10000; i++ {
+		require.False(t, s.tryAcquire(types.NamespacedName{Namespace: "backlog-busy", Name: fmt.Sprintf("queued-%05d", i)}))
+	}
+	require.False(t, s.tryAcquire(nsKey("backlog-quiet")))
+	s.release("backlog-busy")
+
+	for i := 0; i < 20; i++ {
+		*clock = clock.Add(250 * time.Millisecond)
+		key := types.NamespacedName{Namespace: "backlog-busy", Name: fmt.Sprintf("queued-%05d", i)}
+		assert.False(t, s.tryAcquire(key), "busy retry %d must not take the slot reserved for quiet", i)
+	}
+
+	assert.Len(t, s.queued["backlog-busy"], 10000)
+	assert.True(t, s.tryAcquire(nsKey("backlog-quiet")), "quiet gets its slot after a 5s retry gap")
+}
+
+func BenchmarkFairScheduler_DeniedRetry(b *testing.B) {
+	for _, queuedKeys := range []int{10, 10000} {
+		b.Run(fmt.Sprintf("queued=%d", queuedKeys), func(b *testing.B) {
+			s := newFairScheduler(4, time.Minute)
+			for i := 0; i < 4; i++ {
+				s.tryAcquire(types.NamespacedName{Namespace: "bench-busy", Name: "held"})
+			}
+			keys := make([]types.NamespacedName, queuedKeys)
+			for i := range keys {
+				keys[i] = types.NamespacedName{Namespace: "bench-busy", Name: fmt.Sprintf("queued-%05d", i)}
+				s.tryAcquire(keys[i])
+			}
+			s.tryAcquire(types.NamespacedName{Namespace: "bench-quiet", Name: "q"})
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				s.tryAcquire(keys[i%queuedKeys])
+			}
+		})
+	}
 }
