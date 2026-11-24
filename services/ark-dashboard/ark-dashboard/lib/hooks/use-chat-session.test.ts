@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { Provider, createStore } from 'jotai';
 import React from 'react';
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import { chatHistoryAtom } from '@/atoms/chat-history';
 import { CHAT_STREAMING_FEATURE_KEY } from '@/atoms/experimental-features';
@@ -11,7 +11,9 @@ import { BrokerUnavailableError, type ChatResponse } from '@/lib/services/chat';
 import { QUERY_NOT_FOUND_MESSAGE } from '@/lib/utils/chat-turn';
 import { trackEvent } from '@/lib/analytics/singleton';
 
-import { useChatSession } from './use-chat-session';
+import { buildChatKey, useChatSession } from './use-chat-session';
+
+const namespaceState = vi.hoisted(() => ({ namespace: 'default' }));
 
 vi.mock('@/lib/hooks/use-query-mcp-headers', () => ({
   useQueryMcpHeaders: () => ({
@@ -25,7 +27,7 @@ vi.mock('@/lib/hooks/use-query-mcp-headers', () => ({
 
 vi.mock('@/providers/NamespaceProvider', () => ({
   useNamespace: () => ({
-    namespace: 'default',
+    namespace: namespaceState.namespace,
     isNamespaceResolved: true,
     isPending: false,
     readOnlyMode: false,
@@ -1031,7 +1033,7 @@ describe('useChatSession - Stream force-close (#2862)', () => {
 });
 
 describe('useChatSession - Resume after navigation (#3844)', () => {
-  const CHAT_KEY = 'agent-test-agent';
+  const CHAT_KEY = buildChatKey('default', 'agent', 'test-agent');
 
   type A2ATask = Awaited<ReturnType<typeof chatService.getA2ATask>>;
   type QueryDetail = Awaited<ReturnType<typeof chatService.getQuery>>;
@@ -1973,5 +1975,251 @@ describe('useChatSession - Resume after navigation (#3844)', () => {
         expect(result.current.isProcessing).toBe(false);
       });
     });
+  });
+});
+
+describe('useChatSession - Namespace switch during a running query (#3999)', () => {
+  const KEY_A = buildChatKey('ns-a', 'agent', 'test-agent');
+  const KEY_B = buildChatKey('ns-b', 'agent', 'test-agent');
+
+  function storedSession(key: string): Record<string, unknown> | undefined {
+    const stored = JSON.parse(
+      globalThis.sessionStorage.getItem('agent-chat-history') || '{}',
+    );
+    return stored[key];
+  }
+
+  function seedRunningQuery(key: string, queryName: string) {
+    globalThis.sessionStorage.setItem(
+      'agent-chat-history',
+      JSON.stringify({
+        [key]: {
+          sessionId: 'chat-test-agent-abc',
+          messages: [{ role: 'user', content: 'hello' }],
+          activeQueryName: queryName,
+        },
+      }),
+    );
+  }
+
+  function mockQueryLivesIn(namespace: string, queryName: string) {
+    vi.mocked(chatService.getQueryResult).mockImplementation(
+      async (ns: string, name: string): Promise<ChatResponse> => {
+        if (ns !== namespace || name !== queryName) {
+          return { status: 'unknown', terminal: true, notFound: true };
+        }
+        return { status: 'running', terminal: false };
+      },
+    );
+  }
+
+  function finishQuery(namespace: string, queryName: string) {
+    vi.mocked(chatService.getQueryResult).mockImplementation(
+      async (ns: string, name: string): Promise<ChatResponse> => {
+        if (ns !== namespace || name !== queryName) {
+          return { status: 'unknown', terminal: true, notFound: true };
+        }
+        return {
+          status: 'done',
+          terminal: true,
+          messages: [{ role: 'assistant', content: 'final answer' }],
+        };
+      },
+    );
+  }
+
+  function requestedNamespaces(): string[] {
+    return vi.mocked(chatService.getQueryResult).mock.calls.map(([ns]) => ns);
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.resetAllMocks();
+    vi.mocked(agentsService.getByName).mockResolvedValue(null);
+    vi.mocked(chatService.resolveMemoryNotice).mockResolvedValue({
+      settled: true,
+      notice: null,
+    });
+    globalThis.sessionStorage?.clear();
+    globalThis.localStorage?.removeItem(CHAT_STREAMING_FEATURE_KEY);
+    namespaceState.namespace = 'default';
+  });
+
+  afterEach(() => {
+    namespaceState.namespace = 'default';
+  });
+
+  it.each([
+    ['ns-a', 'ns-b', 'q-in-a'],
+    ['ns-b', 'ns-a', 'q-in-b'],
+  ])(
+    'resumes a query only in %s, where it was created, when the chat remounts in %s',
+    async (home, other, queryName) => {
+      const homeKey = buildChatKey(home, 'agent', 'test-agent');
+      seedRunningQuery(homeKey, queryName);
+      mockQueryLivesIn(home, queryName);
+
+      namespaceState.namespace = home;
+      const first = renderHook(
+        () => useChatSession({ name: 'test-agent', type: 'agent' }),
+        { wrapper: createWrapper() },
+      );
+      await waitFor(() => {
+        expect(chatService.getQueryResult).toHaveBeenCalledWith(
+          home,
+          queryName,
+        );
+      });
+      first.unmount();
+
+      namespaceState.namespace = other;
+      const inOther = renderHook(
+        () => useChatSession({ name: 'test-agent', type: 'agent' }),
+        { wrapper: createWrapper() },
+      );
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      });
+      expect(inOther.result.current.messages).toEqual([]);
+      expect(inOther.result.current.isProcessing).toBe(false);
+      inOther.unmount();
+
+      finishQuery(home, queryName);
+      namespaceState.namespace = home;
+      const back = renderHook(
+        () => useChatSession({ name: 'test-agent', type: 'agent' }),
+        { wrapper: createWrapper() },
+      );
+      await waitFor(
+        () => {
+          expect(back.result.current.messages).toEqual([
+            { role: 'user', content: 'hello' },
+            { role: 'assistant', content: 'final answer' },
+          ]);
+        },
+        { timeout: 3000 },
+      );
+      expect(requestedNamespaces()).not.toContain(other);
+      expect(back.result.current.isProcessing).toBe(false);
+      expect(storedSession(homeKey)?.activeQueryName).toBeUndefined();
+    },
+  );
+
+  it('resumes the query when a mounted chat switches to a cached namespace and back', async () => {
+    seedRunningQuery(KEY_A, 'q-in-a');
+    mockQueryLivesIn('ns-a', 'q-in-a');
+    namespaceState.namespace = 'ns-a';
+
+    const view = renderHook(
+      () => useChatSession({ name: 'test-agent', type: 'agent' }),
+      { wrapper: createWrapper() },
+    );
+    await waitFor(() => {
+      expect(view.result.current.isProcessing).toBe(true);
+    });
+
+    namespaceState.namespace = 'ns-b';
+    view.rerender();
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 1200));
+    });
+    expect(requestedNamespaces()).not.toContain('ns-b');
+    expect(view.result.current.messages).toEqual([]);
+    expect(view.result.current.isProcessing).toBe(false);
+    expect(storedSession(KEY_A)?.activeQueryName).toBe('q-in-a');
+
+    finishQuery('ns-a', 'q-in-a');
+    namespaceState.namespace = 'ns-a';
+    view.rerender();
+    await waitFor(
+      () => {
+        expect(view.result.current.messages).toEqual([
+          { role: 'user', content: 'hello' },
+          { role: 'assistant', content: 'final answer' },
+        ]);
+      },
+      { timeout: 3000 },
+    );
+    expect(view.result.current.isProcessing).toBe(false);
+    expect(storedSession(KEY_A)?.activeQueryName).toBeUndefined();
+  });
+
+  it('resumes the query of the target chat when switching away from a busy chat', async () => {
+    globalThis.sessionStorage.setItem(
+      'agent-chat-history',
+      JSON.stringify({
+        [KEY_A]: {
+          sessionId: 'chat-test-agent-a',
+          messages: [{ role: 'user', content: 'question in a' }],
+          activeQueryName: 'q-in-a',
+        },
+        [KEY_B]: {
+          sessionId: 'chat-test-agent-b',
+          messages: [{ role: 'user', content: 'question in b' }],
+          activeQueryName: 'q-in-b',
+        },
+      }),
+    );
+    vi.mocked(chatService.getQueryResult).mockImplementation(
+      async (ns: string, name: string): Promise<ChatResponse> => {
+        if (ns === 'ns-b' && name === 'q-in-b') {
+          return {
+            status: 'done',
+            terminal: true,
+            messages: [{ role: 'assistant', content: 'answer in b' }],
+          };
+        }
+        if (ns === 'ns-a' && name === 'q-in-a') {
+          return { status: 'running', terminal: false };
+        }
+        return { status: 'unknown', terminal: true, notFound: true };
+      },
+    );
+    namespaceState.namespace = 'ns-a';
+
+    const view = renderHook(
+      () => useChatSession({ name: 'test-agent', type: 'agent' }),
+      { wrapper: createWrapper() },
+    );
+    await waitFor(() => {
+      expect(view.result.current.isProcessing).toBe(true);
+    });
+
+    namespaceState.namespace = 'ns-b';
+    view.rerender();
+
+    await waitFor(
+      () => {
+        expect(view.result.current.messages).toEqual([
+          { role: 'user', content: 'question in b' },
+          { role: 'assistant', content: 'answer in b' },
+        ]);
+      },
+      { timeout: 3000 },
+    );
+    expect(chatService.getQueryResult).toHaveBeenCalledWith('ns-b', 'q-in-b');
+    expect(view.result.current.isProcessing).toBe(false);
+    expect(storedSession(KEY_B)?.activeQueryName).toBeUndefined();
+    expect(storedSession(KEY_A)?.activeQueryName).toBe('q-in-a');
+  });
+
+  it('keeps a separate chat for an agent of the same name in another namespace', async () => {
+    seedRunningQuery(KEY_A, 'q-in-a');
+    mockQueryLivesIn('ns-a', 'q-in-a');
+    namespaceState.namespace = 'ns-b';
+
+    const view = renderHook(
+      () => useChatSession({ name: 'test-agent', type: 'agent' }),
+      { wrapper: createWrapper() },
+    );
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+
+    expect(view.result.current.messages).toEqual([]);
+    expect(view.result.current.sessionId).not.toBe('chat-test-agent-abc');
+    expect(chatService.getQueryResult).not.toHaveBeenCalled();
+    expect(storedSession(KEY_B)).toBeDefined();
+    expect(storedSession(KEY_A)?.activeQueryName).toBe('q-in-a');
   });
 });

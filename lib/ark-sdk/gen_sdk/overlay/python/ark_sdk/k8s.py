@@ -223,6 +223,8 @@ def apply_impersonation_headers(api: ApiClient, impersonation: Optional['Imperso
     Impersonate-Group header per group at the transport layer.
     """
     if impersonation:
+        if not impersonation.username or not impersonation.username.strip():
+            raise ValueError("Impersonation requires a non-empty username")
         api.set_default_header("Impersonate-User", impersonation.username)
         if impersonation.groups:
             api.set_default_header("Impersonate-Group", list(impersonation.groups))

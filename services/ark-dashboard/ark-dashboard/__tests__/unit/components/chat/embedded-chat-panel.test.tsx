@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { chatHistoryAtom } from '@/atoms/chat-history';
 import { lastConversationIdAtom } from '@/atoms/internal-states';
 import { EmbeddedChatPanel } from '@/components/chat/embedded-chat-panel';
+import { buildChatKey } from '@/lib/hooks/use-chat-session';
 import { chatService } from '@/lib/services/chat';
 
 vi.mock('@/lib/hooks/use-query-mcp-headers', () => ({
@@ -200,7 +201,7 @@ describe('EmbeddedChatPanel', () => {
     global.fetch = fetchMock;
 
     store.set(chatHistoryAtom, {
-      'agent-test-agent': {
+      [buildChatKey('default', 'agent', 'test-agent')]: {
         messages: [
           { role: 'user', content: 'Hello' },
           { role: 'assistant', content: 'Hi there!' },
@@ -226,7 +227,9 @@ describe('EmbeddedChatPanel', () => {
 
     await user.click(newChatButton);
 
-    const messages = store.get(chatHistoryAtom)['agent-test-agent'].messages;
+    const messages =
+      store.get(chatHistoryAtom)[buildChatKey('default', 'agent', 'test-agent')]
+        .messages;
     expect(messages).toHaveLength(0);
 
     await user.click(debugTab);
