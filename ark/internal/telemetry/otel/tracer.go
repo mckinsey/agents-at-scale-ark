@@ -12,6 +12,7 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/telemetry"
+	"mckinsey.com/ark/internal/telemetry/redact"
 )
 
 const (
@@ -63,11 +64,7 @@ func (t *tracer) Start(ctx context.Context, spanName string, opts ...telemetry.S
 
 	// Add attributes
 	if len(cfg.Attributes) > 0 {
-		otelAttrs := make([]attribute.KeyValue, len(cfg.Attributes))
-		for i, attr := range cfg.Attributes {
-			otelAttrs[i] = convertAttribute(attr)
-		}
-		otelOpts = append(otelOpts, trace.WithAttributes(otelAttrs...))
+		otelOpts = append(otelOpts, trace.WithAttributes(convertAttributes(cfg.Attributes)...))
 	}
 
 	// Automatically add query.name and query.namespace from context
@@ -95,12 +92,7 @@ func (s *span) SetAttributes(attributes ...telemetry.Attribute) {
 	if len(attributes) == 0 {
 		return
 	}
-
-	otelAttrs := make([]attribute.KeyValue, len(attributes))
-	for i, attr := range attributes {
-		otelAttrs[i] = convertAttribute(attr)
-	}
-	s.otelSpan.SetAttributes(otelAttrs...)
+	s.otelSpan.SetAttributes(convertAttributes(attributes)...)
 }
 
 func (s *span) RecordError(err error) {
@@ -118,12 +110,7 @@ func (s *span) AddEvent(name string, attributes ...telemetry.Attribute) {
 		s.otelSpan.AddEvent(name)
 		return
 	}
-
-	otelAttrs := make([]attribute.KeyValue, len(attributes))
-	for i, attr := range attributes {
-		otelAttrs[i] = convertAttribute(attr)
-	}
-	s.otelSpan.AddEvent(name, trace.WithAttributes(otelAttrs...))
+	s.otelSpan.AddEvent(name, trace.WithAttributes(convertAttributes(attributes)...))
 }
 
 func (s *span) TraceID() string {
@@ -136,10 +123,21 @@ func (s *span) SpanID() string {
 
 // Conversion helpers
 
+// convertAttributes converts a slice of telemetry attributes to OTEL key-values. Every
+// span path (Start / SetAttributes / AddEvent) routes through here, and thus through
+// convertAttribute, so no path can hand-roll its own loop and bypass redaction.
+func convertAttributes(attrs []telemetry.Attribute) []attribute.KeyValue {
+	otelAttrs := make([]attribute.KeyValue, len(attrs))
+	for i, attr := range attrs {
+		otelAttrs[i] = convertAttribute(attr)
+	}
+	return otelAttrs
+}
+
 func convertAttribute(attr telemetry.Attribute) attribute.KeyValue {
 	switch v := attr.Value.(type) {
 	case string:
-		return attribute.String(attr.Key, v)
+		return attribute.String(attr.Key, redact.Redact(v))
 	case int:
 		return attribute.Int(attr.Key, v)
 	case int64:
@@ -149,7 +147,22 @@ func convertAttribute(attr telemetry.Attribute) attribute.KeyValue {
 	case bool:
 		return attribute.Bool(attr.Key, v)
 	case []string:
-		return attribute.StringSlice(attr.Key, v)
+		// Allocate only when an element actually changes.
+		var redacted []string
+		for i, s := range v {
+			r := redact.Redact(s)
+			if r == s {
+				continue
+			}
+			if redacted == nil {
+				redacted = append([]string(nil), v...)
+			}
+			redacted[i] = r
+		}
+		if redacted == nil {
+			return attribute.StringSlice(attr.Key, v)
+		}
+		return attribute.StringSlice(attr.Key, redacted)
 	default:
 		// Fallback to string representation
 		return attribute.String(attr.Key, "")

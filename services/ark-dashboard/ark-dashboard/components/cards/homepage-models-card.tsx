@@ -31,7 +31,6 @@ export function HomepageModelsCard() {
       key={section.key}
       title={section.title}
       value={count}
-      Icon={section.icon}
       href={`/${section.key}`}
       isLoading={isPending}
       hasError={Boolean(error)}

@@ -1,0 +1,12 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: hitl-query
+spec:
+  type: user
+  input: "Deploy the api-service application version v2.1.0 to production"
+  target:
+    name: hitl-agent
+    type: agent
+  sessionId: hitl-demo-session
+  conversationId: hitl-demo-conv-001

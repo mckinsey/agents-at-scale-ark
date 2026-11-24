@@ -1,0 +1,86 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: log-fanout-template
+  annotations:
+    workflows.argoproj.io/title: "Log Fanout"
+    workflows.argoproj.io/description: |
+      Fans out to many pod nodes, each with a different amount of output.
+      Exercises per-node log buffers: switching nodes resets the viewport,
+      collapsing and reopening a node keeps its scroll position, and enough
+      shards will evict the least recently used buffers.
+spec:
+  entrypoint: main
+  serviceAccountName: argo-workflow
+
+  arguments:
+    parameters:
+    - name: shards
+      value: "8"
+    - name: lines-per-shard
+      value: "300"
+
+  templates:
+  - name: main
+    dag:
+      tasks:
+      - name: plan
+        template: plan-shards
+        arguments:
+          parameters:
+          - name: shards
+            value: "{{workflow.parameters.shards}}"
+      - name: shard
+        template: emit-shard
+        dependencies: [plan]
+        withParam: "{{tasks.plan.outputs.parameters.shards}}"
+        arguments:
+          parameters:
+          - name: shard
+            value: "{{item}}"
+          - name: lines-per-shard
+            value: "{{workflow.parameters.lines-per-shard}}"
+
+  - name: plan-shards
+    metadata:
+      annotations:
+        workflows.argoproj.io/description: "Builds the shard list to fan out over"
+    inputs:
+      parameters:
+      - name: shards
+    script:
+      image: ghcr.io/mckinsey/agents-at-scale-ark/ark-tools:latest
+      command: [bash]
+      source: |
+        set -euo pipefail
+        shards="{{inputs.parameters.shards}}"
+        echo "planning ${shards} shards"
+        seq 1 "${shards}" | paste -sd, - | sed 's/^/[/; s/$/]/' > /tmp/shards.json
+        cat /tmp/shards.json
+    outputs:
+      parameters:
+      - name: shards
+        valueFrom:
+          path: /tmp/shards.json
+
+  - name: emit-shard
+    metadata:
+      annotations:
+        workflows.argoproj.io/description: "Output volume scales with the shard number"
+    inputs:
+      parameters:
+      - name: shard
+      - name: lines-per-shard
+    script:
+      image: ghcr.io/mckinsey/agents-at-scale-ark/ark-tools:latest
+      command: [bash]
+      source: |
+        set -euo pipefail
+        shard="{{inputs.parameters.shard}}"
+        per_shard="{{inputs.parameters.lines-per-shard}}"
+        total=$((shard * per_shard))
+        echo "shard ${shard} emitting ${total} lines"
+        for i in $(seq 1 "${total}"); do
+          printf 'shard %02d line %06d of %d\n' "${shard}" "${i}" "${total}"
+        done
+        echo "shard ${shard} done"

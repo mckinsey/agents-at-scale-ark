@@ -1,0 +1,12 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: hitl-direct-write
+spec:
+  type: user
+  input: "Use file-gateway-write-file to write 'HITL test' to /tmp/test.txt. Execute the tool now."
+  target:
+    name: hitl-agent
+    type: agent
+  sessionId: hitl-direct-session
+  conversationId: hitl-direct-conv

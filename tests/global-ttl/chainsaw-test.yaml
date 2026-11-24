@@ -59,7 +59,13 @@ spec:
           metadata:
             name: test-query-override-ttl
           spec:
-            ttl: 5m0s
+            # The user-supplied ttl ("5m") is not guaranteed to be rewritten
+            # into Go's canonical Duration string ("5m0s") - that only ever
+            # happened as a side effect of the controller's own full-object
+            # Update(), not a documented contract of the mutating webhook.
+            # Accept either form; the controller parses both identically via
+            # metav1.Duration.
+            (ttl == '5m' || ttl == '5m0s'): true
     catch:
     - events: {}
     - describe:

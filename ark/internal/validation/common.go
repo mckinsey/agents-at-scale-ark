@@ -3,17 +3,23 @@ package validation
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/annotations"
+	"mckinsey.com/ark/internal/secretscope"
 )
 
 const schemeHTTP = "http"
 
 type Validator struct {
 	Lookup ResourceLookup
+	// SAAuthorizer authorizes a Query's requested service account against the
+	// admission requester. Set only on the admission-webhook path; nil on other
+	// validation paths (e.g. apiserver storage), where the check is skipped.
+	SAAuthorizer *ServiceAccountAuthorizer
 }
 
 func NewValidator(lookup ResourceLookup) *Validator {
@@ -38,6 +44,9 @@ func (v *Validator) SecretKeyExists(ctx context.Context, namespace, name, key st
 	secret, err := v.Lookup.GetSecret(ctx, namespace, name)
 	if err != nil {
 		return fmt.Errorf("secret '%s' does not exist in namespace '%s': %v", name, namespace, err)
+	}
+	if err := secretscope.CheckResolvable(secret, secretscope.RejectPersonal); err != nil {
+		return err
 	}
 	if _, exists := secret.Data[key]; !exists {
 		return fmt.Errorf("key '%s' not found in secret '%s' in namespace '%s'", key, name, namespace)
@@ -82,6 +91,10 @@ func (v *Validator) resolveSecretRef(ctx context.Context, namespace, name, key s
 	secret, err := v.Lookup.GetSecret(ctx, namespace, name)
 	if err != nil {
 		return "", fmt.Errorf("failed to get secret %s/%s: %w", namespace, name, err)
+	}
+
+	if err := secretscope.CheckResolvable(secret, secretscope.RejectPersonal); err != nil {
+		return "", err
 	}
 	val, exists := secret.Data[key]
 	if !exists {
@@ -243,6 +256,18 @@ func ValidateHeaderValueFrom(valueFrom *arkv1alpha1.HeaderValueSource, contextPr
 	return nil
 }
 
+func ValidateUniqueHeaderNames(headers []arkv1alpha1.Header, contextPrefix string) error {
+	seen := make(map[string]struct{}, len(headers))
+	for _, header := range headers {
+		name := strings.ToLower(strings.TrimSpace(header.Name))
+		if _, ok := seen[name]; ok {
+			return fmt.Errorf("%s: duplicate header name: %s", contextPrefix, header.Name)
+		}
+		seen[name] = struct{}{}
+	}
+	return nil
+}
+
 func ValidateOverrides(overrides []arkv1alpha1.Override) error {
 	for i, override := range overrides {
 		if err := ValidateOverrideEntry(override, i); err != nil {
@@ -282,6 +307,40 @@ func (v *Validator) ValidateValueSource(ctx context.Context, vs *arkv1alpha1.Val
 			return fmt.Errorf("%s: %w", fieldName, err)
 		}
 	}
+	return nil
+}
+
+// ValidateApprovalConfig checks a tool approval block. Shared by the Agent path, where
+// approval sits on the agent's tool reference, and the Tool path, where it applies to
+// every agent using that tool.
+func ValidateApprovalConfig(approval *arkv1alpha1.ToolApprovalConfig, contextPrefix string) error {
+	if approval == nil {
+		return nil
+	}
+
+	// Validate timeout is positive if specified
+	if approval.Timeout != nil && approval.Timeout.Duration <= 0 {
+		return fmt.Errorf("%sapproval.timeout must be a positive duration", contextPrefix)
+	}
+
+	// Validate onTimeout enum
+	if approval.OnTimeout != "" && approval.OnTimeout != "reject" && approval.OnTimeout != "proceed" {
+		return fmt.Errorf("%sapproval.onTimeout must be 'reject' or 'proceed'", contextPrefix)
+	}
+
+	// Validate argument matchers: each needs a field name and a compilable pattern.
+	for i, matcher := range approval.ArgumentMatches {
+		if matcher.Argument == "" {
+			return fmt.Errorf("%sapproval.argumentMatches[%d].argument must not be empty", contextPrefix, i)
+		}
+		if matcher.Pattern == "" {
+			return fmt.Errorf("%sapproval.argumentMatches[%d].pattern must not be empty", contextPrefix, i)
+		}
+		if _, err := regexp.Compile(matcher.Pattern); err != nil {
+			return fmt.Errorf("%sapproval.argumentMatches[%d].pattern is not a valid regular expression: %w", contextPrefix, i, err)
+		}
+	}
+
 	return nil
 }
 

@@ -1,0 +1,9 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: broken
+spec:
+  prompt: |
+    You are a Broken Agent used to force an upstream error. TRIGGER_ERROR
+  modelRef:
+    name: test-model-mock

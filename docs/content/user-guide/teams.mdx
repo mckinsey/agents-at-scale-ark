@@ -87,7 +87,7 @@ kubectl wait --for=condition=Available team/sequential-team --timeout=60s
 kubectl get team sequential-team
 ```
 
-The controller validates that every member resolves, that the strategy's cross-field rules hold (more on those below), and that the team isn't "mixed" — i.e. you can't combine agents whose execution engines are external (Claude Agent SDK, LangChain, …) with built-in completion agents in one team.
+The controller validates that every member resolves and that the strategy's cross-field rules hold (more on those below).
 
 ## Strategy walkthroughs
 
@@ -253,7 +253,34 @@ members:
 - **`agent`** — references an Agent in the same namespace. Standard case.
 - **`team`** — references another Team. The nested team runs as a single "member"; its own strategy and members are isolated. Useful for composing larger workflows. *(Nested teams are YAML-only — the dashboard's Create Team form does not surface team members.)*
 
-A team cannot reference itself, and you can't mix internal (default completions executor) and external (e.g. Claude Agent SDK, LangChain) agents in the same team — the webhook will reject the apply with `mixed teams are not allowed`.
+A team cannot reference itself. Members can mix execution engines — see [Mixed teams](#mixed-teams).
+
+## Mixed teams
+
+A team can contain both internal agents (default completions executor) and external agents on a named `executionEngine` (e.g. Claude Agent SDK, LangChain):
+
+```yaml
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Team
+metadata:
+  name: code-review-team
+spec:
+  strategy: sequential
+  members:
+    - name: claude-coder      # spec.executionEngine.name: claude-agent-sdk
+      type: agent
+    - name: local-reviewer    # spec.modelRef, no executionEngine
+      type: agent
+```
+
+Every member sees the same transcript — each member's output is appended to the conversation and passed to the next one — but the two kinds receive it in different shapes:
+
+- An **internal member** gets its own system prompt plus the transcript as structured messages.
+- An **external member** — on a named engine or on the built-in **`a2a`** engine — gets the transcript folded into the prompt body with `# <member>:` speaker attribution, because the receiving engine assembles its own prompt. Tool results are rendered as `# tool:` turns, but the tool call that produced them — its name and arguments — is not carried across.
+
+A query that targets an `a2a` agent directly still sends only that query's input, leaving the conversation to the remote server — see [A2AServer → Conversation context](/reference/resources/a2aserver#conversation-context). Only team-member turns carry the transcript.
+
+Conversation state is scoped differently for each of the three: internal members share the parent query's memory; each **named-engine** member gets its own derived `conversationId`, so an executor that keys state on it won't merge members; an **`a2a`** member keeps the query's A2A `contextID`, so the remote server sees one conversation for the whole query.
 
 ## Query a team
 
@@ -332,7 +359,7 @@ kubectl delete teams team-a team-b
 kubectl delete teams --all
 ```
 
-The `Available` condition flips to `False` when the team is misconfigured — `kubectl describe` shows the underlying admission error (missing member, missing selector agent, missing `maxTurns`, mixed engines, etc.).
+The `Available` condition flips to `False` when the team is misconfigured — `kubectl describe` shows the underlying admission error (missing member, missing selector agent, missing `maxTurns`, etc.).
 
 ## Team as a tool
 
@@ -387,7 +414,6 @@ For any of these, write the `Team` YAML directly. You can still inspect, edit, a
 - **`loops can only be used with the 'sequential' strategy`** — selector teams loop via the selector's choices, not via `loops`.
 - **`graph constraint requires at least one edge`** — drop the `graph:` block entirely or add edges.
 - **`graph edge N: 'from'/'to' member 'X' not found in team members`** — every endpoint in `graph.edges` must reference a member of the team.
-- **`mixed teams are not allowed`** — one or more members use an external execution engine while others use the built-in completions engine; split into two teams.
 - **`team member N references agent: agent 'X' does not exist in namespace 'Y'`** — apply the referenced Agent first.
 - **`team 'X' cannot reference itself`** — `members[].name` cannot equal `metadata.name` when `type: team`.
 

@@ -3,30 +3,47 @@ package completions
 import (
 	"context"
 	"fmt"
-	"sync"
-	"time"
 
 	"github.com/openai/openai-go/option"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/common"
+	"mckinsey.com/ark/internal/crossns"
 	"mckinsey.com/ark/internal/eventing"
+	"mckinsey.com/ark/internal/modelurl"
 	"mckinsey.com/ark/internal/telemetry"
 )
 
-const modelCRDCacheTTL = 5 * time.Minute
+const defaultModelName = "default"
 
-type modelCRDCacheEntry struct {
-	crd       *arkv1alpha1.Model
-	expiresAt time.Time
+var validateModelBaseURL = modelurl.Validate
+
+type BaseURLNotAllowedError struct {
+	Field string
+	Rule  modelurl.Rule
+	cause error
 }
 
-var modelCRDCache sync.Map
+func (e *BaseURLNotAllowedError) Error() string {
+	return fmt.Sprintf("%s is not allowed by the model URL policy: %s", e.Field, e.Rule)
+}
 
-const defaultModelName = "default"
+func (e *BaseURLNotAllowedError) Unwrap() error {
+	return e.cause
+}
+
+func checkBaseURL(field, baseURL string) error {
+	err := validateModelBaseURL(baseURL)
+	if err == nil {
+		return nil
+	}
+	rule, _ := modelurl.RuleOf(err)
+	return &BaseURLNotAllowedError{Field: field, Rule: rule, cause: err}
+}
 
 func ResolveModelSpec(modelSpec any, defaultNamespace string) (string, string, error) {
 	if modelSpec == nil {
@@ -62,9 +79,9 @@ func LoadModel(ctx context.Context, k8sClient client.Client, modelSpec interface
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve model spec: %w", err)
 	}
-	modelCRD, err := loadModelCRD(ctx, k8sClient, modelName, namespace)
+	modelCRD, err := loadReferencedModel(ctx, k8sClient, modelName, namespace, defaultNamespace)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load model CRD %s in namespace %s: %w", modelName, namespace, err)
+		return nil, err
 	}
 
 	resolver := common.NewValueSourceResolver(k8sClient)
@@ -110,21 +127,23 @@ func LoadModel(ctx context.Context, k8sClient client.Client, modelSpec interface
 	return modelInstance, nil
 }
 
-func loadModelCRD(ctx context.Context, k8sClient client.Client, name, namespace string) (*arkv1alpha1.Model, error) {
-	cacheKey := namespace + "/" + name
-	if v, ok := modelCRDCache.Load(cacheKey); ok {
-		entry := v.(*modelCRDCacheEntry)
-		if time.Now().Before(entry.expiresAt) {
-			return entry.crd, nil
-		}
+func loadReferencedModel(ctx context.Context, k8sClient client.Client, name, namespace, fromNamespace string) (*arkv1alpha1.Model, error) {
+	modelCRD, err := loadModelCRD(ctx, k8sClient, name, namespace)
+	if err != nil && (namespace == fromNamespace || !apierrors.IsNotFound(err)) {
+		return nil, fmt.Errorf("failed to load model CRD %s in namespace %s: %w", name, namespace, err)
 	}
+	if namespace != fromNamespace && (err != nil || !crossns.Allowed(modelCRD, fromNamespace)) {
+		return nil, crossns.DeniedError("Model", namespace, name, fromNamespace)
+	}
+	return modelCRD, nil
+}
 
+func loadModelCRD(ctx context.Context, k8sClient client.Client, name, namespace string) (*arkv1alpha1.Model, error) {
 	var modelCRD arkv1alpha1.Model
 	if err := k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, &modelCRD); err != nil {
 		return nil, fmt.Errorf("failed to get Model %s/%s: %w", namespace, name, err)
 	}
 
-	modelCRDCache.Store(cacheKey, &modelCRDCacheEntry{crd: &modelCRD, expiresAt: time.Now().Add(modelCRDCacheTTL)})
 	return &modelCRD, nil
 }
 

@@ -1,0 +1,94 @@
+{{- if .Values.rbac.create }}
+{{- /*
+Least-privilege RBAC for the completions pod. It reads
+Query/Agent/Team/Model/MCPServer/Tool/A2AServer/ExecutionEngine config plus the
+secrets/configmaps referenced by model credentials & MCP headers, and services
+to resolve broker ServiceReferences to URLs. Its writes are: updating Memory
+status, and recording A2A task responses as A2ATask resources — it creates the
+A2ATask, reads it back (get), and seeds its initial status (a2atasks/status),
+after which the a2atask controller reconciles their status. It does not emit
+Kubernetes Events (events go to the broker).
+
+Scope follows discovery scope: the central install serves every namespace, so it
+gets a cluster-scoped Role; a per-tenant install (namespaceScopedDiscovery=true)
+only serves its own namespace and gets a namespaced Role.
+*/}}
+{{- $clusterScoped := not .Values.namespaceScopedDiscovery }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: {{ if $clusterScoped }}ClusterRole{{ else }}Role{{ end }}
+metadata:
+  name: {{ include "ark-completions.fullname" . }}
+  {{- if not $clusterScoped }}
+  namespace: {{ include "ark-completions.namespace" . }}
+  {{- end }}
+  labels:
+    app: ark-completions
+rules:
+- apiGroups:
+  - ark.mckinsey.com
+  resources:
+  - agents
+  - teams
+  - models
+  - queries
+  - mcpservers
+  - memories
+  - tools
+  - a2aservers
+  - executionengines
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ark.mckinsey.com
+  resources:
+  - memories/status
+  verbs:
+  - get
+  - update
+  - patch
+- apiGroups:
+  - ark.mckinsey.com
+  resources:
+  - a2atasks
+  verbs:
+  - create
+  - get
+- apiGroups:
+  - ark.mckinsey.com
+  resources:
+  - a2atasks/status
+  verbs:
+  - get
+  - update
+  - patch
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  - configmaps
+  - services
+  verbs:
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: {{ if $clusterScoped }}ClusterRoleBinding{{ else }}RoleBinding{{ end }}
+metadata:
+  name: {{ include "ark-completions.fullname" . }}
+  {{- if not $clusterScoped }}
+  namespace: {{ include "ark-completions.namespace" . }}
+  {{- end }}
+  labels:
+    app: ark-completions
+subjects:
+- kind: ServiceAccount
+  name: {{ include "ark-completions.serviceAccountName" . }}
+  namespace: {{ include "ark-completions.namespace" . }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: {{ if $clusterScoped }}ClusterRole{{ else }}Role{{ end }}
+  name: {{ include "ark-completions.fullname" . }}
+{{- end }}

@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { apiClient } from '@/lib/api/client';
-import { chatService } from '@/lib/services/chat';
+import { APIError } from '@/lib/api/errors';
+import { BrokerUnavailableError, chatService } from '@/lib/services/chat';
 import type {
   QueryDetailResponse,
   QueryListResponse,
@@ -15,6 +16,12 @@ vi.mock('@/lib/api/client', () => ({
     put: vi.fn(),
     delete: vi.fn(),
   },
+}));
+
+// Mock apiUrl with a non-empty base path so we can assert the chunk stream
+// honours the tenant prefix (regression: raw fetch used to drop it).
+vi.mock('@/lib/api/config', () => ({
+  apiUrl: vi.fn((path: string) => `/tenant-a${path}`),
 }));
 
 // Mock crypto.randomUUID
@@ -51,12 +58,12 @@ describe('chatService', () => {
         target: { type: 'AGENT', name: 'agent1' },
       };
 
-      const result = await chatService.createQuery(queryRequest);
+      const result = await chatService.createQuery('default', queryRequest);
 
       expect(apiClient.post).toHaveBeenCalledWith(`/api/v1/queries/`, {
         ...queryRequest,
         target: { type: 'agent', name: 'agent1' },
-      });
+      }, { params: { namespace: 'default' } });
       expect(result).toEqual(mockResponse);
     });
   });
@@ -71,18 +78,17 @@ describe('chatService', () => {
 
       vi.mocked(apiClient.get).mockResolvedValueOnce(mockQuery);
 
-      const result = await chatService.getQuery('test-query');
+      const result = await chatService.getQuery('default', 'test-query');
 
-      expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/queries/test-query`);
+      expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/queries/test-query`, { params: { namespace: 'default' } });
       expect(result).toEqual(mockQuery);
     });
 
     it('should return null for 404 errors', async () => {
-      const error = new Error('Not found') as any;
-      error.response = { status: 404 };
+      const error = new APIError('Not found', 404);
       vi.mocked(apiClient.get).mockRejectedValueOnce(error);
 
-      const result = await chatService.getQuery('non-existent');
+      const result = await chatService.getQuery('default', 'non-existent');
 
       expect(result).toBeNull();
     });
@@ -100,10 +106,13 @@ describe('chatService', () => {
       vi.mocked(apiClient.post).mockResolvedValueOnce(mockResponse);
 
       const result = await chatService.submitChatQuery(
+        'default',
         'Hello',
         'agent',
         'test-agent',
-        'session-123',
+        {
+          sessionId: 'session-123',
+        },
       );
 
       expect(apiClient.post).toHaveBeenCalledWith(
@@ -114,12 +123,11 @@ describe('chatService', () => {
           input: 'Hello',
           target: { type: 'agent', name: 'test-agent' },
           sessionId: 'session-123',
-        }),
-      );
+        }), { params: { namespace: 'default' } });
       expect(result).toEqual(mockResponse);
     });
 
-    it('should add streaming annotation when enableStreaming is true', async () => {
+    it('should not add metadata annotations for a standard chat query', async () => {
       const mockResponse: QueryDetailResponse = {
         name: 'chat-query-mock-uuid',
         input: 'Hello',
@@ -130,44 +138,13 @@ describe('chatService', () => {
       vi.mocked(apiClient.post).mockResolvedValueOnce(mockResponse);
 
       const result = await chatService.submitChatQuery(
+        'default',
         'Hello',
         'agent',
         'test-agent',
-        'session-123',
-        undefined,
-        true,
-      );
-
-      expect(apiClient.post).toHaveBeenCalledWith(
-        `/api/v1/queries/`,
-        expect.objectContaining({
-          type: 'user',
-          input: 'Hello',
-          metadata: {
-            annotations: {
-              'ark.mckinsey.com/streaming-enabled': 'true',
-            },
-          },
-        }),
-      );
-      expect(result).toEqual(mockResponse);
-    });
-
-    it('should not add streaming annotation when enableStreaming is false or undefined', async () => {
-      const mockResponse: QueryDetailResponse = {
-        name: 'chat-query-mock-uuid',
-        input: 'Hello',
-        target: { type: 'agent', name: 'test-agent' },
-        status: { phase: 'pending' },
-      };
-
-      vi.mocked(apiClient.post).mockResolvedValueOnce(mockResponse);
-
-      const result = await chatService.submitChatQuery(
-        'Hello',
-        'agent',
-        'test-agent',
-        'session-123',
+        {
+          sessionId: 'session-123',
+        },
       );
 
       const callArgs = vi.mocked(apiClient.post).mock.calls[0][1] as Record<
@@ -176,6 +153,31 @@ describe('chatService', () => {
       >;
       expect(callArgs.metadata).toBeUndefined();
       expect(result).toEqual(mockResponse);
+    });
+
+    it('should forward annotations as query metadata when provided', async () => {
+      vi.mocked(apiClient.post).mockResolvedValueOnce({
+        name: 'chat-query-mock-uuid',
+      });
+
+      await chatService.submitChatQuery(
+        'default',
+        'Hello',
+        'agent',
+        'test-agent',
+        {
+          sessionId: 'session-123',
+          annotations: { 'example.com/key': 'value' },
+        },
+      );
+
+      expect(apiClient.post).toHaveBeenCalledWith(
+        `/api/v1/queries/`,
+        expect.objectContaining({
+          metadata: { annotations: { 'example.com/key': 'value' } },
+        }),
+        { params: { namespace: 'default' } },
+      );
     });
 
     it('should forward parameters when provided', async () => {
@@ -189,22 +191,21 @@ describe('chatService', () => {
       vi.mocked(apiClient.post).mockResolvedValueOnce(mockResponse);
 
       await chatService.submitChatQuery(
+        'default',
         'Hello',
         'agent',
         'test-agent',
-        'session-123',
-        undefined,
-        undefined,
-        undefined,
-        [{ name: 'agent_name', value: 'Alice' }],
+        {
+          sessionId: 'session-123',
+          parameters: [{ name: 'agent_name', value: 'Alice' }],
+        },
       );
 
       expect(apiClient.post).toHaveBeenCalledWith(
         `/api/v1/queries/`,
         expect.objectContaining({
           parameters: [{ name: 'agent_name', value: 'Alice' }],
-        }),
-      );
+        }), { params: { namespace: 'default' } });
     });
 
     it('should omit parameters when none are provided', async () => {
@@ -217,7 +218,7 @@ describe('chatService', () => {
 
       vi.mocked(apiClient.post).mockResolvedValueOnce(mockResponse);
 
-      await chatService.submitChatQuery('Hello', 'agent', 'test-agent');
+      await chatService.submitChatQuery('default', 'Hello', 'agent', 'test-agent');
 
       const callArgs = vi.mocked(apiClient.post).mock.calls[0][1] as Record<
         string,
@@ -225,9 +226,123 @@ describe('chatService', () => {
       >;
       expect(callArgs.parameters).toBeUndefined();
     });
+
+    const mcpOverride = {
+      resourceType: 'mcpserver',
+      labelSelector: { matchLabels: { 'ark.mckinsey.com/name': 'github' } },
+      headers: [
+        {
+          name: 'Authorization',
+          value: {
+            valueFrom: {
+              secretKeyRef: { name: 'u-0123456789abcdef-github', key: 'token' },
+            },
+          },
+        },
+      ],
+    };
+
+    it('should forward overrides when provided', async () => {
+      vi.mocked(apiClient.post).mockResolvedValueOnce({ name: 'q' });
+
+      await chatService.submitChatQuery('default', 'Hello', 'agent', 'a', {
+        overrides: [mcpOverride],
+      });
+
+      expect(apiClient.post).toHaveBeenCalledWith(
+        `/api/v1/queries/`,
+        expect.objectContaining({ overrides: [mcpOverride] }),
+        { params: { namespace: 'default' } },
+      );
+    });
+
+    it.each([
+      ['absent', {}],
+      ['empty', { overrides: [] }],
+    ])('should omit overrides when they are %s', async (_label, options) => {
+      vi.mocked(apiClient.post).mockResolvedValueOnce({ name: 'q' });
+
+      await chatService.submitChatQuery(
+        'default',
+        'Hello',
+        'agent',
+        'a',
+        options,
+      );
+
+      expect(vi.mocked(apiClient.post).mock.calls[0][1]).not.toHaveProperty(
+        'overrides',
+      );
+    });
+
+    it('should forward overrides and parameters from the streaming entry point', async () => {
+      vi.mocked(apiClient.post).mockResolvedValueOnce({ name: 'q' });
+      const controller = new AbortController();
+      globalThis.fetch = vi.fn().mockResolvedValueOnce({
+        ok: true,
+        body: {
+          getReader: () => ({
+            read: vi.fn().mockResolvedValueOnce({ done: true }),
+            cancel: vi.fn().mockResolvedValue(undefined),
+          }),
+        },
+      });
+
+      const { chunks } = await chatService.startStreamChatResponse(
+        'default',
+        'Hello',
+        'agent',
+        'a',
+        {
+          abortSignal: controller.signal,
+          parameters: [{ name: 'p', value: 'v' }],
+          overrides: [mcpOverride],
+        },
+      );
+      const received = [];
+      for await (const chunk of chunks) {
+        received.push(chunk);
+      }
+      expect(received).toEqual([]);
+
+      const body = vi.mocked(apiClient.post).mock.calls[0][1];
+      expect(body).toMatchObject({
+        parameters: [{ name: 'p', value: 'v' }],
+        overrides: [mcpOverride],
+      });
+      expect(body).not.toHaveProperty('abortSignal');
+      expect(globalThis.fetch).toHaveBeenCalledWith(expect.any(String), {
+        signal: controller.signal,
+      });
+    });
   });
 
   describe('getQueryResult', () => {
+    it('reports a query that no longer exists', async () => {
+      vi.mocked(apiClient.get).mockRejectedValueOnce(
+        new APIError('Not found', 404),
+      );
+
+      const result = await chatService.getQueryResult('default', 'gone');
+
+      expect(apiClient.get).toHaveBeenCalledWith('/api/v1/queries/gone', {
+        params: { namespace: 'default' },
+      });
+      expect(result).toEqual({
+        status: 'unknown',
+        terminal: true,
+        notFound: true,
+      });
+    });
+
+    it('keeps waiting on a query that has no status yet', async () => {
+      vi.mocked(apiClient.get).mockResolvedValueOnce({ name: 'new-query' });
+
+      const result = await chatService.getQueryResult('default', 'new-query');
+
+      expect(result).toEqual({ status: 'unknown', terminal: false });
+    });
+
     it('should return terminal status for completed query', async () => {
       const mockQuery: QueryDetailResponse = {
         name: 'test-query',
@@ -240,7 +355,7 @@ describe('chatService', () => {
 
       vi.mocked(apiClient.get).mockResolvedValueOnce(mockQuery);
 
-      const result = await chatService.getQueryResult('test-query');
+      const result = await chatService.getQueryResult('default', 'test-query');
 
       expect(result).toEqual({
         status: 'done',
@@ -260,10 +375,30 @@ describe('chatService', () => {
 
       vi.mocked(apiClient.get).mockResolvedValueOnce(mockQuery);
 
-      const result = await chatService.getQueryResult('test-query');
+      const result = await chatService.getQueryResult('default', 'test-query');
 
       expect(result).toEqual({
         status: 'running',
+        terminal: false,
+        response: 'No response',
+      });
+    });
+
+    it('should return non-terminal status for queued query', async () => {
+      const mockQuery: QueryDetailResponse = {
+        name: 'test-query',
+        input: 'Test',
+        status: {
+          phase: 'queued',
+        },
+      };
+
+      vi.mocked(apiClient.get).mockResolvedValueOnce(mockQuery);
+
+      const result = await chatService.getQueryResult('default', 'test-query');
+
+      expect(result).toEqual({
+        status: 'queued',
         terminal: false,
         response: 'No response',
       });
@@ -280,7 +415,7 @@ describe('chatService', () => {
 
       vi.mocked(apiClient.get).mockResolvedValueOnce(mockQuery);
 
-      const result = await chatService.getQueryResult('test-query');
+      const result = await chatService.getQueryResult('default', 'test-query');
 
       expect(result).toEqual({
         status: 'unknown',
@@ -294,11 +429,12 @@ describe('chatService', () => {
         new Error('Network error'),
       );
 
-      const result = await chatService.getQueryResult('test-query');
+      const result = await chatService.getQueryResult('default', 'test-query');
 
       expect(result).toEqual({
         status: 'error',
         terminal: true,
+        transportError: true,
       });
     });
   });
@@ -325,6 +461,7 @@ describe('chatService', () => {
 
       const onUpdate = vi.fn();
       const stop = await chatService.streamQueryStatus(
+        'default',
         'test-query',
         onUpdate,
         100,
@@ -353,6 +490,7 @@ describe('chatService', () => {
         .mockImplementation(() => {});
 
       const stop = await chatService.streamQueryStatus(
+        'default',
         'test-query',
         onUpdate,
         100,
@@ -386,6 +524,7 @@ describe('chatService', () => {
 
       const onUpdate = vi.fn();
       const stop = await chatService.streamQueryStatus(
+        'default',
         'test-query',
         onUpdate,
         100,
@@ -416,7 +555,7 @@ describe('chatService', () => {
 
       vi.mocked(apiClient.get).mockResolvedValueOnce(mockListResponse);
 
-      const result = await chatService.getChatHistory('session-123');
+      const result = await chatService.getChatHistory('default', 'session-123');
 
       expect(result).toHaveLength(3);
       expect(result[0].name).toBe('chat-query-1000');
@@ -439,9 +578,9 @@ describe('chatService', () => {
 
       vi.mocked(apiClient.get).mockResolvedValueOnce(mockResponse);
 
-      const result = await chatService.listQueries();
+      const result = await chatService.listQueries('default');
 
-      expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/queries/`);
+      expect(apiClient.get).toHaveBeenCalledWith(`/api/v1/queries/`, { params: { namespace: 'default' } });
       expect(result).toEqual(mockResponse);
     });
   });
@@ -457,21 +596,19 @@ describe('chatService', () => {
       vi.mocked(apiClient.put).mockResolvedValueOnce(mockResponse);
 
       const updates = { input: 'Updated input' };
-      const result = await chatService.updateQuery('test-query', updates);
+      const result = await chatService.updateQuery('default', 'test-query', updates);
 
       expect(apiClient.put).toHaveBeenCalledWith(
         `/api/v1/queries/test-query`,
-        updates,
-      );
+        updates, { params: { namespace: 'default' } });
       expect(result).toEqual(mockResponse);
     });
 
     it('should return null for 404 errors', async () => {
-      const error = new Error('Not found') as any;
-      error.response = { status: 404 };
+      const error = new APIError('Not found', 404);
       vi.mocked(apiClient.put).mockRejectedValueOnce(error);
 
-      const result = await chatService.updateQuery('non-existent', {});
+      const result = await chatService.updateQuery('default', 'non-existent', {});
 
       expect(result).toBeNull();
     });
@@ -481,20 +618,18 @@ describe('chatService', () => {
     it('should delete query and return true', async () => {
       vi.mocked(apiClient.delete).mockResolvedValueOnce(undefined);
 
-      const result = await chatService.deleteQuery('test-query');
+      const result = await chatService.deleteQuery('default', 'test-query');
 
       expect(apiClient.delete).toHaveBeenCalledWith(
-        `/api/v1/queries/test-query`,
-      );
+        `/api/v1/queries/test-query`, { params: { namespace: 'default' } });
       expect(result).toBe(true);
     });
 
     it('should return false for 404 errors', async () => {
-      const error = new Error('Not found') as any;
-      error.response = { status: 404 };
+      const error = new APIError('Not found', 404);
       vi.mocked(apiClient.delete).mockRejectedValueOnce(error);
 
-      const result = await chatService.deleteQuery('non-existent');
+      const result = await chatService.deleteQuery('default', 'non-existent');
 
       expect(result).toBe(false);
     });
@@ -575,17 +710,20 @@ describe('chatService', () => {
                 value: new TextEncoder().encode(mockSSEData),
               })
               .mockResolvedValueOnce({ done: true }),
-            releaseLock: vi.fn(),
+            cancel: vi.fn().mockResolvedValue(undefined),
           }),
         },
       });
 
       const chunks = [];
       for await (const chunk of chatService.streamChatResponse(
+        'default',
         messages,
         'agent',
         'test-agent',
-        'session-123',
+        {
+          sessionId: 'session-123',
+        },
       )) {
         chunks.push(chunk);
       }
@@ -618,13 +756,148 @@ describe('chatService', () => {
       });
 
       const generator = chatService.streamChatResponse(
+        'default',
         messages,
         'agent',
         'test-agent',
-        'session-123',
+        {
+          sessionId: 'session-123',
+        },
       );
 
       await expect(generator.next()).rejects.toThrow(
+        'Failed to connect to stream: Internal Server Error',
+      );
+    });
+
+    it('should throw a BrokerUnavailableError with parsed code and fallback on a 503', async () => {
+      const messages = [{ role: 'user' as const, content: 'Hello' }];
+      const mockQueryResponse: QueryDetailResponse = {
+        name: 'chat-query-mock-uuid',
+        input: messages,
+        target: { type: 'agent', name: 'test-agent' },
+        status: { phase: 'pending' },
+      };
+
+      vi.mocked(apiClient.post).mockResolvedValueOnce(mockQueryResponse);
+
+      global.fetch = vi.fn().mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+        statusText: 'Service Unavailable',
+        json: async () => ({ code: 'broker_unavailable', fallback: 'poll' }),
+      });
+
+      const generator = chatService.streamChatResponse(
+        'default',
+        messages,
+        'agent',
+        'test-agent',
+        {
+          sessionId: 'session-123',
+        },
+      );
+
+      let caught: unknown;
+      try {
+        await generator.next();
+      } catch (err) {
+        caught = err;
+      }
+
+      expect(caught).toBeInstanceOf(BrokerUnavailableError);
+      const error = caught as BrokerUnavailableError;
+      expect(error.status).toBe(503);
+      expect(error.code).toBe('broker_unavailable');
+      expect(error.fallback).toBe('poll');
+      expect(error.queryName).toBe('chat-query-mock-uuid');
+    });
+
+    it('should throw a usable BrokerUnavailableError when the 503 body is not JSON', async () => {
+      const messages = [{ role: 'user' as const, content: 'Hello' }];
+      const mockQueryResponse: QueryDetailResponse = {
+        name: 'chat-query-mock-uuid',
+        input: messages,
+        target: { type: 'agent', name: 'test-agent' },
+        status: { phase: 'pending' },
+      };
+
+      vi.mocked(apiClient.post).mockResolvedValueOnce(mockQueryResponse);
+
+      global.fetch = vi.fn().mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+        statusText: 'Service Unavailable',
+        json: async () => {
+          throw new Error('not json');
+        },
+      });
+
+      const generator = chatService.streamChatResponse(
+        'default',
+        messages,
+        'agent',
+        'test-agent',
+        {
+          sessionId: 'session-123',
+        },
+      );
+
+      let caught: unknown;
+      try {
+        await generator.next();
+      } catch (err) {
+        caught = err;
+      }
+
+      expect(caught).toBeInstanceOf(BrokerUnavailableError);
+      const error = caught as BrokerUnavailableError;
+      expect(error.status).toBe(503);
+      expect(error.code).toBeUndefined();
+      expect(error.fallback).toBeUndefined();
+      expect(error.message).toBe(
+        'Failed to connect to stream: Service Unavailable',
+      );
+    });
+
+    it('should throw a generic Error on a non-503 stream failure', async () => {
+      const messages = [{ role: 'user' as const, content: 'Hello' }];
+      const mockQueryResponse: QueryDetailResponse = {
+        name: 'chat-query-mock-uuid',
+        input: messages,
+        target: { type: 'agent', name: 'test-agent' },
+        status: { phase: 'pending' },
+      };
+
+      vi.mocked(apiClient.post).mockResolvedValueOnce(mockQueryResponse);
+
+      global.fetch = vi.fn().mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+        json: async () => ({ error: { message: 'boom' } }),
+      });
+
+      const generator = chatService.streamChatResponse(
+        'default',
+        messages,
+        'agent',
+        'test-agent',
+        {
+          sessionId: 'session-123',
+        },
+      );
+
+      let caught: unknown;
+      try {
+        await generator.next();
+      } catch (err) {
+        caught = err;
+      }
+
+      expect(caught).toBeInstanceOf(Error);
+      expect(caught).not.toBeInstanceOf(BrokerUnavailableError);
+      expect((caught as Error).message).toBe(
         'Failed to connect to stream: Internal Server Error',
       );
     });
@@ -646,14 +919,56 @@ describe('chatService', () => {
       });
 
       const generator = chatService.streamChatResponse(
+        'default',
         messages,
         'agent',
         'test-agent',
-        'session-123',
+        {
+          sessionId: 'session-123',
+        },
       );
 
       await expect(generator.next()).rejects.toThrow(
         'No response body available for streaming',
+      );
+    });
+
+    it('prefixes the chunk stream URL with the tenant base path', async () => {
+      const messages = [{ role: 'user' as const, content: 'Hello' }];
+      const mockQueryResponse = {
+        name: 'chat-query-mock-uuid',
+        input: messages,
+        target: { type: 'agent', name: 'test-agent' },
+        status: { phase: 'pending' },
+      } as unknown as QueryDetailResponse;
+
+      vi.mocked(apiClient.post).mockResolvedValueOnce(mockQueryResponse);
+
+      const fetchMock = vi.fn().mockResolvedValueOnce({
+        ok: true,
+        body: {
+          getReader: () => ({
+            read: vi.fn().mockResolvedValueOnce({ done: true }),
+            cancel: vi.fn().mockResolvedValue(undefined),
+          }),
+        },
+      });
+      global.fetch = fetchMock;
+
+      const generator = chatService.streamChatResponse(
+        'default',
+        messages,
+        'agent',
+        'test-agent',
+        {
+          sessionId: 'session-123',
+        },
+      );
+      await generator.next();
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringMatching(/^\/tenant-a\/api\/v1\/broker\/chunks\?/),
+        expect.anything(),
       );
     });
   });

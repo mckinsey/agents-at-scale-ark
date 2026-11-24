@@ -1,0 +1,12 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: hitl-nested-write
+spec:
+  type: user
+  input: "Create a directory /data/aas-files/test-folder and then write 'HITL test content' to /data/aas-files/test-folder/test.txt"
+  target:
+    name: hitl-agent
+    type: agent
+  sessionId: hitl-nested-session
+  conversationId: hitl-nested-conv

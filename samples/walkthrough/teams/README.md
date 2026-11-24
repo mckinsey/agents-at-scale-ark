@@ -59,7 +59,7 @@ apiVersion: ark.mckinsey.com/v1alpha1
 kind: Query
 spec:
   input: "Research topic or question"
-  targets:
-    - type: team
-      name: research-analysis-team
+  target:
+    type: team
+    name: research-analysis-team
 ```

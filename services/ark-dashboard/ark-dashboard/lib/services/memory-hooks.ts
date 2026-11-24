@@ -2,24 +2,23 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { toast } from 'sonner';
 
+import { useNamespace } from '@/providers/NamespaceProvider';
+
 import type { MemoryMessagesFilters } from './memory';
 import { memoryService } from './memory';
+import { getErrorMessage } from './resource-error-message';
 
 export const GET_MEMORY_RESOURCES_QUERY_KEY = 'get-memory-resources';
 export const GET_CONVERSATIONS_QUERY_KEY = 'get-conversations';
 export const GET_ALL_MEMORY_MESSAGES_QUERY_KEY = 'get-all-memory-messages';
 
-const getErrorMessage = (error: unknown): string => {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return 'An unexpected error occurred';
-};
-
 export const useGetMemoryResources = () => {
+  const { namespace } = useNamespace();
+
   const query = useQuery({
-    queryKey: [GET_MEMORY_RESOURCES_QUERY_KEY],
-    queryFn: memoryService.getMemoryResources,
+    queryKey: [GET_MEMORY_RESOURCES_QUERY_KEY, namespace],
+    queryFn: () => memoryService.getMemoryResources(namespace),
+    enabled: Boolean(namespace),
   });
 
   useEffect(() => {
@@ -37,9 +36,12 @@ export const useGetMemoryResources = () => {
 };
 
 export const useGetConversations = () => {
+  const { namespace } = useNamespace();
+
   const query = useQuery({
-    queryKey: [GET_CONVERSATIONS_QUERY_KEY],
-    queryFn: memoryService.getConversations,
+    queryKey: [GET_CONVERSATIONS_QUERY_KEY, namespace],
+    queryFn: () => memoryService.getConversations(namespace),
+    enabled: Boolean(namespace),
   });
 
   useEffect(() => {
@@ -57,14 +59,18 @@ export const useGetConversations = () => {
 };
 
 export const useGetAllMemoryMessages = (filters: MemoryMessagesFilters) => {
+  const { namespace } = useNamespace();
+
   const query = useQuery({
     queryKey: [
       GET_ALL_MEMORY_MESSAGES_QUERY_KEY,
       filters.memory,
       filters.conversation,
       filters.query,
+      namespace,
     ],
-    queryFn: () => memoryService.getAllMemoryMessages(filters),
+    queryFn: () => memoryService.getAllMemoryMessages(namespace, filters),
+    enabled: Boolean(namespace),
   });
 
   useEffect(() => {
@@ -83,9 +89,16 @@ export const useGetAllMemoryMessages = (filters: MemoryMessagesFilters) => {
 
 export const useDeleteQueryMemory = () => {
   const queryClient = useQueryClient();
+  const { namespace } = useNamespace();
 
   return useMutation({
-    mutationFn: memoryService.deleteQuery,
+    mutationFn: ({
+      conversationId,
+      queryId,
+    }: {
+      conversationId: string;
+      queryId: string;
+    }) => memoryService.deleteQuery({ namespace, conversationId, queryId }),
     onSuccess: (_, { queryId }) => {
       queryClient.invalidateQueries({
         queryKey: [GET_MEMORY_RESOURCES_QUERY_KEY],
@@ -109,9 +122,11 @@ export const useDeleteQueryMemory = () => {
 
 export const useDeleteConversationMemory = () => {
   const queryClient = useQueryClient();
+  const { namespace } = useNamespace();
 
   return useMutation({
-    mutationFn: memoryService.deleteConversation,
+    mutationFn: (conversationId: string) =>
+      memoryService.deleteConversation(namespace, conversationId),
     onSuccess: (_, conversationId) => {
       queryClient.invalidateQueries({
         queryKey: [GET_MEMORY_RESOURCES_QUERY_KEY],
@@ -143,9 +158,10 @@ export const useDeleteConversationMemory = () => {
 
 export const useResetMemory = () => {
   const queryClient = useQueryClient();
+  const { namespace } = useNamespace();
 
   return useMutation({
-    mutationFn: memoryService.resetMemory,
+    mutationFn: () => memoryService.resetMemory(namespace),
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: [GET_MEMORY_RESOURCES_QUERY_KEY],

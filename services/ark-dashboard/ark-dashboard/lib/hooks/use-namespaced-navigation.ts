@@ -1,51 +1,53 @@
 'use client';
 
-import { useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback } from 'react';
+
+import { useNavigationGuardContext } from '@/lib/hooks/use-navigation-guard';
+import { buildScopedPath } from '@/lib/utils/param-scope';
 
 type NavigationOptions = Parameters<ReturnType<typeof useRouter>['push']>[1];
 
-function buildFullPath(path: string, searchParams: URLSearchParams | null): string {
-  const [pathname, pathQuery] = path.split('?');
-  const merged = new URLSearchParams(searchParams?.toString() ?? '');
-
-  if (pathQuery) {
-    const pathParams = new URLSearchParams(pathQuery);
-    for (const [key, value] of pathParams) {
-      merged.set(key, value);
-    }
-  }
-
-  const queryString = merged.toString();
-  return queryString ? `${pathname}?${queryString}` : pathname;
-}
-
 export function useNamespacedNavigation() {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
+  const guard = useNavigationGuardContext();
 
   const push = useCallback(
     (path: string, options?: NavigationOptions) => {
-      const fullPath = buildFullPath(path, searchParams);
-      if (options) {
-        router.push(fullPath, options);
-      } else {
-        router.push(fullPath);
+      const fullPath = buildScopedPath(path, searchParams, pathname);
+      const doNav = () => {
+        if (options) {
+          router.push(fullPath, options);
+        } else {
+          router.push(fullPath);
+        }
+      };
+      if (guard.requestNavigation(doNav)) {
+        return;
       }
+      doNav();
     },
-    [router, searchParams],
+    [router, searchParams, pathname, guard],
   );
 
   const replace = useCallback(
     (path: string, options?: NavigationOptions) => {
-      const fullPath = buildFullPath(path, searchParams);
-      if (options) {
-        router.replace(fullPath, options);
-      } else {
-        router.replace(fullPath);
+      const fullPath = buildScopedPath(path, searchParams, pathname);
+      const doNav = () => {
+        if (options) {
+          router.replace(fullPath, options);
+        } else {
+          router.replace(fullPath);
+        }
+      };
+      if (guard.requestNavigation(doNav)) {
+        return;
       }
+      doNav();
     },
-    [router, searchParams],
+    [router, searchParams, pathname, guard],
   );
 
   return { push, replace };

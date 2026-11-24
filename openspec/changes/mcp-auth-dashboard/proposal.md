@@ -45,11 +45,17 @@ These extend the existing orchestration endpoints. The `mcp-auth-ark-api-orchest
 
 - **`authorized-by` annotation** — on a successful exchange, ark-api writes the identity captured at `start` time to `ark.mckinsey.com/mcp-auth-authorized-by` (verbatim), replacing the hard-coded `cli`. CLI-initiated flows with no inbound identity continue to record `cli`.
 
+- **`auth/start` auto-provisions `tokenSecretRef`** — a dashboard-created MCPServer carries no `spec.authorization` block, so the discovered server has nowhere to store tokens. Rather than reject with a "set `tokenSecretRef.name` and re-run" error, `auth/start` now patches the MCPServer to default `spec.authorization.tokenSecretRef.name` to `<name>-oauth` (key overrides take their CRD defaults) and continues. An operator-set name is preserved. This is what lets **Authenticate** work on a freshly discovered server with no manual `kubectl` step; it applies to the CLI identically.
+
 - **MCPServer read surface** — `MCPServerResponse` and `MCPServerDetailResponse` gain an `authorization` object — `{ state, resourceName?, authorizedBy?, authorizedAt?, expiresAt? }` — sourced from `status.authorization.state`, `status.authorization.resourceName`, `status.authorization.expiresAt`, and the two `mcp-auth-authorized-*` annotations. The list endpoint already returns `annotations`; adding the typed block lets the dashboard render a state badge and an expiry indication without parsing raw status or annotation strings. The field is omitted/null when `status.authorization` is absent.
 
 ### Configuration
 
-- `ARK_API_DASHBOARD_URL` — base URL of the dashboard used to build the post-callback redirect. The redirect target is `<ARK_API_DASHBOARD_URL>/mcp?…`, so the value MUST include any path prefix under which the dashboard is served (e.g. `https://ark.example.com/dashboard`) — relevant to deployments behind an `X-Forwarded-Prefix`. Validated at startup when set: a well-formed absolute `https://` URL, or an `http://` loopback host (`127.0.0.1`, `[::1]` bracketed per RFC 3986 §3.2.2, `localhost`) matching the `ARK_API_PUBLIC_CALLBACK_URL` carve-out. When unset, dashboard-initiated flows fall back to the HTML completion page.
+- `ARK_API_DASHBOARD_URL` — base URL of the dashboard used to build the post-callback redirect. The redirect target is `<ARK_API_DASHBOARD_URL>/mcp?…`, so the value MUST include any path prefix under which the dashboard is served (e.g. `https://ark.example.com/dashboard`) — relevant to deployments behind an `X-Forwarded-Prefix`. Validated at startup when set: a well-formed absolute `https://` URL, or an `http://` loopback host (`127.0.0.1`, `[::1]` bracketed per RFC 3986 §3.2.2, `localhost`) matching the `ARK_API_PUBLIC_CALLBACK_URL` carve-out. When unset, dashboard-initiated flows fall back to the HTML completion page. The Helm chart defaults it to the local dashboard host so devspace works out of the box; real deployments override it with their `https` ingress.
+
+### Out-of-the-box local reachability
+
+The IdP redirects the browser to `ARK_API_PUBLIC_CALLBACK_URL`, which defaults to the loopback literal `http://127.0.0.1:34780/...` (strict IdPs accept a loopback literal without TLS). The CLI reaches it by port-forwarding ark-api; the dashboard has no such step, so the callback was unreachable. `services/ark-api/devspace.yaml` now forwards `34780:8000` for the lifetime of `devspace dev`, so the dashboard flow completes with no manual `kubectl port-forward`. Non-local deployments expose ark-api on a public `https` ingress and set `ARK_API_PUBLIC_CALLBACK_URL`/`ARK_API_DASHBOARD_URL` accordingly.
 
 ### Dashboard
 
@@ -79,12 +85,14 @@ None as a baseline delta. The `mcp-auth-ark-api-orchestration` capability is now
 ## Impact
 
 - **Scope:**
-  - `services/ark-api/ark-api/src/ark_api/api/v1/mcp_auth.py` — `redirect_on_complete` + identity capture on `start`; dashboard redirect (success/error/cache-miss) on `callback`.
+  - `services/ark-api/ark-api/src/ark_api/api/v1/mcp_auth.py` — `redirect_on_complete` + identity capture and `tokenSecretRef` auto-provision on `start`; dashboard redirect (success/error/cache-miss) on `callback`.
+  - `services/ark-api/ark-api/src/ark_api/services/mcp_auth_persistence.py` — `ensure_mcpserver_token_secret_ref` helper.
+  - `services/ark-api/devspace.yaml` + `services/ark-api/chart/values.yaml` — devspace callback port-forward and the `ARK_API_DASHBOARD_URL` local default.
   - `services/ark-api/ark-api/src/ark_api/api/v1/mcp_servers.py` + `models/mcp_servers.py` — `authorization` block (incl. `expiresAt`) on the response models.
   - `services/ark-api/ark-api/src/ark_api/core/` — `ARK_API_DASHBOARD_URL` config + validation.
   - `services/ark-dashboard/` — card badge, Authenticate/Re-authenticate/Sign out actions, completion handling, service + hooks.
   - `docs/content/` — dashboard authenticate flow + the new env var.
-- **CRD:** none. Consumes `spec.authorization.tokenSecretRef`, `status.authorization.*`, and the `mcp-auth-authorized-*` annotations unchanged.
+- **CRD:** none. Consumes `spec.authorization.tokenSecretRef`, `status.authorization.*`, and the `mcp-auth-authorized-*` annotations unchanged; `auth/start` now writes `spec.authorization.tokenSecretRef.name` (using the CRD's existing field) when absent.
 - **RBAC:** none beyond `mcp-auth-ark-api-orchestration`.
 - **Security:**
   - No token material reaches the browser; the redirect carries the MCPServer name, namespace, an opaque `auth_id`, and (on failure) an OAuth error code + a 200-char-capped description.

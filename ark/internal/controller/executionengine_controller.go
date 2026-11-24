@@ -6,11 +6,15 @@ import (
 	"context"
 	"fmt"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 	"mckinsey.com/ark/internal/common"
@@ -47,9 +51,9 @@ func (r *ExecutionEngineReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	switch executionEngine.Status.Phase {
-	case statusReady, statusError:
+	case statusReady:
 		return ctrl.Result{}, nil
-	case statusRunning:
+	case statusRunning, statusError:
 		return r.processExecutionEngine(ctx, executionEngine)
 	default:
 		if err := r.updateStatus(ctx, executionEngine, statusRunning, "Resolving execution engine address"); err != nil {
@@ -78,7 +82,7 @@ func (r *ExecutionEngineReconciler) processExecutionEngine(ctx context.Context, 
 		if err := r.updateStatus(ctx, executionEngine, statusError, fmt.Sprintf("Failed to resolve address: %v", err)); err != nil {
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{}, nil
+		return ctrl.Result{RequeueAfter: addressResolutionRetryInterval}, nil
 	}
 
 	executionEngine.Status.LastResolvedAddress = resolvedAddress
@@ -107,5 +111,33 @@ func (r *ExecutionEngineReconciler) updateStatus(ctx context.Context, executionE
 func (r *ExecutionEngineReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&arkv1prealpha1.ExecutionEngine{}).
+		Watches(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(r.mapSecretToExecutionEngines)).
+		Watches(&corev1.ConfigMap{}, handler.EnqueueRequestsFromMapFunc(r.mapConfigMapToExecutionEngines)).
 		Complete(r)
+}
+
+// mapSecretToExecutionEngines enqueues ExecutionEngines whose address references the Secret.
+func (r *ExecutionEngineReconciler) mapSecretToExecutionEngines(ctx context.Context, obj client.Object) []reconcile.Request {
+	return r.mapDependencyToExecutionEngines(ctx, obj, func(vf *arkv1prealpha1.ValueFromSource) bool {
+		return vf.SecretKeyRef != nil && vf.SecretKeyRef.Name == obj.GetName()
+	})
+}
+
+// mapConfigMapToExecutionEngines enqueues ExecutionEngines whose address references the ConfigMap.
+func (r *ExecutionEngineReconciler) mapConfigMapToExecutionEngines(ctx context.Context, obj client.Object) []reconcile.Request {
+	return r.mapDependencyToExecutionEngines(ctx, obj, func(vf *arkv1prealpha1.ValueFromSource) bool {
+		return vf.ConfigMapKeyRef != nil && vf.ConfigMapKeyRef.Name == obj.GetName()
+	})
+}
+
+func (r *ExecutionEngineReconciler) mapDependencyToExecutionEngines(ctx context.Context, obj client.Object, matches func(*arkv1prealpha1.ValueFromSource) bool) []reconcile.Request {
+	return mapDependencyRequests(ctx, r.Client, obj, &arkv1prealpha1.ExecutionEngineList{},
+		func(l *arkv1prealpha1.ExecutionEngineList) []arkv1prealpha1.ExecutionEngine { return l.Items },
+		func(e arkv1prealpha1.ExecutionEngine) bool {
+			vf := e.Spec.Address.ValueFrom
+			return vf != nil && matches(vf)
+		},
+		func(e arkv1prealpha1.ExecutionEngine) types.NamespacedName {
+			return types.NamespacedName{Name: e.Name, Namespace: e.Namespace}
+		})
 }

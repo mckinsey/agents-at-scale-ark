@@ -19,6 +19,6 @@ metadata:
       {"ark-system/filesystem": {"toolCalls": [{"name": "set_base_directory", "arguments": {"path": "./shared"}}]}}
 spec:
   input: Which folders can you see use the filesystem tool? Call directory-tree with path ".".
-  targets:
-  - type: agent
+  target:
+    type: agent
     name: query-with-mcp-settings-in-annotations

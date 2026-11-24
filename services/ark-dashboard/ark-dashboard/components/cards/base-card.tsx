@@ -1,7 +1,7 @@
 'use client';
 
 import type { LucideIcon } from 'lucide-react';
-import React, { useEffect, useRef, useState } from 'react';
+import React from 'react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -11,12 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
+import { TruncatedTooltip } from '@/components/ui/truncated-tooltip';
 import { cn } from '@/lib/utils';
 
 export interface BaseCardAction {
@@ -25,11 +20,11 @@ export interface BaseCardAction {
   onClick: () => void;
   variant?:
     | 'default'
+    | 'accent'
     | 'destructive'
-    | 'outline'
     | 'secondary'
-    | 'ghost'
-    | 'link';
+    | 'outline'
+    | 'ghost';
   className?: string;
   disabled?: boolean;
 }
@@ -59,29 +54,6 @@ export function BaseCard({
   footer,
   onClick,
 }: BaseCardProps) {
-  const titleRef = useRef<HTMLSpanElement>(null);
-  const [isTruncated, setIsTruncated] = useState(false);
-
-  useEffect(() => {
-    const checkTruncation = () => {
-      if (titleRef.current) {
-        setIsTruncated(
-          titleRef.current.scrollWidth > titleRef.current.clientWidth,
-        );
-      }
-    };
-
-    checkTruncation();
-    window.addEventListener('resize', checkTruncation);
-    return () => window.removeEventListener('resize', checkTruncation);
-  }, [title]);
-
-  const titleElement = (
-    <span ref={titleRef} className="block truncate">
-      {title}
-    </span>
-  );
-
   return (
     <Card
       className={cn('relative', onClick && 'cursor-pointer', cardClassName)}
@@ -94,18 +66,9 @@ export function BaseCard({
             ) : typeof Icon === 'function' ? (
               <Icon className={cn('h-5 w-5 flex-shrink-0', iconClassName)} />
             ) : null)}
-          {isTruncated ? (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>{titleElement}</TooltipTrigger>
-                <TooltipContent>
-                  <p>{title}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          ) : (
-            titleElement
-          )}
+          <TruncatedTooltip label={title}>
+            <span className="block truncate">{title}</span>
+          </TruncatedTooltip>
         </CardTitle>
         {actions.length > 0 && (
           <CardAction className="ml-auto flex">

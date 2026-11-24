@@ -1,0 +1,9 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: no-schema-agent
+spec:
+  description: Agent without an output schema, used as a negative control
+  prompt: Extract structured information from the input text.
+  modelRef:
+    name: test-model-mock

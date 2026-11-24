@@ -8,7 +8,7 @@ import { SettingsSidebar } from '@/components/settings/settings-sidebar';
 import { type SettingPage, settingsSections } from '@/components/settings/settings-types';
 import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
 
-const DEFAULT_SETTINGS_PAGE: SettingPage = 'a2a-servers';
+const DEFAULT_SETTINGS_PAGE: SettingPage = 'queries';
 
 const VALID_SETTINGS_PAGES: SettingPage[] = settingsSections.flatMap(s =>
   s.items.map(i => i.key),

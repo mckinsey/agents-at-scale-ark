@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Provider as JotaiProvider, createStore, useAtomValue } from 'jotai';
@@ -9,8 +10,24 @@ import {
 } from '@/atoms/experimental-features';
 import { lastConversationIdAtom } from '@/atoms/internal-states';
 import FloatingChat from '@/components/floating-chat';
+import { buildChatKey } from '@/lib/hooks/use-chat-session';
 import type { QueryDetailResponse } from '@/lib/services';
 import { chatService } from '@/lib/services';
+
+const mockInvalidateQueriesList = vi.fn();
+
+vi.mock('@/lib/services/queries-hooks', () => ({
+  useInvalidateQueriesList: () => mockInvalidateQueriesList,
+}));
+
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: () => ({
+    namespace: 'default',
+    isNamespaceResolved: true,
+    isPending: false,
+    readOnlyMode: false,
+  }),
+}));
 
 // Mock Next.js router - used by ChatMessage component
 vi.mock('next/navigation', () => ({
@@ -27,6 +44,10 @@ vi.mock('next/navigation', () => ({
 Element.prototype.scrollIntoView = vi.fn();
 
 // Mock the chat service
+vi.mock('@/lib/services/agents', async () => ({
+  agentsService: (await import('@/lib/services')).agentsService,
+}));
+
 vi.mock('@/lib/services', () => ({
   chatService: {
     streamChatResponse: vi.fn(),
@@ -35,6 +56,9 @@ vi.mock('@/lib/services', () => ({
     submitChatQuery: vi.fn(),
     getQueryResult: vi.fn(),
     getQuery: vi.fn().mockResolvedValue({ status: { conversationId: '' } }),
+    resolveMemoryNotice: vi
+      .fn()
+      .mockResolvedValue({ settled: true, notice: null }),
   },
   agentsService: {
     getByName: vi.fn().mockResolvedValue({ parameters: [] }),
@@ -50,27 +74,33 @@ vi.mock('jotai', async importOriginal => {
   };
 });
 
+const MESSAGE_PLACEHOLDER = 'Write here to chat with your agent...';
+const PROCESSING_PLACEHOLDER = 'Processing...';
+
+// Shaped like the DOM AbortError the real fetch throws, so the hook's
+// `err.name === 'AbortError'` swallow path is exercised.
+function makeAbortError(): Error {
+  return Object.assign(new Error('Aborted'), { name: 'AbortError' });
+}
+
 function renderFloatingChat(
   props: {
     id: string;
     name: string;
     type: 'agent' | 'model' | 'team';
-    position: number;
     onClose: () => void;
   },
   store?: ReturnType<typeof createStore>,
 ) {
-  if (store) {
-    return render(
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>
       <JotaiProvider store={store}>
         <FloatingChat {...props} />
-      </JotaiProvider>,
-    );
-  }
-  return render(
-    <JotaiProvider>
-      <FloatingChat {...props} />
-    </JotaiProvider>,
+      </JotaiProvider>
+    </QueryClientProvider>,
   );
 }
 
@@ -79,7 +109,6 @@ describe('FloatingChat', () => {
     id: 'test-chat',
     name: 'Test Agent',
     type: 'agent' as const,
-    position: 0,
     onClose: vi.fn(),
   };
 
@@ -131,7 +160,7 @@ describe('FloatingChat', () => {
 
       renderFloatingChat(defaultProps);
 
-      const input = screen.getByPlaceholderText('Type your message...');
+      const input = screen.getByPlaceholderText(MESSAGE_PLACEHOLDER);
       await user.type(input, 'Hi there');
 
       const sendButton = screen.getByRole('button', { name: /send/i });
@@ -174,7 +203,7 @@ describe('FloatingChat', () => {
 
       renderFloatingChat(defaultProps);
 
-      const input = screen.getByPlaceholderText('Type your message...');
+      const input = screen.getByPlaceholderText(MESSAGE_PLACEHOLDER);
       await user.type(input, 'Test');
 
       const sendButton = screen.getByRole('button', { name: /send/i });
@@ -201,7 +230,7 @@ describe('FloatingChat', () => {
 
       renderFloatingChat(defaultProps);
 
-      const input = screen.getByPlaceholderText('Type your message...');
+      const input = screen.getByPlaceholderText(MESSAGE_PLACEHOLDER);
       await user.type(input, 'Test');
 
       const sendButton = screen.getByRole('button', { name: /send/i });
@@ -235,7 +264,7 @@ describe('FloatingChat', () => {
 
       renderFloatingChat(defaultProps);
 
-      const input = screen.getByPlaceholderText('Type your message...');
+      const input = screen.getByPlaceholderText(MESSAGE_PLACEHOLDER);
       await user.type(input, 'Test');
 
       const sendButton = screen.getByRole('button', { name: /send/i });
@@ -271,7 +300,7 @@ describe('FloatingChat', () => {
 
       renderFloatingChat(defaultProps);
 
-      const input = screen.getByPlaceholderText('Type your message...');
+      const input = screen.getByPlaceholderText(MESSAGE_PLACEHOLDER);
       await user.type(input, 'Test');
 
       const sendButton = screen.getByRole('button', { name: /send/i });
@@ -280,7 +309,7 @@ describe('FloatingChat', () => {
       // Should show "Processing..." placeholder
       await waitFor(() => {
         expect(
-          screen.getByPlaceholderText('Processing...'),
+          screen.getByPlaceholderText(PROCESSING_PLACEHOLDER),
         ).toBeInTheDocument();
       });
 
@@ -289,7 +318,7 @@ describe('FloatingChat', () => {
       // Should return to normal placeholder
       await waitFor(() => {
         expect(
-          screen.getByPlaceholderText('Type your message...'),
+          screen.getByPlaceholderText(MESSAGE_PLACEHOLDER),
         ).toBeInTheDocument();
       });
     });
@@ -307,7 +336,7 @@ describe('FloatingChat', () => {
 
       renderFloatingChat(defaultProps);
 
-      const input = screen.getByPlaceholderText('Type your message...');
+      const input = screen.getByPlaceholderText(MESSAGE_PLACEHOLDER);
 
       // Send first message
       await user.type(input, 'First message');
@@ -332,6 +361,294 @@ describe('FloatingChat', () => {
       expect(screen.getByText('Second message')).toBeInTheDocument();
       expect(screen.getByText('Second response')).toBeInTheDocument();
     });
+
+    it('stops a hung chunk stream when the query reaches a terminal phase (#2862)', async () => {
+      const user = userEvent.setup();
+
+      // Chunk stream that yields once, then hangs until the transport is
+      // released — simulates the broker never sending [DONE] (executor killed /
+      // broker unreachable).
+      vi.mocked(chatService.streamChatResponse).mockImplementation(
+        async function* (
+          _namespace,
+          _input,
+          _targetType,
+          _targetName,
+          options,
+        ) {
+          yield { choices: [{ delta: { content: 'partial' } }] };
+          await new Promise<void>((_resolve, reject) => {
+            if (options?.abortSignal?.aborted) return reject(makeAbortError());
+            options?.abortSignal?.addEventListener(
+              'abort',
+              () => reject(makeAbortError()),
+              { once: true },
+            );
+          });
+        },
+      );
+
+      // Query reaches a terminal phase with no [DONE] on the chunk stream: fire
+      // the onTerminal callback the hook passes to bind the stream to the poll.
+      vi.mocked(chatService.streamQueryStatus).mockImplementation(
+        async (
+          _namespace,
+          _queryName,
+          _onUpdate,
+          _pollInterval,
+          onTerminal,
+        ) => {
+          onTerminal?.('done');
+          return () => {};
+        },
+      );
+
+      renderFloatingChat(defaultProps);
+
+      const input = screen.getByPlaceholderText(MESSAGE_PLACEHOLDER);
+      await user.type(input, 'Hi');
+      await user.click(screen.getByRole('button', { name: /send/i }));
+
+      // Streaming started: first chunk rendered, input disabled.
+      await waitFor(() => {
+        expect(screen.getByText('partial')).toBeInTheDocument();
+      });
+      expect(input).toBeDisabled();
+
+      // A re-enabled input is how the chat signals it left the streaming state.
+      // The hung stream never ends on its own, so this only happens if the
+      // terminal-phase poll stops it; without that wiring the input stays
+      // disabled and this waitFor times out.
+      await waitFor(
+        () => {
+          expect(input).not.toBeDisabled();
+        },
+        { timeout: 4000 },
+      );
+      // Stopping is a clean close, not an abort surfaced to the user: no error
+      // message is rendered for the turn.
+      expect(
+        screen.queryByText(/Failed to send message/i),
+      ).not.toBeInTheDocument();
+    });
+
+    it('lets a late chunk within the grace finish instead of truncating (#2862)', async () => {
+      const user = userEvent.setup();
+
+      // The query goes terminal while a final chunk is still in flight. The
+      // grace must let that chunk land rather than stopping the stream at once.
+      vi.mocked(chatService.streamChatResponse).mockImplementation(
+        async function* (
+          _namespace,
+          _input,
+          _targetType,
+          _targetName,
+          options,
+        ) {
+          yield { choices: [{ delta: { content: 'part1' } }] };
+          const late = new Promise<void>(resolve => setTimeout(resolve, 50));
+          const released = new Promise<never>((_resolve, reject) => {
+            if (options?.abortSignal?.aborted) return reject(makeAbortError());
+            options?.abortSignal?.addEventListener(
+              'abort',
+              () => reject(makeAbortError()),
+              { once: true },
+            );
+          });
+          await Promise.race([late, released]);
+          yield {
+            choices: [{ delta: { content: 'part2' }, finish_reason: 'stop' }],
+          };
+        },
+      );
+
+      vi.mocked(chatService.streamQueryStatus).mockImplementation(
+        async (
+          _namespace,
+          _queryName,
+          _onUpdate,
+          _pollInterval,
+          onTerminal,
+        ) => {
+          onTerminal?.('done');
+          return () => {};
+        },
+      );
+
+      renderFloatingChat(defaultProps);
+
+      const input = screen.getByPlaceholderText(MESSAGE_PLACEHOLDER);
+      await user.type(input, 'Hi');
+      await user.click(screen.getByRole('button', { name: /send/i }));
+
+      // The late chunk must arrive; a zero grace would stop before it lands.
+      await waitFor(() => {
+        expect(screen.getByText('part1part2')).toBeInTheDocument();
+      });
+      await waitFor(() => {
+        expect(input).not.toBeDisabled();
+      });
+      expect(
+        screen.queryByText(/Failed to send message/i),
+      ).not.toBeInTheDocument();
+    });
+
+    it('surfaces a failure when the query force-closes on phase:error (#2862)', async () => {
+      const user = userEvent.setup();
+
+      // Query fails without ever emitting an error chunk (e.g. pre-exec timeout):
+      // the stream hangs, only the terminal phase reports the failure.
+      vi.mocked(chatService.streamChatResponse).mockImplementation(
+        async function* (
+          _namespace,
+          _input,
+          _targetType,
+          _targetName,
+          options,
+        ) {
+          yield { choices: [{ delta: { content: 'partial' } }] };
+          await new Promise<void>((_resolve, reject) => {
+            if (options?.abortSignal?.aborted) return reject(makeAbortError());
+            options?.abortSignal?.addEventListener(
+              'abort',
+              () => reject(makeAbortError()),
+              { once: true },
+            );
+          });
+        },
+      );
+      vi.mocked(chatService.streamQueryStatus).mockImplementation(
+        async (
+          _namespace,
+          _queryName,
+          _onUpdate,
+          _pollInterval,
+          onTerminal,
+        ) => {
+          onTerminal?.('error');
+          return () => {};
+        },
+      );
+
+      renderFloatingChat(defaultProps);
+      const input = screen.getByPlaceholderText(MESSAGE_PLACEHOLDER);
+      await user.type(input, 'Hi');
+      await user.click(screen.getByRole('button', { name: /send/i }));
+
+      // Without threading the error phase, this force-closes as a silent success.
+      await waitFor(
+        () => {
+          expect(screen.getByText('Query failed')).toBeInTheDocument();
+        },
+        { timeout: 4000 },
+      );
+    });
+
+    it('force-closes cleanly on phase:canceled without marking a failure (#2862)', async () => {
+      const user = userEvent.setup();
+
+      vi.mocked(chatService.streamChatResponse).mockImplementation(
+        async function* (
+          _namespace,
+          _input,
+          _targetType,
+          _targetName,
+          options,
+        ) {
+          yield { choices: [{ delta: { content: 'partial' } }] };
+          await new Promise<void>((_resolve, reject) => {
+            if (options?.abortSignal?.aborted) return reject(makeAbortError());
+            options?.abortSignal?.addEventListener(
+              'abort',
+              () => reject(makeAbortError()),
+              { once: true },
+            );
+          });
+        },
+      );
+      vi.mocked(chatService.streamQueryStatus).mockImplementation(
+        async (
+          _namespace,
+          _queryName,
+          _onUpdate,
+          _pollInterval,
+          onTerminal,
+        ) => {
+          onTerminal?.('canceled');
+          return () => {};
+        },
+      );
+
+      renderFloatingChat(defaultProps);
+      const input = screen.getByPlaceholderText(MESSAGE_PLACEHOLDER);
+      await user.type(input, 'Hi');
+      await user.click(screen.getByRole('button', { name: /send/i }));
+
+      await waitFor(
+        () => {
+          expect(input).not.toBeDisabled();
+        },
+        { timeout: 4000 },
+      );
+      // canceled is not a failure: the partial answer stays, nothing is marked failed.
+      expect(screen.getByText('partial')).toBeInTheDocument();
+      expect(screen.queryByText('Query failed')).not.toBeInTheDocument();
+    });
+
+    it('does not force-close on phase:unknown, so a live answer is not truncated (#2862)', async () => {
+      const user = userEvent.setup();
+
+      // A late chunk lands past the grace; an `unknown` phase must not abort it.
+      vi.mocked(chatService.streamChatResponse).mockImplementation(
+        async function* (
+          _namespace,
+          _input,
+          _targetType,
+          _targetName,
+          options,
+        ) {
+          yield { choices: [{ delta: { content: 'part1' } }] };
+          const late = new Promise<void>(resolve => setTimeout(resolve, 500));
+          const released = new Promise<never>((_resolve, reject) => {
+            if (options?.abortSignal?.aborted) return reject(makeAbortError());
+            options?.abortSignal?.addEventListener(
+              'abort',
+              () => reject(makeAbortError()),
+              { once: true },
+            );
+          });
+          await Promise.race([late, released]);
+          yield {
+            choices: [{ delta: { content: 'part2' }, finish_reason: 'stop' }],
+          };
+        },
+      );
+      vi.mocked(chatService.streamQueryStatus).mockImplementation(
+        async (
+          _namespace,
+          _queryName,
+          _onUpdate,
+          _pollInterval,
+          onTerminal,
+        ) => {
+          onTerminal?.('unknown');
+          return () => {};
+        },
+      );
+
+      renderFloatingChat(defaultProps);
+      const input = screen.getByPlaceholderText(MESSAGE_PLACEHOLDER);
+      await user.type(input, 'Hi');
+      await user.click(screen.getByRole('button', { name: /send/i }));
+
+      // 500ms > 300ms grace: if `unknown` armed the force-close, part2 is lost.
+      await waitFor(
+        () => {
+          expect(screen.getByText('part1part2')).toBeInTheDocument();
+        },
+        { timeout: 4000 },
+      );
+    });
   });
 
   describe('window state management', () => {
@@ -344,7 +661,7 @@ describe('FloatingChat', () => {
         renderFloatingChat(defaultProps);
 
         expect(
-          screen.getByPlaceholderText('Type your message...'),
+          screen.getByPlaceholderText(MESSAGE_PLACEHOLDER),
         ).toBeInTheDocument();
         expect(
           screen.getByText(/start a conversation with the agent/i),
@@ -381,7 +698,7 @@ describe('FloatingChat', () => {
         await user.click(minimizeButton);
 
         expect(
-          screen.queryByPlaceholderText('Type your message...'),
+          screen.queryByPlaceholderText(MESSAGE_PLACEHOLDER),
         ).not.toBeInTheDocument();
         expect(
           screen.queryByText(/start a conversation with the agent/i),
@@ -428,7 +745,7 @@ describe('FloatingChat', () => {
         await user.click(restoreButton);
 
         expect(
-          screen.getByPlaceholderText('Type your message...'),
+          screen.getByPlaceholderText(MESSAGE_PLACEHOLDER),
         ).toBeInTheDocument();
       });
 
@@ -441,13 +758,19 @@ describe('FloatingChat', () => {
         });
         await user.click(minimizeButton);
 
+        expect(
+          screen.queryByRole('button', { name: /maximize chat/i }),
+        ).not.toBeInTheDocument();
+
+        await user.click(screen.getByRole('button', { name: /restore chat/i }));
+
         const maximizeButton = screen.getByRole('button', {
           name: /maximize chat/i,
         });
         await user.click(maximizeButton);
 
         expect(
-          screen.getByPlaceholderText('Type your message...'),
+          screen.getByPlaceholderText(MESSAGE_PLACEHOLDER),
         ).toBeInTheDocument();
         const restoreSizeButton = screen.getByRole('button', {
           name: /restore size/i,
@@ -507,7 +830,7 @@ describe('FloatingChat', () => {
         await user.click(minimizeButton);
 
         expect(
-          screen.queryByPlaceholderText('Type your message...'),
+          screen.queryByPlaceholderText(MESSAGE_PLACEHOLDER),
         ).not.toBeInTheDocument();
         const restoreButton = screen.getByRole('button', {
           name: /restore chat/i,
@@ -535,53 +858,32 @@ describe('FloatingChat', () => {
       vi.mocked(useAtomValue).mockReturnValue(true);
     });
 
-    it('should render debug mode switch', () => {
+    const getToolCallsToggle = () =>
+      screen.getByRole('button', { name: /tool calls/i });
+
+    it('should render the tool-calls toggle', () => {
       renderFloatingChat(defaultProps);
 
-      const debugSwitch = screen.getByRole('switch', {
-        name: /show tool calls/i,
-      });
-      expect(debugSwitch).toBeInTheDocument();
+      expect(getToolCallsToggle()).toBeInTheDocument();
     });
 
-    it('should have debug mode enabled by default', () => {
+    it('should have tool calls enabled by default', () => {
       renderFloatingChat(defaultProps);
 
-      const debugSwitch = screen.getByRole('switch', {
-        name: /show tool calls/i,
-      });
-      expect(debugSwitch).toBeChecked();
+      expect(getToolCallsToggle()).toHaveAttribute('aria-pressed', 'true');
     });
 
-    it('should toggle debug mode when switch is clicked', async () => {
+    it('should toggle debug mode when the toggle is clicked', async () => {
       const user = userEvent.setup();
       renderFloatingChat(defaultProps);
 
-      const debugSwitch = screen.getByRole('switch', {
-        name: /show tool calls/i,
-      });
-      expect(debugSwitch).toBeChecked();
+      expect(getToolCallsToggle()).toHaveAttribute('aria-pressed', 'true');
 
-      await user.click(debugSwitch);
-      expect(debugSwitch).not.toBeChecked();
+      await user.click(getToolCallsToggle());
+      expect(getToolCallsToggle()).toHaveAttribute('aria-pressed', 'false');
 
-      await user.click(debugSwitch);
-      expect(debugSwitch).toBeChecked();
-    });
-
-    it('should toggle debug mode when label is clicked', async () => {
-      const user = userEvent.setup();
-      renderFloatingChat(defaultProps);
-
-      const debugSwitch = screen.getByRole('switch', {
-        name: /show tool calls/i,
-      });
-      const label = screen.getByText('Show tool calls');
-
-      expect(debugSwitch).toBeChecked();
-
-      await user.click(label);
-      expect(debugSwitch).not.toBeChecked();
+      await user.click(getToolCallsToggle());
+      expect(getToolCallsToggle()).toHaveAttribute('aria-pressed', 'true');
     });
 
     it('should show tool calls by default (debug mode on)', async () => {
@@ -624,7 +926,7 @@ describe('FloatingChat', () => {
 
       renderFloatingChat(defaultProps);
 
-      const input = screen.getByPlaceholderText('Type your message...');
+      const input = screen.getByPlaceholderText(MESSAGE_PLACEHOLDER);
       await user.type(input, 'What is the weather?');
 
       const sendButton = screen.getByRole('button', { name: /send/i });
@@ -677,12 +979,12 @@ describe('FloatingChat', () => {
 
       renderFloatingChat(defaultProps);
 
-      const debugSwitch = screen.getByRole('switch', {
-        name: /show tool calls/i,
+      const debugSwitch = screen.getByRole('button', {
+        name: /tool calls/i,
       });
       await user.click(debugSwitch);
 
-      const input = screen.getByPlaceholderText('Type your message...');
+      const input = screen.getByPlaceholderText(MESSAGE_PLACEHOLDER);
       await user.type(input, 'What is the weather?');
 
       const sendButton = screen.getByRole('button', { name: /send/i });
@@ -735,11 +1037,11 @@ describe('FloatingChat', () => {
 
       renderFloatingChat(defaultProps);
 
-      const debugSwitch = screen.getByRole('switch', {
-        name: /show tool calls/i,
+      const debugSwitch = screen.getByRole('button', {
+        name: /tool calls/i,
       });
 
-      const input = screen.getByPlaceholderText('Type your message...');
+      const input = screen.getByPlaceholderText(MESSAGE_PLACEHOLDER);
       await user.type(input, 'What is the weather?');
 
       const sendButton = screen.getByRole('button', { name: /send/i });
@@ -787,7 +1089,7 @@ describe('FloatingChat', () => {
 
       renderFloatingChat(defaultProps);
 
-      const input = screen.getByPlaceholderText('Type your message...');
+      const input = screen.getByPlaceholderText(MESSAGE_PLACEHOLDER);
       await user.type(input, 'Test message');
 
       const sendButton = screen.getByRole('button', { name: /send/i });
@@ -795,20 +1097,26 @@ describe('FloatingChat', () => {
 
       await waitFor(() => {
         expect(chatService.submitChatQuery).toHaveBeenCalledWith(
+          'default',
           'Test message',
           'agent',
           'Test Agent',
-          expect.any(String),
-          undefined, // conversationId
-          undefined, // enableStreaming
-          '5m', // timeout
-          undefined, // parameters
+          {
+            sessionId: expect.any(String),
+            conversationId: undefined,
+            timeout: '5m',
+            parameters: undefined,
+            annotations: undefined,
+          },
         );
       });
 
       // Should call getQueryResult
       await waitFor(() => {
-        expect(chatService.getQueryResult).toHaveBeenCalledWith('query-123');
+        expect(chatService.getQueryResult).toHaveBeenCalledWith(
+          'default',
+          'query-123',
+        );
       });
 
       // Should eventually show the response
@@ -864,7 +1172,7 @@ describe('FloatingChat', () => {
 
       renderFloatingChat(defaultProps);
 
-      const input = screen.getByPlaceholderText('Type your message...');
+      const input = screen.getByPlaceholderText(MESSAGE_PLACEHOLDER);
       await user.type(input, 'Test message');
 
       const sendButton = screen.getByRole('button', { name: /send/i });
@@ -883,7 +1191,7 @@ describe('FloatingChat', () => {
       expect(storedHistory).not.toBe(null);
 
       const parsedHistory = JSON.parse(storedHistory!);
-      const chatKey = 'agent-Test Agent';
+      const chatKey = buildChatKey('default', 'agent', 'Test Agent');
       expect(parsedHistory[chatKey]).toBeDefined();
       expect(parsedHistory[chatKey].messages).toHaveLength(2);
       expect(parsedHistory[chatKey].messages[0].content).toBe('Test message');
@@ -916,7 +1224,7 @@ describe('FloatingChat', () => {
 
       renderFloatingChat(defaultProps);
 
-      const input = screen.getByPlaceholderText('Type your message...');
+      const input = screen.getByPlaceholderText(MESSAGE_PLACEHOLDER);
       await user.type(input, 'Test message');
 
       const sendButton = screen.getByRole('button', { name: /send/i });
@@ -924,14 +1232,17 @@ describe('FloatingChat', () => {
 
       await waitFor(() => {
         expect(chatService.submitChatQuery).toHaveBeenCalledWith(
+          'default',
           'Test message',
           'agent',
           'Test Agent',
-          expect.any(String),
-          undefined,
-          undefined,
-          '5m',
-          undefined, // parameters
+          {
+            sessionId: expect.any(String),
+            conversationId: undefined,
+            timeout: '5m',
+            parameters: undefined,
+            annotations: undefined,
+          },
         );
       });
 
@@ -980,7 +1291,7 @@ describe('FloatingChat', () => {
 
       renderFloatingChat(defaultProps);
 
-      const input = screen.getByPlaceholderText('Type your message...');
+      const input = screen.getByPlaceholderText(MESSAGE_PLACEHOLDER);
       await user.type(input, 'Test');
 
       const sendButton = screen.getByRole('button', { name: /send/i });
@@ -1007,7 +1318,7 @@ describe('FloatingChat', () => {
 
       renderFloatingChat(defaultProps);
 
-      const input = screen.getByPlaceholderText('Type your message...');
+      const input = screen.getByPlaceholderText(MESSAGE_PLACEHOLDER);
       await user.type(input, 'Test message');
 
       const sendButton = screen.getByRole('button', { name: /send/i });
@@ -1032,7 +1343,7 @@ describe('FloatingChat', () => {
 
       renderFloatingChat(defaultProps);
 
-      const input = screen.getByPlaceholderText('Type your message...');
+      const input = screen.getByPlaceholderText(MESSAGE_PLACEHOLDER);
       await user.type(input, 'First message');
 
       const sendButton = screen.getByRole('button', { name: /send/i });
@@ -1068,7 +1379,7 @@ describe('FloatingChat', () => {
 
       renderFloatingChat(defaultProps, store);
 
-      const input = screen.getByPlaceholderText('Type your message...');
+      const input = screen.getByPlaceholderText(MESSAGE_PLACEHOLDER);
       await user.type(input, 'First message');
 
       const sendButton = screen.getByRole('button', { name: /send/i });
@@ -1114,7 +1425,7 @@ describe('FloatingChat', () => {
 
       renderFloatingChat(defaultProps);
 
-      const input = screen.getByPlaceholderText('Type your message...');
+      const input = screen.getByPlaceholderText(MESSAGE_PLACEHOLDER);
       await user.type(input, 'Test message');
 
       const sendButton = screen.getByRole('button', { name: /send/i });
@@ -1127,7 +1438,7 @@ describe('FloatingChat', () => {
       const storedHistoryBefore = sessionStorage.getItem('agent-chat-history');
       expect(storedHistoryBefore).not.toBe(null);
       const parsedHistoryBefore = JSON.parse(storedHistoryBefore!);
-      const chatKey = 'agent-Test Agent';
+      const chatKey = buildChatKey('default', 'agent', 'Test Agent');
       expect(parsedHistoryBefore[chatKey].messages).toHaveLength(2);
 
       const clearButton = screen.getByRole('button', { name: /new chat/i });

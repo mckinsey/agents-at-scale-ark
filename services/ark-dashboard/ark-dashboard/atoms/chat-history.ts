@@ -9,6 +9,7 @@ export interface TokenUsage {
   prompt_tokens: number;
   completion_tokens: number;
   total_tokens: number;
+  cached_tokens: number;
 }
 
 export interface ChatSession {
@@ -17,6 +18,7 @@ export interface ChatSession {
   tokenUsage?: TokenUsage;
   messageTokenUsage?: Record<number, TokenUsage>;
   conversationId?: string;
+  activeQueryName?: string;
 }
 
 type ChatHistoryMap = Record<string, ChatSession>;

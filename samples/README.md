@@ -157,6 +157,13 @@ Weather forecasting with tool chaining.
 
 ### 🔌 MCP Integration
 
+#### `mcp/machine-to-machine-oauth.yaml` - Machine-to-Machine OAuth
+MCP server where the controller obtains and renews the token itself, no browser involved.
+- **Secret**: EC private signing key
+- **MCPServer**: `clientCredentials` with `private_key_jwt` (RFC 7523)
+- **Prerequisite**: the authorization server must already have Ark registered as a client
+- **Use case**: Enterprise MCP servers inside your own trust domain
+
 #### `mcp/github-external-mcp-server-sample.yaml` - Remote MCP Server
 GitHub MCP server with authentication.
 - **Secret**: GitHub token
@@ -261,21 +268,14 @@ Basic query targeting a single agent.
 - **Query**: Simple math calculation
 - **Use case**: Basic agent interaction
 
-#### `queries/query-multiple-targets.yaml` - Multi-Target Queries
-Querying multiple agents and teams.
-- **Targets**: Multiple agents and teams
-- **Query**: Single input to multiple processors
-- **Use case**: Parallel processing
-
 #### `queries/query-with-label-selectors.yaml` - Label Selector Queries
 Dynamic target selection using label selectors.
-- **Selector**: Label-based target discovery
-- **Mixed mode**: Explicit targets + label selector
-- **Query**: Selects agents and teams by labels
+- **Selector**: `matchLabels` and `matchExpressions` combined
+- **Query**: Selects the first matching agent, team, model or tool
 - **Use case**: Dynamic resource discovery
 
 #### `queries/query-selectors-only.yaml` - Selector-Only Query
-Query using only label selectors (no explicit targets).
+Query using only a label selector (no explicit target).
 - **Selector**: `matchLabels` for analyst role
 - **Query**: Market trend analysis
 - **Use case**: Pure label-based targeting
@@ -297,38 +297,24 @@ Enterprise customer onboarding with comprehensive parameters.
 
 ### 📋 Query Target Selection
 
-Queries support three ways to select targets:
+A query runs against exactly one target. Select it in one of two ways:
 
-#### 1. Explicit Targets
+#### 1. Explicit Target
 ```yaml
 spec:
-  targets:
-    - type: agent
-      name: specific-agent
-    - type: team
-      name: specific-team
+  target:
+    type: agent
+    name: specific-agent
 ```
 
-#### 2. Label Selectors
+#### 2. Label Selector
+Resolves to the first matching resource, checked in order Agent → Team → Model → Tool.
 ```yaml
 spec:
   selector:
     matchLabels:
       role: analyst
       tier: production
-```
-
-#### 3. Mixed Mode (Both)
-```yaml
-spec:
-  targets:
-    - type: agent
-      name: backup-agent
-  selector:
-    matchExpressions:
-      - key: category
-        operator: In
-        values: ["weather", "climate"]
 ```
 
 **Label Selector Features:**
@@ -429,10 +415,12 @@ Standalone model configuration.
    kubectl create secret generic azure-openai-secret \
      --from-literal=api-key="your-key" \
      --from-literal=api-version="2024-02-15-preview"
+   kubectl label secret azure-openai-secret ark.mckinsey.com/resource-type=secret ark.mckinsey.com/scope=shared
    
    # For GitHub MCP samples
    kubectl create secret generic github-token \
      --from-literal=token="your-github-pat"
+   kubectl label secret github-token ark.mckinsey.com/resource-type=secret ark.mckinsey.com/scope=shared
    ```
 
 4. **Model dependencies**: Some samples require specific models to be deployed first
@@ -447,6 +435,7 @@ For first-time users, deploy samples in this order:
    kubectl create secret generic azure-openai-secret \
      --from-literal=api-key="your-key" \
      --from-literal=api-version="2024-02-15-preview"
+   kubectl label secret azure-openai-secret ark.mckinsey.com/resource-type=secret ark.mckinsey.com/scope=shared
    ```
 
 2. **Deploy a model**:

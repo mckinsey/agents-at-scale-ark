@@ -8,14 +8,49 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/eventing"
+	eventmock "mckinsey.com/ark/internal/eventing/mock"
+	eventnoop "mckinsey.com/ark/internal/eventing/noop"
+	eventrecorder "mckinsey.com/ark/internal/eventing/recorder"
 )
+
+// teamEventProvider is a test eventing.Provider whose TeamRecorder captures
+// emitted events in a mock emitter, so specs can assert the controller actually
+// emits (the noop provider silently discards). Other recorders are unused here.
+type teamEventProvider struct {
+	emitter  *eventmock.MockEventEmitter
+	recorder eventing.TeamRecorder
+}
+
+func newTeamEventProvider() *teamEventProvider {
+	e := eventmock.NewMockEventEmitter()
+	return &teamEventProvider{emitter: e, recorder: eventrecorder.NewTeamRecorder(e, e)}
+}
+
+func (p *teamEventProvider) TeamRecorder() eventing.TeamRecorder { return p.recorder }
+
+func (p *teamEventProvider) ModelRecorder() eventing.ModelRecorder { return nil }
+
+func (p *teamEventProvider) A2aRecorder() eventing.A2aRecorder { return nil }
+
+func (p *teamEventProvider) AgentRecorder() eventing.AgentRecorder { return nil }
+
+func (p *teamEventProvider) ExecutionEngineRecorder() eventing.ExecutionEngineRecorder { return nil }
+
+func (p *teamEventProvider) MCPServerRecorder() eventing.MCPServerRecorder { return nil }
+
+func (p *teamEventProvider) QueryRecorder() eventing.QueryRecorder { return nil }
+
+func (p *teamEventProvider) ToolRecorder() eventing.ToolRecorder { return nil }
+
+func (p *teamEventProvider) MemoryRecorder() eventing.MemoryRecorder { return nil }
 
 var _ = Describe("Team Controller", func() {
 	Context("When reconciling a resource", func() {
@@ -63,13 +98,43 @@ var _ = Describe("Team Controller", func() {
 			controllerReconciler := &TeamReconciler{
 				Client:   k8sClient,
 				Scheme:   k8sClient.Scheme(),
-				Recorder: record.NewFakeRecorder(10),
+				Eventing: eventnoop.NewProvider(),
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: typeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("emits TeamCreated then StatusChanged across reconciles", func() {
+			events := newTeamEventProvider()
+			controllerReconciler := &TeamReconciler{
+				Client:   k8sClient,
+				Scheme:   k8sClient.Scheme(),
+				Eventing: events,
+			}
+
+			By("first reconcile initializes conditions and emits TeamCreated")
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("second reconcile flips availability for the missing member and emits StatusChanged")
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
+			Expect(err).NotTo(HaveOccurred())
+
+			updated := &arkv1alpha1.Team{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, updated)).To(Succeed())
+			cond := meta.FindStatusCondition(updated.Status.Conditions, TeamAvailable)
+			Expect(cond).NotTo(BeNil())
+			Expect(cond.Reason).To(Equal("MemberNotFound"))
+
+			By("asserting the controller actually emitted both events (would fail if either emit call is dropped)")
+			reasons := make([]string, 0)
+			for _, e := range events.emitter.GetEvents() {
+				reasons = append(reasons, e.Reason)
+			}
+			Expect(reasons).To(ContainElements("TeamCreated", "StatusChanged"))
 		})
 	})
 
@@ -80,7 +145,7 @@ var _ = Describe("Team Controller", func() {
 			reconciler := &TeamReconciler{
 				Client:   k8sClient,
 				Scheme:   k8sClient.Scheme(),
-				Recorder: record.NewFakeRecorder(10),
+				Eventing: eventnoop.NewProvider(),
 			}
 
 			team := &arkv1alpha1.Team{
@@ -106,7 +171,7 @@ var _ = Describe("Team Controller", func() {
 			reconciler := &TeamReconciler{
 				Client:   k8sClient,
 				Scheme:   k8sClient.Scheme(),
-				Recorder: record.NewFakeRecorder(10),
+				Eventing: eventnoop.NewProvider(),
 			}
 
 			agentName := "available-agent"
@@ -160,7 +225,7 @@ var _ = Describe("Team Controller", func() {
 			reconciler := &TeamReconciler{
 				Client:   k8sClient,
 				Scheme:   k8sClient.Scheme(),
-				Recorder: record.NewFakeRecorder(10),
+				Eventing: eventnoop.NewProvider(),
 			}
 
 			teamName := "team-with-missing-agent"
@@ -189,7 +254,7 @@ var _ = Describe("Team Controller", func() {
 			reconciler := &TeamReconciler{
 				Client:   k8sClient,
 				Scheme:   k8sClient.Scheme(),
-				Recorder: record.NewFakeRecorder(10),
+				Eventing: eventnoop.NewProvider(),
 			}
 
 			agentName := "agent-no-condition"
@@ -235,7 +300,7 @@ var _ = Describe("Team Controller", func() {
 			reconciler := &TeamReconciler{
 				Client:   k8sClient,
 				Scheme:   k8sClient.Scheme(),
-				Recorder: record.NewFakeRecorder(10),
+				Eventing: eventnoop.NewProvider(),
 			}
 
 			agentName := "unavailable-agent"
@@ -289,7 +354,7 @@ var _ = Describe("Team Controller", func() {
 			reconciler := &TeamReconciler{
 				Client:   k8sClient,
 				Scheme:   k8sClient.Scheme(),
-				Recorder: record.NewFakeRecorder(10),
+				Eventing: eventnoop.NewProvider(),
 			}
 
 			agent1Name := "agent-one"
@@ -388,7 +453,7 @@ var _ = Describe("Team Controller IsNotFound", func() {
 		controllerReconciler := &TeamReconciler{
 			Client:   k8sClient,
 			Scheme:   k8sClient.Scheme(),
-			Recorder: record.NewFakeRecorder(10),
+			Eventing: eventnoop.NewProvider(),
 		}
 
 		By("reconciling to initialize status")

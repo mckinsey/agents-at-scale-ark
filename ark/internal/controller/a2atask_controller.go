@@ -4,17 +4,22 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	a2aclient "trpc.group/trpc-go/trpc-a2a-go/client"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
@@ -30,6 +35,7 @@ const (
 	defaultTaskTimeout         = 12 * time.Hour
 	defaultTaskTTL             = 720 * time.Hour
 	maxPollBackoff             = 5 * time.Minute
+	pollRequestTimeout         = 30 * time.Second
 	rateLimitBackoffFloor      = 30 * time.Second
 	maxBackoffExponent         = 16
 )
@@ -46,6 +52,7 @@ type A2ATaskReconciler struct {
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=queries,verbs=get;list
 // +kubebuilder:rbac:groups=ark.mckinsey.com,resources=agents,verbs=get;list
 
+//nolint:gocognit // TODO: Refactor to reduce cognitive complexity
 func (r *A2ATaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 
@@ -72,6 +79,29 @@ func (r *A2ATaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, nil
 	}
 
+	//nolint:nestif // TODO: Refactor to reduce nesting complexity
+	if a2aTask.Status.Phase == arka2a.PhaseInputRequired {
+		if timedOut, err := r.checkApprovalTimeout(ctx, &a2aTask); err != nil {
+			log.Error(err, "failed to check approval timeout")
+		} else if timedOut {
+			if err := r.Status().Update(ctx, &a2aTask); err != nil {
+				log.Error(err, "unable to update A2ATask status after timeout")
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{}, nil
+		}
+
+		if a2aTask.Spec.A2AServerRef == nil && a2aTask.Spec.Input != "" {
+			if handled := r.processApprovalDecision(ctx, &a2aTask); handled {
+				if err := r.Status().Update(ctx, &a2aTask); err != nil {
+					log.Error(err, "unable to update A2ATask status after approval decision")
+					return ctrl.Result{}, err
+				}
+				return ctrl.Result{}, nil
+			}
+		}
+	}
+
 	if done, err := r.reconcileTimeout(ctx, &a2aTask); done || err != nil {
 		return ctrl.Result{}, err
 	}
@@ -80,9 +110,35 @@ func (r *A2ATaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 }
 
 func (r *A2ATaskReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	return setupA2ATaskController(mgr, r)
+}
+
+// a2aTaskUpdatePredicate skips updates that change neither generation nor status —
+// i.e. the reconciler's own poll-failure annotation write, which would otherwise
+// retrigger immediately and supersede the RequeueAfter backoff. Status updates must
+// pass: the reconciler drives its phase handshakes (TaskNotStarted, approval
+// decisions) through its own status writes with no RequeueAfter.
+func a2aTaskUpdatePredicate() predicate.Predicate {
+	return predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			if e.ObjectOld.GetGeneration() != e.ObjectNew.GetGeneration() {
+				return true
+			}
+			oldTask, okOld := e.ObjectOld.(*arkv1alpha1.A2ATask)
+			newTask, okNew := e.ObjectNew.(*arkv1alpha1.A2ATask)
+			if !okOld || !okNew {
+				return true
+			}
+			return !equality.Semantic.DeepEqual(oldTask.Status, newTask.Status)
+		},
+	}
+}
+
+func setupA2ATaskController(mgr ctrl.Manager, rec reconcile.Reconciler) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&arkv1alpha1.A2ATask{}).
-		Complete(r)
+		WithEventFilter(a2aTaskUpdatePredicate()).
+		Complete(rec)
 }
 
 // reconcileTTL deletes the task once it has outlived its TTL. Returns true when handled.
@@ -102,7 +158,12 @@ func (r *A2ATaskReconciler) reconcileTTL(ctx context.Context, a2aTask *arkv1alph
 }
 
 // reconcileTimeout marks the task failed once it has exceeded its timeout. Returns true when handled.
+// Skipped for HITL approval tasks: there's no remote A2A server to poll, so the spec.timeout
+// is not meaningful for them. checkApprovalTimeout handles their expiry instead.
 func (r *A2ATaskReconciler) reconcileTimeout(ctx context.Context, a2aTask *arkv1alpha1.A2ATask) (bool, error) {
+	if a2aTask.Spec.A2AServerRef == nil {
+		return false, nil
+	}
 	timeout := defaultTaskTimeout
 	if a2aTask.Spec.Timeout != nil {
 		timeout = a2aTask.Spec.Timeout.Duration
@@ -175,9 +236,17 @@ func (r *A2ATaskReconciler) handlePollFailure(ctx context.Context, a2aTask *arkv
 
 // fetchA2ATaskStatus queries the A2A server for the current task status and updates the A2ATask
 func (r *A2ATaskReconciler) fetchA2ATaskStatus(ctx context.Context, a2aTask *arkv1alpha1.A2ATask) error {
+	ctx, cancel := context.WithTimeout(ctx, pollRequestTimeout)
+	defer cancel()
+
 	a2aClient, err := r.createA2AClient(ctx, a2aTask)
 	if err != nil {
 		return err
+	}
+
+	// For approval tasks without A2AServer (a2aClient is nil), skip remote polling
+	if a2aClient == nil {
+		return nil
 	}
 
 	task, err := r.queryTaskStatus(ctx, a2aClient, a2aTask.Spec.TaskID)
@@ -193,6 +262,11 @@ func (r *A2ATaskReconciler) fetchA2ATaskStatus(ctx context.Context, a2aTask *ark
 
 // createA2AClient creates an A2A client for the task
 func (r *A2ATaskReconciler) createA2AClient(ctx context.Context, a2aTask *arkv1alpha1.A2ATask) (*a2aclient.A2AClient, error) {
+	// For approval tasks without an A2AServer, there's no remote server to poll
+	if a2aTask.Spec.A2AServerRef == nil {
+		return nil, nil
+	}
+
 	serverNamespace := a2aTask.Spec.A2AServerRef.Namespace
 	if serverNamespace == "" {
 		serverNamespace = a2aTask.Namespace
@@ -204,7 +278,7 @@ func (r *A2ATaskReconciler) createA2AClient(ctx context.Context, a2aTask *arkv1a
 		return nil, fmt.Errorf("unable to get A2AServer %v: %w", serverKey, err)
 	}
 
-	a2aServerAddress := a2aServer.Status.LastResolvedAddress
+	a2aServerAddress := arka2a.RPCEndpoint(&a2aServer)
 	if a2aServerAddress == "" {
 		return nil, fmt.Errorf("A2AServer %v has no resolved address", serverKey)
 	}
@@ -257,6 +331,124 @@ func (r *A2ATaskReconciler) setConditionCompleted(a2aTask *arkv1alpha1.A2ATask, 
 		Message:            message,
 		ObservedGeneration: a2aTask.Generation,
 	})
+}
+
+// checkApprovalTimeout checks if an approval request has timed out and applies the onTimeout policy.
+// Returns true if timeout was handled, false otherwise.
+func (r *A2ATaskReconciler) checkApprovalTimeout(ctx context.Context, a2aTask *arkv1alpha1.A2ATask) (bool, error) {
+	log := logf.FromContext(ctx)
+
+	if a2aTask.Status.ProtocolMetadata == nil {
+		return false, nil
+	}
+
+	timeoutStr, hasTimeout := a2aTask.Status.ProtocolMetadata["timeout"]
+	onTimeout := a2aTask.Status.ProtocolMetadata["onTimeout"]
+
+	if !hasTimeout || timeoutStr == "" {
+		return false, nil
+	}
+
+	timeoutDuration, err := time.ParseDuration(timeoutStr)
+	if err != nil {
+		log.Error(err, "failed to parse approval timeout", "timeout", timeoutStr)
+		return false, fmt.Errorf("invalid timeout format: %w", err)
+	}
+
+	if a2aTask.Status.StartTime == nil {
+		return false, nil
+	}
+
+	expiryTime := a2aTask.Status.StartTime.Add(timeoutDuration)
+	if time.Now().Before(expiryTime) {
+		return false, nil
+	}
+
+	log.Info("Approval timeout exceeded, applying onTimeout policy",
+		"taskId", a2aTask.Spec.TaskID,
+		"onTimeout", onTimeout,
+		"timeout", timeoutDuration)
+
+	switch onTimeout {
+	case "proceed":
+		log.Info("Approval timeout expired, proceeding per onTimeout policy", "taskId", a2aTask.Spec.TaskID)
+		a2aTask.Status.Phase = arka2a.PhaseCompleted
+		completionTime := metav1.Now()
+		a2aTask.Status.CompletionTime = &completionTime
+		r.setConditionCompleted(a2aTask, metav1.ConditionTrue, arka2a.ConditionReasonApprovalTimeoutProceeded,
+			"Approval timeout exceeded, proceeding per onTimeout policy")
+
+	case "reject", "":
+		log.Info("Approval timeout expired, rejecting per onTimeout policy", "taskId", a2aTask.Spec.TaskID)
+		a2aTask.Status.Phase = arka2a.PhaseFailed
+		a2aTask.Status.Error = fmt.Sprintf("Approval timeout exceeded after %s", timeoutDuration)
+		completionTime := metav1.Now()
+		a2aTask.Status.CompletionTime = &completionTime
+		r.setConditionCompleted(a2aTask, metav1.ConditionTrue, arka2a.ConditionReasonApprovalTimeoutRejected,
+			"Approval timeout exceeded, rejecting per onTimeout policy")
+
+	default:
+		return false, fmt.Errorf("invalid onTimeout value: %s", onTimeout)
+	}
+
+	return true, nil
+}
+
+// processApprovalDecision processes the approval decision from spec.Input for HITL tasks.
+// Returns true if decision was processed (or if bad input was handled as terminal failure), false otherwise.
+func (r *A2ATaskReconciler) processApprovalDecision(ctx context.Context, a2aTask *arkv1alpha1.A2ATask) bool {
+	log := logf.FromContext(ctx)
+
+	var decision struct {
+		Decision string `json:"decision"`
+	}
+
+	if err := json.Unmarshal([]byte(a2aTask.Spec.Input), &decision); err != nil {
+		log.Error(err, "failed to parse approval decision", "input", a2aTask.Spec.Input)
+		completionTime := metav1.Now()
+		a2aTask.Status.CompletionTime = &completionTime
+		a2aTask.Status.Phase = arka2a.PhaseFailed
+		a2aTask.Status.Error = fmt.Sprintf("Invalid approval decision format: %v", err)
+		r.setConditionCompleted(a2aTask, metav1.ConditionFalse, "InvalidApprovalDecision",
+			fmt.Sprintf("Failed to parse approval decision: %v", err))
+		return true
+	}
+
+	if decision.Decision == "" {
+		return false
+	}
+
+	log.Info("Processing approval decision",
+		"taskId", a2aTask.Spec.TaskID,
+		"decision", decision.Decision)
+
+	completionTime := metav1.Now()
+	a2aTask.Status.CompletionTime = &completionTime
+
+	switch decision.Decision {
+	case "approved":
+		log.Info("Approval granted, marking task as completed", "taskId", a2aTask.Spec.TaskID)
+		a2aTask.Status.Phase = arka2a.PhaseCompleted
+		r.setConditionCompleted(a2aTask, metav1.ConditionTrue, arka2a.ConditionReasonApprovalGranted,
+			"User approved the tool calls")
+
+	case "rejected":
+		log.Info("Approval rejected, marking task as failed", "taskId", a2aTask.Spec.TaskID)
+		a2aTask.Status.Phase = arka2a.PhaseFailed
+		a2aTask.Status.Error = "Tool execution rejected by user"
+		r.setConditionCompleted(a2aTask, metav1.ConditionTrue, arka2a.ConditionReasonApprovalRejected,
+			"Tool execution rejected by user")
+
+	default:
+		log.Error(fmt.Errorf("invalid decision value: %s", decision.Decision), "unknown approval decision")
+		a2aTask.Status.Phase = arka2a.PhaseFailed
+		a2aTask.Status.Error = fmt.Sprintf("Invalid decision value: %s", decision.Decision)
+		r.setConditionCompleted(a2aTask, metav1.ConditionFalse, "InvalidApprovalDecision",
+			fmt.Sprintf("Unknown decision value: %s", decision.Decision))
+		return true
+	}
+
+	return true
 }
 
 func (r *A2ATaskReconciler) getFailureCount(ctx context.Context, a2aTask *arkv1alpha1.A2ATask) int {

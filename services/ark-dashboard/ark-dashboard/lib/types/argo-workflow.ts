@@ -20,6 +20,8 @@ export interface ArgoWorkflowSpec {
   workflowTemplateRef?: {
     name: string;
   };
+  suspend?: boolean;
+  shutdown?: 'Stop' | 'Terminate';
 }
 
 export interface ArgoNodeStatus {
@@ -31,6 +33,8 @@ export interface ArgoNodeStatus {
     | 'Steps'
     | 'StepGroup'
     | 'DAG'
+    | 'TaskGroup'
+    | 'Retry'
     | 'Container'
     | 'Script'
     | 'Suspend';
@@ -69,6 +73,7 @@ export interface ArgoWorkflowStatus {
   progress?: string;
   message?: string;
   nodes?: Record<string, ArgoNodeStatus>;
+  compressedNodes?: string;
   artifactRepositoryRef?: {
     configMap: string;
     key: string;
@@ -89,11 +94,15 @@ export interface ArgoWorkflow {
   kind: string;
   metadata: ArgoWorkflowMetadata;
   spec: ArgoWorkflowSpec;
-  status: ArgoWorkflowStatus;
+  status?: ArgoWorkflowStatus;
 }
 
 export interface ArgoWorkflowList {
   apiVersion: string;
   kind: string;
   items: ArgoWorkflow[];
+  metadata?: {
+    continue?: string;
+    remainingItemCount?: string | number;
+  };
 }

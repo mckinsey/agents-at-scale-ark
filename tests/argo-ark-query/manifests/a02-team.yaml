@@ -1,0 +1,33 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: planner
+spec:
+  prompt: |
+    You are a Planner Agent. Draft a short travel plan.
+    Start your response with "PLAN:" to identify your contribution.
+  modelRef:
+    name: test-model-mock
+---
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: reviewer
+spec:
+  prompt: |
+    You are a Reviewer Agent. Review the plan and finalize it.
+    Start your response with "FINAL:" to identify your contribution.
+  modelRef:
+    name: test-model-mock
+---
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Team
+metadata:
+  name: travel-team
+spec:
+  strategy: sequential
+  members:
+    - type: agent
+      name: planner
+    - type: agent
+      name: reviewer

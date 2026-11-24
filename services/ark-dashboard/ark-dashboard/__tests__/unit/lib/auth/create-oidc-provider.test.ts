@@ -4,7 +4,8 @@ import type { OktaProfile } from "@auth/core/providers/okta";
 
 // Mock the constants
 vi.mock('@/lib/constants/auth', () => ({
-  OIDC_CONFIG_URL: 'https://example.com/.well-known/openid-configuration'
+  OIDC_CONFIG_URL: 'https://example.com/.well-known/openid-configuration',
+  OIDC_SCOPES: 'openid email profile'
 }));
 
 describe('createOIDCProvider', () => {
@@ -85,5 +86,30 @@ describe('createOIDCProvider', () => {
     expect(provider.name).toBe('Minimal Provider');
     expect(provider.id).toBe('minimal');
     expect(provider.type).toBe('oidc');
+  });
+
+  it('should source the authorization scope from OIDC_SCOPES', async () => {
+    vi.resetModules();
+    vi.doMock('@/lib/constants/auth', () => ({
+      OIDC_CONFIG_URL: 'https://example.com/.well-known/openid-configuration',
+      OIDC_SCOPES: 'openid email profile offline_access'
+    }));
+
+    const { createOIDCProvider: createWithScopes } = await import(
+      '@/lib/auth/create-oidc-provider'
+    );
+
+    const provider = createWithScopes({
+      clientId: 'test',
+      name: 'test',
+      id: 'test'
+    });
+
+    expect(provider.authorization).toEqual({
+      params: { scope: 'openid email profile offline_access' }
+    });
+
+    vi.doUnmock('@/lib/constants/auth');
+    vi.resetModules();
   });
 });

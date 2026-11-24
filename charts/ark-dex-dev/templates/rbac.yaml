@@ -1,0 +1,116 @@
+{{- if .Values.rbac.create }}
+# RBAC for the two hardcoded Dex users. ark-api impersonates the authenticated
+# user (IMPERSONATION_USERNAME_CLAIM=email), so these bindings are what actually
+# decides what each login can do.
+#
+# Subjects are Users, not Groups: Dex's static password store has no groups field,
+# so its tokens carry no `groups` claim and the group-based bindings in
+# samples/rbac-test-bindings.yaml would never match.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ark-sso-dev-editor
+  labels:
+    app: {{ .Release.Name }}
+rules:
+  - apiGroups: ["ark.mckinsey.com"]
+    resources: ["agents", "models", "queries", "teams", "tools", "memories", "mcpservers", "a2aservers", "a2atasks", "executionengines"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ark-sso-dev-viewer
+  labels:
+    app: {{ .Release.Name }}
+rules:
+  - apiGroups: ["ark.mckinsey.com"]
+    resources: ["agents", "models", "queries", "teams", "tools", "memories", "mcpservers", "a2aservers", "a2atasks", "executionengines"]
+    verbs: ["get", "list", "watch"]
+---
+# Namespaces are cluster-scoped, so this cannot live in a namespaced Role.
+# GET /v1/namespaces lists them as the impersonated user and the dashboard calls it
+# to populate the namespace selector — without this both users get a broken picker.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ark-sso-dev-namespace-reader
+  labels:
+    app: {{ .Release.Name }}
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ark-sso-dev-admin
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}
+subjects:
+  - kind: User
+    name: {{ .Values.users.admin.email }}
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: ark-sso-dev-editor
+  apiGroup: rbac.authorization.k8s.io
+{{- if .Values.rbac.bindArkTenantRole }}
+---
+# Adds secrets, configmaps, pods and events on top of the Ark resources above, so
+# the admin can manage model provider credentials and marketplace sources. This also
+# restores the marketplace-source write path, which dev/marketplace-source-editor-binding.yaml
+# grants to ark-api-sa — no longer the effective identity once impersonation is on.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ark-sso-dev-admin-tenant
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}
+subjects:
+  - kind: User
+    name: {{ .Values.users.admin.email }}
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: Role
+  name: {{ .Values.rbac.arkTenantRoleName }}
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ark-sso-dev-viewer
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}
+subjects:
+  - kind: User
+    name: {{ .Values.users.viewer.email }}
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: ark-sso-dev-viewer
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ark-sso-dev-namespace-reader
+  labels:
+    app: {{ .Release.Name }}
+subjects:
+  - kind: User
+    name: {{ .Values.users.admin.email }}
+    apiGroup: rbac.authorization.k8s.io
+  - kind: User
+    name: {{ .Values.users.viewer.email }}
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: ark-sso-dev-namespace-reader
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}

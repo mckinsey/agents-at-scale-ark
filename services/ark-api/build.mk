@@ -59,7 +59,7 @@ $(ARK_API_STAMP_DEPS): $(ARK_API_SERVICE_SOURCE_DIR)/pyproject.toml $(ARK_SDK_WH
 	sed -i.bak 's|path = "../../../out/ark-sdk/py-sdk/dist/ark_sdk-.*\.whl"|path = "./out/$(notdir $(ARK_SDK_WHL))"|' pyproject.toml && \
 	uv remove ark_sdk || true && \
 	uv add ./out/$(notdir $(ARK_SDK_WHL)) && \
-	rm -f uv.lock && uv sync
+	uv lock && uv sync
 	@touch $@
 
 # OpenAPI generation (side effect of test)
@@ -96,7 +96,7 @@ $(ARK_API_STAMP_INSTALL): $(ARK_API_STAMP_BUILD) $$(LOCALHOST_GATEWAY_STAMP_INST
 	sed -i.bak 's|path = "../../out/ark-sdk/py-sdk/dist/ark_sdk-.*\.whl"|path = "./out/$(notdir $(ARK_SDK_WHL))"|' pyproject.toml && \
 	uv remove ark_sdk || true && \
 	uv add ./out/$(notdir $(ARK_SDK_WHL)) && \
-	rm -f uv.lock && uv sync
+	uv lock && uv sync
 	cd ${ARK_API_SERVICE_DIR}
 	./scripts/build-and-push.sh -i $(ARK_API_IMAGE) -t $(ARK_API_TAG) -f $(ARK_API_SERVICE_DIR)/Dockerfile -c $(ARK_API_SERVICE_DIR)
 	helm upgrade --install $(ARK_API_SERVICE_NAME) $(ARK_API_SERVICE_DIR)/chart \

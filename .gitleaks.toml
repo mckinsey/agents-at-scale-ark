@@ -1,0 +1,18 @@
+title = "Ark Gitleaks configuration"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "ark-api-secret-key"
+description = "Ark API secret key"
+regex = '''sk-ark-[A-Za-z0-9_-]{64}'''
+keywords = ["sk-ark-"]
+tags = ["ark", "api-key", "secret"]
+
+[allowlist]
+description = "Test fixtures contain intentional sample tokens used to exercise redaction or filtering logic; they are not real secrets."
+paths = [
+  '''ark/internal/telemetry/redact/testdata/credential-redaction\.json''',
+  '''lib/ark-sdk/gen_sdk/overlay/python/test_overlay/test_secret_client\.py''',
+]

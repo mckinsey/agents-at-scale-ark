@@ -118,8 +118,8 @@ type TeamRecorder interface {
 	// StartTurn begins tracing a single turn in team execution.
 	StartTurn(ctx context.Context, turn int, memberName, memberType string) (context.Context, Span)
 
-	// RecordTurnOutput records turn execution output messages.
-	RecordTurnOutput(span Span, messages any, messageCount int)
+	// RecordTurnOutput records turn execution output.
+	RecordTurnOutput(span Span, output string, messageCount int)
 
 	// RecordTokenUsage records token consumption for team execution.
 	RecordTokenUsage(span Span, promptTokens, completionTokens, totalTokens int64)

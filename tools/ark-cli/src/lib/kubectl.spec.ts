@@ -1,13 +1,14 @@
 import {vi} from 'vitest';
+import chalk from 'chalk';
+import {EVENT_ANNOTATIONS} from './constants.js';
 
 const mockExeca = vi.fn() as any;
 vi.mock('execa', () => ({
   execa: mockExeca,
 }));
 
-const {getResource, listResources, deleteResource} = await import(
-  './kubectl.js'
-);
+const {getResource, listResources, deleteResource, watchEventsLive} =
+  await import('./kubectl.js');
 
 interface TestResource {
   metadata: {
@@ -272,6 +273,99 @@ describe('kubectl', () => {
         ['delete', 'queries', '--all'],
         {stdio: 'pipe'}
       );
+    });
+  });
+
+  describe('watchEventsLive', () => {
+    const eventData = JSON.stringify({agent: 'weather'});
+
+    function mockEvents(items: unknown[]) {
+      mockExeca.mockImplementation((_cmd: string, args: string[]) => {
+        if (args.includes('wait')) {
+          return Promise.resolve({stdout: '', stderr: '', exitCode: 0});
+        }
+        return Promise.resolve({stdout: JSON.stringify({items})});
+      });
+    }
+
+    function eventWithData(overrides: Record<string, unknown> = {}) {
+      return {
+        reason: 'ResolveStart',
+        type: 'Normal',
+        eventTime: '2023-01-02T03:04:05.678Z',
+        metadata: {
+          uid: 'uid-1',
+          annotations: {[EVENT_ANNOTATIONS.EVENT_DATA]: eventData},
+        },
+        ...overrides,
+      };
+    }
+
+    let logSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      logSpy.mockRestore();
+    });
+
+    it('renders events through formatEvent when pretty is enabled', async () => {
+      mockEvents([eventWithData()]);
+
+      await watchEventsLive('cli-query-1', true);
+
+      expect(logSpy).toHaveBeenCalledTimes(1);
+      const line = logSpy.mock.calls[0][0] as string;
+      // Pretty mode expands the payload into colorized key=value detail.
+      expect(line).toContain(`${chalk.blue('agent')}${chalk.dim('=')}${chalk.white('weather')}`);
+      expect(line).toContain(chalk.green('ResolveStart'));
+      // The raw JSON blob must not leak into the pretty output.
+      expect(line).not.toContain(eventData);
+    });
+
+    it('prints the raw event-data blob by default (non-pretty)', async () => {
+      mockEvents([eventWithData()]);
+
+      await watchEventsLive('cli-query-1');
+
+      expect(logSpy).toHaveBeenCalledTimes(1);
+      const line = logSpy.mock.calls[0][0] as string;
+      expect(line).toContain(eventData);
+      // Raw path uses ANSI escape codes, not chalk-expanded detail.
+      expect(line).toContain('\x1b[32m');
+    });
+
+    it('deduplicates events by uid across polls', async () => {
+      mockEvents([eventWithData(), eventWithData()]);
+
+      await watchEventsLive('cli-query-1', true);
+
+      expect(logSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('skips events without an ark event-data annotation', async () => {
+      mockEvents([{reason: 'Foo', metadata: {uid: 'uid-2', annotations: {}}}]);
+
+      await watchEventsLive('cli-query-1', true);
+
+      expect(logSpy).not.toHaveBeenCalled();
+    });
+
+    it('reports an error when the query wait fails', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      mockExeca.mockImplementation((_cmd: string, args: string[]) => {
+        if (args.includes('wait')) {
+          return Promise.reject(new Error('timed out'));
+        }
+        return Promise.resolve({stdout: JSON.stringify({items: []})});
+      });
+
+      await watchEventsLive('cli-query-1', true);
+
+      expect(errorSpy).toHaveBeenCalled();
+      errorSpy.mockRestore();
     });
   });
 });

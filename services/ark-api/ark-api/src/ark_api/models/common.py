@@ -1,5 +1,21 @@
 """Common models shared across resources."""
 from enum import Enum
+from typing import Optional
+
+from pydantic import BaseModel
+
+
+class PaginatedListResponse(BaseModel):
+    """Base fields for cursor-paginated list responses.
+
+    ``count`` is the number of items in this page. ``continue_token`` is the
+    opaque Kubernetes continuation token for the next page, or ``None`` on the
+    last page. ``remaining_item_count`` is Kubernetes' best-effort estimate of
+    items left after this page and may be ``None``.
+    """
+    count: int
+    continue_token: Optional[str] = None
+    remaining_item_count: Optional[int] = None
 
 
 class AvailabilityStatus(str, Enum):

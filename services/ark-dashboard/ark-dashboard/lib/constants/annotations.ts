@@ -10,6 +10,7 @@ export const ARK_ANNOTATIONS = {
   A2A_SERVER_NAME: `${ARK_PREFIX}a2a-server-name`,
   A2A_SERVER_ADDRESS: `${ARK_PREFIX}a2a-server-address`,
   A2A_SERVER_SKILLS: `${ARK_PREFIX}a2a-server-skills`,
+  A2A_STREAMING_SUPPORTED: `${ARK_PREFIX}a2a-streaming-supported`,
 
   // MCP annotations
   MCP_SERVER_NAME: `${ARK_PREFIX}mcp-server-name`,
@@ -17,9 +18,6 @@ export const ARK_ANNOTATIONS = {
   // ARK service annotations
   SERVICE: `${ARK_PREFIX}service`,
   RESOURCES: `${ARK_PREFIX}resources`,
-
-  // Streaming annotations
-  STREAMING_ENABLED: `${ARK_PREFIX}streaming-enabled`,
 
   // Origin annotations
   ORIGIN: `${ARK_PREFIX}origin`,

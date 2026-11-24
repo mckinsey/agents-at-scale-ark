@@ -11,12 +11,10 @@ export const getStreamQuerySchema = z.object({
     .enum(['true', 'false'])
     .transform((v) => v === 'true')
     .optional(),
-  'wait-for-query': z.coerce.number().int().nonnegative().optional(),
   'max-chunk-size': z.coerce.number().int().positive().optional(),
 });
 export type GetStreamQuery = z.infer<typeof getStreamQuerySchema>;
 export type GetStreamQueryRaw = {
   'from-beginning'?: 'true' | 'false';
-  'wait-for-query'?: string;
   'max-chunk-size'?: string;
 };

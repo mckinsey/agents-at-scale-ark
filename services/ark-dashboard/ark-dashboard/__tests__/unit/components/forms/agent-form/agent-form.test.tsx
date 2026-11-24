@@ -1,9 +1,12 @@
-import { render, screen } from '@testing-library/react';
+import { render } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { AgentForm } from '@/components/forms/agent-form/agent-form';
 
 vi.mock('next/navigation', () => ({
   useRouter: vi.fn(() => ({ push: vi.fn() })),
   usePathname: vi.fn(() => '/agents'),
+  useSearchParams: vi.fn(() => new URLSearchParams()),
 }));
 
 vi.mock('@/providers/NamespaceProvider', () => ({
@@ -18,7 +21,7 @@ vi.mock('@/lib/hooks/use-namespaced-navigation', () => ({
 }));
 
 vi.mock('@/lib/services', () => ({
-  agentsService: { getAll: vi.fn().mockResolvedValue([]) },
+  agentsService: { list: vi.fn().mockResolvedValue([]) },
 }));
 
 vi.mock('@/components/forms/agent-form/use-agent-form', () => ({
@@ -48,12 +51,11 @@ vi.mock('@/components/forms/agent-form/use-agent-form', () => ({
       handleToolToggle: vi.fn(),
       handleDeleteTool: vi.fn(),
       isToolSelected: vi.fn(),
+      isOutputSchemaSupported: vi.fn(() => false),
       onSubmit: vi.fn(),
     },
   })),
 }));
-
-import { AgentForm } from '@/components/forms/agent-form/agent-form';
 
 describe('AgentForm', () => {
   beforeEach(() => {
@@ -61,7 +63,7 @@ describe('AgentForm', () => {
   });
 
   it('should render loading spinner when loading', () => {
-    const { container } = render(<AgentForm mode="create" />);
+    const { container } = render(<AgentForm mode="edit" />);
     expect(container.querySelector('.animate-spin')).toBeTruthy();
   });
 });

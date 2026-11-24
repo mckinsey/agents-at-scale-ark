@@ -46,6 +46,8 @@ app:
     # Authentication environment variables
     - name: OIDC_ISSUER_URL
       value: ""
+    # Expected JWT audience. Accepts a single value or a comma-separated list
+    # (e.g. "app-a,app-b"); a token passes if its aud matches any of them.
     - name: OIDC_APPLICATION_ID
       value: ""
     # AUTH_MODE options:
@@ -60,6 +62,16 @@ app:
     # Default: 10.0 seconds
     - name: PROXY_TIMEOUT
       value: "10.0"
+    # Maximum accepted file-gateway upload size, in bytes
+    # Applies only to file-gateway uploads, not to A2A or MCP proxy traffic
+    # Default: 1048576 (1 MB), matching the dashboard's client-side limit
+    - name: PROXY_MAX_UPLOAD_BYTES
+      value: "1048576"
+    # In-cluster Argo Server URL used to list workflows sorted by start time
+    # Requires Argo Server with --auth-mode=server; empty uses the Kubernetes API
+    # Resolves in the ark-api namespace; use argo-workflows-server.<namespace> otherwise
+    - name: ARGO_SERVER_URL
+      value: "http://argo-workflows-server:2746"
     # A2A Gateway environment variables
     # These configure the external URLs advertised in agent cards (.well-known/agent.json)
     # Must match your external routing configuration (HTTPRoute/Ingress)
@@ -75,6 +87,10 @@ app:
     # Read-only mode - set to "true" to disable write operations
     - name: READ_ONLY_MODE
       value: "false"
+    - name: API_KEY_RETENTION_SECONDS
+      value: "7776000"
+    - name: API_KEY_REAPER_INTERVAL_SECONDS
+      value: "3600"
     # MCP authorization endpoints. Leave ARK_API_PUBLIC_CALLBACK_URL unset to
     # disable the four /api/v1/mcp-servers/{name}/auth/* endpoints (they will
     # return 503). When set, the URL MUST be https unless the host is a
@@ -90,6 +106,20 @@ app:
     # ingress. Override with a public https ingress URL for real deployments.
     - name: ARK_API_PUBLIC_CALLBACK_URL
       value: "http://127.0.0.1:34780/v1/mcp/auth/callback"
+    # Optional: base URL of the dashboard, used to redirect the browser back
+    # after a dashboard-initiated MCP auth flow. The redirect target is
+    # <ARK_API_DASHBOARD_URL>/mcp, so this value MUST include any path prefix
+    # under which the dashboard is served (e.g. behind an X-Forwarded-Prefix).
+    # Same scheme rules as ARK_API_PUBLIC_CALLBACK_URL: https, unless the host
+    # is a loopback literal (127.0.0.1, [::1] bracketed, or localhost) which may
+    # use http. Required only for the dashboard redirect-completion path; the
+    # CLI flow is unaffected. When unset, dashboard flows fall back to the HTML
+    # completion page.
+    # The default is the local devspace dashboard host, which resolves to
+    # loopback (so http is permitted). Override with a public https ingress URL
+    # for real deployments.
+    - name: ARK_API_DASHBOARD_URL
+      value: "http://dashboard.default.127.0.0.1.nip.io:8080"
     # Optional tuning knobs (defaults shown). All accept positive integers.
     # - name: ARK_API_MCP_AUTH_CACHE_TTL_SECONDS
     #   value: "600"
@@ -162,6 +192,11 @@ impersonation:
   usernameClaim: email
   groupsClaim: groups
   prefix: ""
+
+# Restricts ark-api's configmap writes to the ones it owns - RBAC cannot.
+# Needs ValidatingAdmissionPolicy (Kubernetes 1.30+); skipped where absent.
+configMapPolicy:
+  enabled: true
 
 # Network policy configuration
 networkPolicy:

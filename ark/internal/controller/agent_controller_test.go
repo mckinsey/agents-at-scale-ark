@@ -16,6 +16,7 @@ import (
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 	eventnoop "mckinsey.com/ark/internal/eventing/noop"
+	"mckinsey.com/ark/internal/validation"
 )
 
 var _ = Describe("Agent Controller", func() {
@@ -152,6 +153,370 @@ var _ = Describe("Agent Controller", func() {
 			Expect(k8sClient.Delete(ctx, a2aAgent)).To(Succeed())
 		})
 
+		It("should mark agent unavailable when it has no model and uses the default executor", func() {
+			const modellessAgentName = "test-modelless-agent"
+			modellessAgentNamespacedName := types.NamespacedName{
+				Name:      modellessAgentName,
+				Namespace: "default",
+			}
+
+			By("creating an agent with no model, no execution engine, and no A2A annotation")
+			modellessAgent := &arkv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      modellessAgentName,
+					Namespace: "default",
+				},
+				Spec: arkv1alpha1.AgentSpec{
+					ModelRef: nil,
+					Prompt:   "test prompt for modelless agent",
+				},
+			}
+			Expect(k8sClient.Create(ctx, modellessAgent)).To(Succeed())
+			defer func() {
+				Expect(k8sClient.Delete(ctx, modellessAgent)).To(Succeed())
+			}()
+
+			controllerReconciler := &AgentReconciler{
+				Client:   k8sClient,
+				Scheme:   k8sClient.Scheme(),
+				Eventing: eventnoop.NewProvider(),
+			}
+
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: modellessAgentNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: modellessAgentNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying the agent is unavailable because no model is configured")
+			var reconciledAgent arkv1alpha1.Agent
+			Expect(k8sClient.Get(ctx, modellessAgentNamespacedName, &reconciledAgent)).To(Succeed())
+			Expect(reconciledAgent.Status.Conditions).To(HaveLen(1))
+			condition := reconciledAgent.Status.Conditions[0]
+			Expect(condition.Type).To(Equal("Available"))
+			Expect(condition.Status).To(Equal(metav1.ConditionFalse))
+			Expect(condition.Reason).To(Equal("ModelNotConfigured"))
+		})
+
+		It("should mark agent unavailable with ModelNotConfigured after webhook defaulting", func() {
+			const defaultedAgentName = "test-defaulted-modelless-agent"
+			defaultedAgentNamespacedName := types.NamespacedName{
+				Name:      defaultedAgentName,
+				Namespace: "default",
+			}
+
+			By("creating an agent with no model and running it through webhook defaulting")
+			defaultedAgent := &arkv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      defaultedAgentName,
+					Namespace: "default",
+				},
+				Spec: arkv1alpha1.AgentSpec{
+					Prompt: "test prompt for defaulted modelless agent",
+				},
+			}
+			validation.DefaultAgent(defaultedAgent)
+			Expect(defaultedAgent.Spec.ModelRef).NotTo(BeNil())
+			Expect(k8sClient.Create(ctx, defaultedAgent)).To(Succeed())
+			defer func() {
+				Expect(k8sClient.Delete(ctx, defaultedAgent)).To(Succeed())
+			}()
+
+			controllerReconciler := &AgentReconciler{
+				Client:   k8sClient,
+				Scheme:   k8sClient.Scheme(),
+				Eventing: eventnoop.NewProvider(),
+			}
+
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: defaultedAgentNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: defaultedAgentNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying the injected default is reported as a missing configuration, not a missing model")
+			var reconciledAgent arkv1alpha1.Agent
+			Expect(k8sClient.Get(ctx, defaultedAgentNamespacedName, &reconciledAgent)).To(Succeed())
+			Expect(reconciledAgent.Status.Conditions).To(HaveLen(1))
+			condition := reconciledAgent.Status.Conditions[0]
+			Expect(condition.Type).To(Equal("Available"))
+			Expect(condition.Status).To(Equal(metav1.ConditionFalse))
+			Expect(condition.Reason).To(Equal("ModelNotConfigured"))
+			Expect(condition.Message).To(ContainSubstring("Agent has no model configured"))
+
+			By("creating a 'default' model that has not become available")
+			defaultModel := newModel("default", "default")
+			Expect(k8sClient.Create(ctx, defaultModel)).To(Succeed())
+			defer func() {
+				Expect(k8sClient.Delete(ctx, defaultModel)).To(Succeed())
+			}()
+
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: defaultedAgentNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying the unavailable fallback is reported as ModelNotReady and still names the missing configuration")
+			Expect(k8sClient.Get(ctx, defaultedAgentNamespacedName, &reconciledAgent)).To(Succeed())
+			Expect(reconciledAgent.Status.Conditions).To(HaveLen(1))
+			condition = reconciledAgent.Status.Conditions[0]
+			Expect(condition.Status).To(Equal(metav1.ConditionFalse))
+			Expect(condition.Reason).To(Equal("ModelNotReady"))
+			Expect(condition.Message).To(Equal("Agent has no model configured; the 'default' model it falls back to is not available"))
+		})
+
+		It("should report ModelNotFound when an explicit default model is missing", func() {
+			const explicitAgentName = "test-explicit-default-model-agent"
+			explicitAgentNamespacedName := types.NamespacedName{
+				Name:      explicitAgentName,
+				Namespace: "default",
+			}
+
+			By("creating an agent that explicitly references a 'default' model that does not exist")
+			explicitAgent := &arkv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      explicitAgentName,
+					Namespace: "default",
+				},
+				Spec: arkv1alpha1.AgentSpec{
+					ModelRef: &arkv1alpha1.AgentModelRef{Name: "default"},
+					Prompt:   "test prompt for explicit default model agent",
+				},
+			}
+			validation.DefaultAgent(explicitAgent)
+			Expect(k8sClient.Create(ctx, explicitAgent)).To(Succeed())
+			defer func() {
+				Expect(k8sClient.Delete(ctx, explicitAgent)).To(Succeed())
+			}()
+
+			controllerReconciler := &AgentReconciler{
+				Client:   k8sClient,
+				Scheme:   k8sClient.Scheme(),
+				Eventing: eventnoop.NewProvider(),
+			}
+
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: explicitAgentNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: explicitAgentNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying a user-supplied model reference is still reported as ModelNotFound")
+			var reconciledAgent arkv1alpha1.Agent
+			Expect(k8sClient.Get(ctx, explicitAgentNamespacedName, &reconciledAgent)).To(Succeed())
+			Expect(reconciledAgent.Status.Conditions).To(HaveLen(1))
+			condition := reconciledAgent.Status.Conditions[0]
+			Expect(condition.Type).To(Equal("Available"))
+			Expect(condition.Status).To(Equal(metav1.ConditionFalse))
+			Expect(condition.Reason).To(Equal("ModelNotFound"))
+
+			By("creating the referenced model without it becoming available")
+			defaultModel := newModel("default", "default")
+			Expect(k8sClient.Create(ctx, defaultModel)).To(Succeed())
+			defer func() {
+				Expect(k8sClient.Delete(ctx, defaultModel)).To(Succeed())
+			}()
+
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: explicitAgentNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying a user-supplied model that is not ready is reported as ModelNotReady")
+			Expect(k8sClient.Get(ctx, explicitAgentNamespacedName, &reconciledAgent)).To(Succeed())
+			Expect(reconciledAgent.Status.Conditions).To(HaveLen(1))
+			condition = reconciledAgent.Status.Conditions[0]
+			Expect(condition.Status).To(Equal(metav1.ConditionFalse))
+			Expect(condition.Reason).To(Equal("ModelNotReady"))
+			Expect(condition.Message).To(Equal("Model 'default' is not available"))
+		})
+
+		It("should keep an A2A agent available when it has no model", func() {
+			const a2aModellessAgentName = "test-a2a-modelless-agent"
+			a2aModellessAgentNamespacedName := types.NamespacedName{
+				Name:      a2aModellessAgentName,
+				Namespace: "default",
+			}
+
+			By("creating an A2A agent with no model and no execution engine")
+			a2aModellessAgent := &arkv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      a2aModellessAgentName,
+					Namespace: "default",
+					Annotations: map[string]string{
+						"ark.mckinsey.com/a2a-server-name": "test-a2a-server",
+					},
+				},
+				Spec: arkv1alpha1.AgentSpec{
+					ModelRef: nil,
+					Prompt:   "test prompt for A2A modelless agent",
+				},
+			}
+			Expect(k8sClient.Create(ctx, a2aModellessAgent)).To(Succeed())
+			defer func() {
+				Expect(k8sClient.Delete(ctx, a2aModellessAgent)).To(Succeed())
+			}()
+
+			controllerReconciler := &AgentReconciler{
+				Client:   k8sClient,
+				Scheme:   k8sClient.Scheme(),
+				Eventing: eventnoop.NewProvider(),
+			}
+
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: a2aModellessAgentNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: a2aModellessAgentNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying the A2A agent is available despite having no model")
+			var reconciledAgent arkv1alpha1.Agent
+			Expect(k8sClient.Get(ctx, a2aModellessAgentNamespacedName, &reconciledAgent)).To(Succeed())
+			Expect(reconciledAgent.Status.Conditions).To(HaveLen(1))
+			condition := reconciledAgent.Status.Conditions[0]
+			Expect(condition.Type).To(Equal("Available"))
+			Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+			Expect(condition.Reason).NotTo(Equal("ModelNotConfigured"))
+		})
+
+		It("should keep an engine-backed agent available when its referenced model is missing", func() {
+			const engineAgentName = "test-engine-modelless-agent"
+			engineAgentNamespacedName := types.NamespacedName{
+				Name:      engineAgentName,
+				Namespace: "default",
+			}
+
+			By("creating an ExecutionEngine for the agent to delegate to")
+			engine := &arkv1prealpha1.ExecutionEngine{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-modelless-engine",
+					Namespace: "default",
+				},
+				Spec: arkv1prealpha1.ExecutionEngineSpec{
+					Address: arkv1prealpha1.ValueSource{Value: "http://test-modelless-engine:8080"},
+				},
+			}
+			Expect(k8sClient.Create(ctx, engine)).To(Succeed())
+			defer func() {
+				Expect(k8sClient.Delete(ctx, engine)).To(Succeed())
+			}()
+
+			By("creating an engine-backed agent whose modelRef points at a Model that does not exist")
+			engineAgent := &arkv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      engineAgentName,
+					Namespace: "default",
+				},
+				Spec: arkv1alpha1.AgentSpec{
+					ModelRef:        &arkv1alpha1.AgentModelRef{Name: "default"},
+					Prompt:          "test prompt for engine-backed agent",
+					ExecutionEngine: &arkv1alpha1.ExecutionEngineRef{Name: "test-modelless-engine"},
+				},
+			}
+			Expect(k8sClient.Create(ctx, engineAgent)).To(Succeed())
+			defer func() {
+				Expect(k8sClient.Delete(ctx, engineAgent)).To(Succeed())
+			}()
+
+			controllerReconciler := &AgentReconciler{
+				Client:   k8sClient,
+				Scheme:   k8sClient.Scheme(),
+				Eventing: eventnoop.NewProvider(),
+			}
+
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: engineAgentNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: engineAgentNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying the agent is not reported unavailable for a model it never uses")
+			var reconciledAgent arkv1alpha1.Agent
+			Expect(k8sClient.Get(ctx, engineAgentNamespacedName, &reconciledAgent)).To(Succeed())
+			Expect(reconciledAgent.Status.Conditions).To(HaveLen(1))
+			condition := reconciledAgent.Status.Conditions[0]
+			Expect(condition.Type).To(Equal("Available"))
+			Expect(condition.Reason).NotTo(Equal("ModelNotFound"))
+			Expect(condition.Reason).NotTo(Equal("ModelNotConfigured"))
+		})
+
+		It("should not default a modelRef for an engine-backed agent", func() {
+			const engineAgentName = "test-engine-defaulted-agent"
+			engineAgentNamespacedName := types.NamespacedName{
+				Name:      engineAgentName,
+				Namespace: "default",
+			}
+
+			By("creating an ExecutionEngine for the agent to delegate to")
+			engine := &arkv1prealpha1.ExecutionEngine{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-defaulted-engine",
+					Namespace: "default",
+				},
+				Spec: arkv1prealpha1.ExecutionEngineSpec{
+					Address: arkv1prealpha1.ValueSource{Value: "http://test-defaulted-engine:8080"},
+				},
+			}
+			Expect(k8sClient.Create(ctx, engine)).To(Succeed())
+			defer func() {
+				Expect(k8sClient.Delete(ctx, engine)).To(Succeed())
+			}()
+
+			By("creating an engine-backed agent with no model and running it through webhook defaulting")
+			engineAgent := &arkv1alpha1.Agent{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      engineAgentName,
+					Namespace: "default",
+				},
+				Spec: arkv1alpha1.AgentSpec{
+					Prompt:          "test prompt for engine-backed agent",
+					ExecutionEngine: &arkv1alpha1.ExecutionEngineRef{Name: "test-defaulted-engine"},
+				},
+			}
+			validation.DefaultAgent(engineAgent)
+			Expect(engineAgent.Spec.ModelRef).To(BeNil())
+			Expect(k8sClient.Create(ctx, engineAgent)).To(Succeed())
+			defer func() {
+				Expect(k8sClient.Delete(ctx, engineAgent)).To(Succeed())
+			}()
+
+			controllerReconciler := &AgentReconciler{
+				Client:   k8sClient,
+				Scheme:   k8sClient.Scheme(),
+				Eventing: eventnoop.NewProvider(),
+			}
+
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: engineAgentNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying the stored spec keeps a nil modelRef")
+			var reconciledAgent arkv1alpha1.Agent
+			Expect(k8sClient.Get(ctx, engineAgentNamespacedName, &reconciledAgent)).To(Succeed())
+			Expect(reconciledAgent.Spec.ModelRef).To(BeNil())
+		})
+
 		It("should handle agents with partial tool dependencies", func() {
 			const partialToolAgentName = "test-partial-tool-agent"
 			partialToolAgentTypeNamespacedName := types.NamespacedName{
@@ -227,6 +592,22 @@ var _ = Describe("Agent Controller", func() {
 				Namespace: "default",
 			}
 
+			By("seeding an available model so the tool check is the failing dependency")
+			const missingToolModelName = "tool-test-model"
+			missingToolModel := newModel(missingToolModelName, "default")
+			Expect(k8sClient.Create(ctx, missingToolModel)).To(Succeed())
+			missingToolModel.Status.Conditions = []metav1.Condition{{
+				Type:               ModelAvailable,
+				Status:             metav1.ConditionTrue,
+				Reason:             "Available",
+				Message:            "model is available",
+				LastTransitionTime: metav1.Now(),
+			}}
+			Expect(k8sClient.Status().Update(ctx, missingToolModel)).To(Succeed())
+			defer func() {
+				Expect(k8sClient.Delete(ctx, missingToolModel)).To(Succeed())
+			}()
+
 			By("creating an agent with partial tool referencing non-existent CRD")
 			missingToolAgent := &arkv1alpha1.Agent{
 				ObjectMeta: metav1.ObjectMeta{
@@ -234,7 +615,8 @@ var _ = Describe("Agent Controller", func() {
 					Namespace: "default",
 				},
 				Spec: arkv1alpha1.AgentSpec{
-					Prompt: "test prompt for missing tool agent",
+					ModelRef: &arkv1alpha1.AgentModelRef{Name: missingToolModelName},
+					Prompt:   "test prompt for missing tool agent",
 					Tools: []arkv1alpha1.AgentTool{
 						{
 							Type: "custom",
@@ -436,7 +818,7 @@ var _ = Describe("Agent Controller", func() {
 				},
 			}
 			Expect(k8sClient.Create(ctx, engine)).To(Succeed())
-			engine.Status.Phase = "error"
+			engine.Status.Phase = statusError
 			engine.Status.Message = "Failed to resolve address"
 			Expect(k8sClient.Status().Update(ctx, engine)).To(Succeed())
 			defer func() {
@@ -509,7 +891,7 @@ var _ = Describe("Agent Controller", func() {
 				},
 			}
 			Expect(k8sClient.Create(ctx, engine)).To(Succeed())
-			engine.Status.Phase = "ready"
+			engine.Status.Phase = statusReady
 			engine.Status.LastResolvedAddress = "http://localhost:9090"
 			Expect(k8sClient.Status().Update(ctx, engine)).To(Succeed())
 			defer func() {
@@ -599,3 +981,22 @@ var _ = Describe("Agent Controller", func() {
 		})
 	})
 })
+
+func newModel(name, namespace string) *arkv1alpha1.Model {
+	return &arkv1alpha1.Model{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Spec: arkv1alpha1.ModelSpec{
+			Model:    arkv1alpha1.ValueSource{Value: "gpt-4o"},
+			Provider: "openai",
+			Config: arkv1alpha1.ModelConfig{
+				OpenAI: &arkv1alpha1.OpenAIModelConfig{
+					BaseURL: arkv1alpha1.ValueSource{Value: "https://api.openai.com"},
+					APIKey:  arkv1alpha1.ValueSource{Value: "sk-test-key"},
+				},
+			},
+		},
+	}
+}

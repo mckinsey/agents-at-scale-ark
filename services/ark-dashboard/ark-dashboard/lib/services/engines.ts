@@ -3,11 +3,13 @@
 // and the generic resource API.
 
 import { apiClient } from '@/lib/api/client';
+import { accessReviewService } from '@/lib/services/access-review';
 
 interface ExecutionEngineK8sResource {
   metadata: {
     name: string;
     namespace: string;
+    annotations?: Record<string, string>;
   };
   spec: {
     description?: string;
@@ -28,6 +30,7 @@ export type ExecutionEnginePhase = 'ready' | 'running' | 'error';
 export interface ExecutionEngine {
   name: string;
   namespace: string;
+  annotations?: Record<string, string>;
   description?: string;
   phase: ExecutionEnginePhase;
   resolvedAddress?: string;
@@ -41,6 +44,7 @@ function toExecutionEngine(resource: ExecutionEngineK8sResource): ExecutionEngin
   return {
     name: resource.metadata.name,
     namespace: resource.metadata.namespace,
+    annotations: resource.metadata.annotations,
     description: resource.spec.description,
     phase: (resource.status.phase as ExecutionEnginePhase) || 'running',
     resolvedAddress: resource.status.lastResolvedAddress,
@@ -49,16 +53,22 @@ function toExecutionEngine(resource: ExecutionEngineK8sResource): ExecutionEngin
 }
 
 export const executionEnginesService = {
-  async getAll(): Promise<ExecutionEngine[]> {
-    const response =
-      await apiClient.get<ExecutionEngineK8sListResponse>(RESOURCE_PATH);
+  async getAll(namespace: string): Promise<ExecutionEngine[]> {
+    const response = await apiClient.get<ExecutionEngineK8sListResponse>(
+      RESOURCE_PATH,
+      { params: { namespace } },
+    );
     return response.items.map(toExecutionEngine);
   },
 
-  async getByName(name: string): Promise<ExecutionEngine | null> {
+  async getByName(
+    namespace: string,
+    name: string,
+  ): Promise<ExecutionEngine | null> {
     try {
       const response = await apiClient.get<ExecutionEngineK8sResource>(
         `${RESOURCE_PATH}/${name}`,
+        { params: { namespace } },
       );
       return toExecutionEngine(response);
     } catch {
@@ -66,12 +76,17 @@ export const executionEnginesService = {
     }
   },
 
-  async delete(name: string): Promise<boolean> {
-    try {
-      await apiClient.delete(`${RESOURCE_PATH}/${name}`);
-      return true;
-    } catch {
-      return false;
-    }
+  async delete(namespace: string, name: string): Promise<void> {
+    await apiClient.delete(`${RESOURCE_PATH}/${name}`, {
+      params: { namespace },
+    });
+  },
+
+  async canDelete(namespace: string): Promise<boolean> {
+    return accessReviewService.check(namespace, {
+      group: 'ark.mckinsey.com',
+      resource: 'executionengines',
+      verb: 'delete',
+    });
   },
 };

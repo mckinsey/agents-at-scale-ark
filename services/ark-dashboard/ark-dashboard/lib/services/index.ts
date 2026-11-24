@@ -1,12 +1,14 @@
 export {
   modelsService,
   type Model,
+  type ModelListItem,
   type ModelCreateRequest,
   type ModelUpdateRequest,
 } from './models';
 export {
   teamsService,
   type Team,
+  type TeamListItem,
   type TeamCreateRequest,
   type TeamUpdateRequest,
   type TeamMember,
@@ -14,14 +16,19 @@ export {
 export {
   agentsService,
   type Agent,
+  type AgentListItem,
   type Skill,
   type AgentTool,
+  type ToolApprovalConfig,
   type AgentCreateRequest,
   type AgentUpdateRequest,
+  type AgentHeader,
+  type AgentOverride,
 } from './agents';
 export {
   memoriesService,
   type Memory,
+  type MemoryListItem,
   type MemoryCreateRequest,
   type MemoryUpdateRequest,
 } from './memories';
@@ -36,11 +43,10 @@ export { toolsService, type Tool } from './tools';
 export { queriesService } from './queries';
 export { secretsService, type Secret } from './secrets';
 export {
-  arkServicesService,
-  type ArkService,
-  type HTTPRouteInfo,
-  type ArkServiceListResponse,
-} from './ark-services';
+  configurationsService,
+  type Configuration,
+  type ConfigurationReference,
+} from './configurations';
 export {
   chatService,
   type ChatMessage,

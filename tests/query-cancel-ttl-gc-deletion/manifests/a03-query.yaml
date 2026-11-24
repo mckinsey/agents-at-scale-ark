@@ -1,0 +1,10 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: cancel-ttl-gc-deletion-query
+spec:
+  input: Check the host by running "id".
+  target:
+    type: agent
+    name: cancel-gated-agent
+  ttl: "5s"

@@ -1,4 +1,5 @@
 export { SecretsSection } from './secrets-section';
+export { SecretsTable } from './secrets-table';
 export { ModelsSection } from './models-section';
 export { TeamsSection } from './teams-section';
 export { AgentsSection } from './agents-section';

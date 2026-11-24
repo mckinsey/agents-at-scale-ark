@@ -193,8 +193,11 @@ The `ark-tenant` Helm chart provisions namespaces for Ark workloads:
 helm install ark-tenant oci://ghcr.io/mckinsey/agents-at-scale-ark/charts/ark-tenant \
   -n tenant-1 \
   --create-namespace \
-  --set serviceAccount.name=ark-tenant
+  --set serviceAccount.name=ark-tenant \
+  --set memory.requireBroker=false
 ```
+
+The chart refuses a fresh install into a namespace with no `ark-broker` Service, because a tenant without a broker loses conversation history. This command provisions RBAC only, so it passes `memory.requireBroker=false` to skip that check. Drop the flag once you install `ark-broker` into the same namespace — see [Tenant and Namespace Management](/operations-guide/tenant-namespace-management).
 
 This creates:
 - The namespace (if it doesn't exist)

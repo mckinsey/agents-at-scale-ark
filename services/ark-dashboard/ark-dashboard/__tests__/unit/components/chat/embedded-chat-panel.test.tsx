@@ -7,7 +7,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { chatHistoryAtom } from '@/atoms/chat-history';
 import { lastConversationIdAtom } from '@/atoms/internal-states';
 import { EmbeddedChatPanel } from '@/components/chat/embedded-chat-panel';
+import { buildChatKey } from '@/lib/hooks/use-chat-session';
 import { chatService } from '@/lib/services/chat';
+
+vi.mock('@/providers/NamespaceProvider', () => ({
+  useNamespace: () => ({
+    namespace: 'default',
+    isNamespaceResolved: true,
+    isPending: false,
+    readOnlyMode: false,
+  }),
+}));
 
 vi.mock('@/lib/services/chat', () => ({
   chatService: {
@@ -136,7 +146,7 @@ describe('EmbeddedChatPanel', () => {
   it('should persist new sessionId to atom on new chat creation', async () => {
     renderEmbeddedChatPanel({ name: 'test-agent', type: 'agent' });
 
-    const newChatButton = screen.getByText(/New Chat/i);
+    const newChatButton = screen.getByRole('button', { name: /new chat/i });
     expect(newChatButton).toBeInTheDocument();
   });
 
@@ -181,7 +191,7 @@ describe('EmbeddedChatPanel', () => {
     global.fetch = fetchMock;
 
     store.set(chatHistoryAtom, {
-      'agent-test-agent': {
+      [buildChatKey('default', 'agent', 'test-agent')]: {
         messages: [
           { role: 'user', content: 'Hello' },
           { role: 'assistant', content: 'Hi there!' },
@@ -200,12 +210,16 @@ describe('EmbeddedChatPanel', () => {
     const chatTab = screen.getByRole('tab', { name: /Chat/i });
     await user.click(chatTab);
 
-    const newChatButton = await screen.findByText(/New Chat/i);
+    const newChatButton = await screen.findByRole('button', {
+      name: /new chat/i,
+    });
     expect(newChatButton).not.toBeDisabled();
 
     await user.click(newChatButton);
 
-    const messages = store.get(chatHistoryAtom)['agent-test-agent'].messages;
+    const messages =
+      store.get(chatHistoryAtom)[buildChatKey('default', 'agent', 'test-agent')]
+        .messages;
     expect(messages).toHaveLength(0);
 
     await user.click(debugTab);

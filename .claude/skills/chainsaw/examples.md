@@ -39,7 +39,8 @@ spec:
       # Install ark-tenant for RBAC
       - script:
           content: |
-            helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait
+            helm install ark-tenant ../../charts/ark-tenant --namespace $NAMESPACE --create-namespace --wait \
+              --set memory.requireBroker=false
           env:
           - name: NAMESPACE
             value: ($namespace)
@@ -154,9 +155,9 @@ spec:
   parameters:
     - name: your_name
       value: "QueryAgent123"
-  targets:
-    - type: agent
-      name: test-agent
+  target:
+    type: agent
+    name: test-agent
 ```
 
 ## Key Patterns

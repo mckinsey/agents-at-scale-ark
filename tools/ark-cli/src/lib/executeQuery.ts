@@ -5,11 +5,11 @@
 import {execa} from 'execa';
 import ora from 'ora';
 import chalk from 'chalk';
-import type {Query, QueryTarget} from './types.js';
+import type {Query, QueryTarget, QueryParameter} from './types.js';
 import {ExitCodes} from './errors.js';
 import {ArkApiProxy} from './arkApiProxy.js';
 import {ChatClient, ToolCall, ArkMetadata} from './chatClient.js';
-import {watchEventsLive} from './kubectl.js';
+import {watchQueryEvents} from './brokerEvents.js';
 import {loadConfig} from './config.js';
 
 export interface QueryOptions {
@@ -22,6 +22,7 @@ export interface QueryOptions {
   outputFormat?: string;
   sessionId?: string;
   conversationId?: string;
+  parameters?: QueryParameter[];
 }
 
 interface StreamState {
@@ -73,6 +74,7 @@ export async function executeQuery(options: QueryOptions): Promise<void> {
         sessionId,
         conversationId,
         queryTimeout: options.timeout,
+        parameters: options.parameters,
       },
       (chunk: string, toolCalls?: ToolCall[], arkMetadata?: ArkMetadata) => {
         if (firstOutput) {
@@ -173,11 +175,14 @@ async function executeQueryWithFormat(options: QueryOptions): Promise<void> {
         type: options.targetType,
         name: options.targetName,
       },
+      ...(options.parameters && options.parameters.length > 0
+        ? {parameters: options.parameters}
+        : {}),
     },
   };
 
   try {
-    await execa('kubectl', ['apply', '-f', '-'], {
+    const applied = await execa('kubectl', ['apply', '-f', '-', '-o', 'json'], {
       input: JSON.stringify(queryManifest),
       stdio: ['pipe', 'pipe', 'pipe'],
     });
@@ -185,8 +190,15 @@ async function executeQueryWithFormat(options: QueryOptions): Promise<void> {
     // Give Kubernetes a moment to process the resource before watching
     await new Promise((resolve) => setTimeout(resolve, 100));
 
-    if (options.outputFormat === 'events') {
-      await watchEventsLive(queryName);
+    if (
+      options.outputFormat === 'events' ||
+      options.outputFormat === 'events-pretty'
+    ) {
+      await watchQueryEvents({
+        queryName,
+        queryUid: appliedUid(applied?.stdout),
+        pretty: options.outputFormat === 'events-pretty',
+      });
       return;
     }
 
@@ -217,7 +229,7 @@ async function executeQueryWithFormat(options: QueryOptions): Promise<void> {
     } else {
       console.error(
         chalk.red(
-          `Invalid output format: ${options.outputFormat}. Use: yaml, json, name, or events`
+          `Invalid output format: ${options.outputFormat}. Use: yaml, json, name, events, or events-pretty`
         )
       );
       process.exit(ExitCodes.CliError);
@@ -243,4 +255,33 @@ export function parseTarget(target: string): QueryTarget | null {
     type: parts[0],
     name: parts[1],
   };
+}
+
+/** Parse repeated `name=value` flags into QueryParameters (mirrors the fark CLI). */
+export function parseParameters(parameters: string[]): QueryParameter[] {
+  return parameters.map((param) => {
+    const idx = param.indexOf('=');
+    if (idx === -1) {
+      throw new Error(`parameter must be in name=value format, got: ${param}`);
+    }
+    const name = param.slice(0, idx).trim();
+    const value = param.slice(idx + 1).trim();
+    if (name === '') {
+      throw new Error(`parameter name cannot be empty in: ${param}`);
+    }
+    return {name, value};
+  });
+}
+
+function appliedUid(stdout: unknown): string | undefined {
+  if (typeof stdout !== 'string' || !stdout) {
+    return undefined;
+  }
+  try {
+    const uid = (JSON.parse(stdout) as {metadata?: {uid?: unknown}}).metadata
+      ?.uid;
+    return typeof uid === 'string' && uid ? uid : undefined;
+  } catch {
+    return undefined;
+  }
 }

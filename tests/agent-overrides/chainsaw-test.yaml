@@ -170,6 +170,16 @@ spec:
             exit 1
           fi
 
+          # The mock echoes the whole last message, so the tool result the model was
+          # sent is visible here. Nothing else in the suite would notice if the
+          # untrusted-output fence silently stopped being applied in a cluster.
+          if echo "$RESPONSE" | grep -q "ark-untrusted-tool-output"; then
+            echo "✓ MCP tool result reached the model fenced as untrusted data"
+          else
+            echo "✗ MCP tool result reached the model unfenced"
+            exit 1
+          fi
+
           echo ""
           echo "✅ All agent MCP override headers verified via tool"
     catch:

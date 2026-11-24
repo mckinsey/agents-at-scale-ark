@@ -1,0 +1,12 @@
+# Point streaming at the fault proxy instead of the real broker, so the
+# executor's chunk-stream writes hit the injector while the completion POST is
+# forwarded through to the broker.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ark-config-streaming
+data:
+  enabled: "true"
+  serviceRef: |
+    name: fault-proxy
+    port: "http"

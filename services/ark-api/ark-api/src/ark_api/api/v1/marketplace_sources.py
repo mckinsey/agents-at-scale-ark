@@ -97,12 +97,19 @@ def parse_sources(data: dict[str, str]) -> list[MarketplaceSourceParsed]:
 def _parse_entry(name: str, raw: str) -> MarketplaceSourceParsed:
     value = json.loads(raw)
     auth = value.get("auth") or {}
+    secret_ref = auth.get("secretRef")
+    if secret_ref and secret_ref != derive_secret_name(name):
+        logger.info(
+            "ignoring credential reference for source %s: it is not the Secret Ark manages for it",
+            name,
+        )
+        secret_ref = None
     return MarketplaceSourceParsed(
         name=name,
         url=value["url"],
         displayName=value.get("displayName"),
         scheme=auth.get("scheme"),
-        secretRef=auth.get("secretRef"),
+        secretRef=secret_ref,
     )
 
 

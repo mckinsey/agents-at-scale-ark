@@ -33,16 +33,18 @@ spec:
     try:
     - apply:
         file: manifests/a00-rbac.yaml
-    - apply:
-        file: manifests/a00-memory.yaml
     - wait:
         apiVersion: ark.mckinsey.com/v1alpha1
         kind: Memory
         name: default
+        namespace: default
         timeout: 60s
         for:
           jsonPath:
             path: '{.status.lastResolvedAddress}'
+    - script:
+        content: |
+          kubectl annotate memory default -n default ark.mckinsey.com/allowed-namespaces='*' --overwrite
     - apply:
         file: manifests/a01-agent.yaml
     - apply:

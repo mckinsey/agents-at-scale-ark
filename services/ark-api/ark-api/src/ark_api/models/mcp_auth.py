@@ -24,6 +24,14 @@ class AuthStartRequest(BaseModel):
             "omit the field entirely to fall back to status.authorization.scopesSupported."
         ),
     )
+    redirect_on_complete: bool = Field(
+        default=False,
+        description=(
+            "When true (used by the dashboard), the callback redirects the browser "
+            "back to the dashboard instead of rendering the HTML completion page. "
+            "Defaults to false, preserving the CLI's HTML-completion behaviour."
+        ),
+    )
 
 
 class AuthStartResponse(BaseModel):

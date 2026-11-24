@@ -28,7 +28,10 @@ let mockSendMessage = vi.fn();
 
 const mockChatClient = vi.fn() as MockedClass<typeof ChatClient>;
 
-let mockArkApiProxyInstance: {start: ReturnType<typeof vi.fn>; stop: ReturnType<typeof vi.fn>} = {
+let mockArkApiProxyInstance: {
+  start: ReturnType<typeof vi.fn>;
+  stop: ReturnType<typeof vi.fn>;
+} = {
   start: vi.fn(),
   stop: vi.fn(),
 };
@@ -41,6 +44,11 @@ vi.mock('./arkApiProxy.js', () => ({
 
 vi.mock('./chatClient.js', () => ({
   ChatClient: mockChatClient,
+}));
+
+const mockWatchQueryEvents = vi.fn();
+vi.mock('./brokerEvents.js', () => ({
+  watchQueryEvents: mockWatchQueryEvents,
 }));
 
 const mockExit = vi.spyOn(process, 'exit').mockImplementation((() => {
@@ -56,7 +64,8 @@ const mockStdoutWrite = vi
   .spyOn(process.stdout, 'write')
   .mockImplementation(() => true);
 
-const {executeQuery, parseTarget} = await import('./executeQuery.js');
+const {executeQuery, parseTarget, parseParameters} =
+  await import('./executeQuery.js');
 const {ExitCodes} = await import('./errors.js');
 
 describe('executeQuery', () => {
@@ -100,6 +109,44 @@ describe('executeQuery', () => {
       expect(parseTarget('invalid')).toBeNull();
       expect(parseTarget('')).toBeNull();
       expect(parseTarget('model/default/extra')).toBeNull();
+    });
+  });
+
+  describe('parseParameters', () => {
+    it('returns an empty array for no parameters', () => {
+      expect(parseParameters([])).toEqual([]);
+    });
+
+    it('parses multiple pairs preserving order', () => {
+      expect(parseParameters(['a=1', 'b=2'])).toEqual([
+        {name: 'a', value: '1'},
+        {name: 'b', value: '2'},
+      ]);
+    });
+
+    it('splits only on the first = so values may contain =', () => {
+      expect(parseParameters(['token=ab=cd'])).toEqual([
+        {name: 'token', value: 'ab=cd'},
+      ]);
+    });
+
+    it('trims whitespace and allows an empty value', () => {
+      expect(parseParameters([' name = value '])).toEqual([
+        {name: 'name', value: 'value'},
+      ]);
+      expect(parseParameters(['empty='])).toEqual([{name: 'empty', value: ''}]);
+    });
+
+    it('throws when there is no =', () => {
+      expect(() => parseParameters(['bad'])).toThrow(
+        'parameter must be in name=value format, got: bad'
+      );
+    });
+
+    it('throws when the name is empty', () => {
+      expect(() => parseParameters(['=value'])).toThrow(
+        'parameter name cannot be empty in: =value'
+      );
     });
   });
 
@@ -333,7 +380,9 @@ describe('executeQuery', () => {
 
     it('should handle errors and exit with CliError', async () => {
       mockSpinner.isSpinning = true;
-      const startMock = vi.fn().mockRejectedValue(new Error('Connection failed'));
+      const startMock = vi
+        .fn()
+        .mockRejectedValue(new Error('Connection failed'));
       mockArkApiProxyInstance.start = startMock;
 
       await expect(
@@ -381,6 +430,106 @@ describe('executeQuery', () => {
   });
 
   describe('executeQuery with output format', () => {
+    it('routes the events format to the event watcher with the Query UID', async () => {
+      mockExeca.mockImplementation(async (_command: string, args: string[]) => {
+        if (args.includes('apply')) {
+          return {
+            stdout: JSON.stringify({metadata: {uid: 'uid-123'}}),
+            stderr: '',
+            exitCode: 0,
+          };
+        }
+        return {stdout: '', stderr: '', exitCode: 0};
+      });
+
+      await executeQuery({
+        targetType: 'model',
+        targetName: 'default',
+        message: 'Hello',
+        outputFormat: 'events',
+      });
+
+      expect(mockExeca).toHaveBeenCalledWith(
+        'kubectl',
+        ['apply', '-f', '-', '-o', 'json'],
+        expect.any(Object)
+      );
+      expect(mockWatchQueryEvents).toHaveBeenCalledTimes(1);
+      expect(mockWatchQueryEvents).toHaveBeenCalledWith({
+        queryName: expect.stringMatching(/cli-query-\d+/),
+        queryUid: 'uid-123',
+        pretty: false,
+      });
+    });
+
+    it('routes the events-pretty format to the event watcher with pretty enabled', async () => {
+      mockExeca.mockImplementation(async (_command: string, args: string[]) => {
+        if (args.includes('apply')) {
+          return {
+            stdout: JSON.stringify({metadata: {uid: 'uid-456'}}),
+            stderr: '',
+            exitCode: 0,
+          };
+        }
+        return {stdout: '', stderr: '', exitCode: 0};
+      });
+
+      await executeQuery({
+        targetType: 'model',
+        targetName: 'default',
+        message: 'Hello',
+        outputFormat: 'events-pretty',
+      });
+
+      expect(mockWatchQueryEvents).toHaveBeenCalledWith({
+        queryName: expect.stringMatching(/cli-query-\d+/),
+        queryUid: 'uid-456',
+        pretty: true,
+      });
+    });
+
+    it.each([
+      ['an empty uid', {metadata: {uid: ''}}],
+      ['no metadata', {kind: 'Query'}],
+      ['a non-string uid', {metadata: {uid: 42}}],
+    ])('passes no UID when apply output has %s', async (_label, applied) => {
+      mockExeca.mockResolvedValue({
+        stdout: JSON.stringify(applied),
+        stderr: '',
+        exitCode: 0,
+      });
+
+      await executeQuery({
+        targetType: 'model',
+        targetName: 'default',
+        message: 'Hello',
+        outputFormat: 'events-pretty',
+      });
+
+      expect(mockWatchQueryEvents).toHaveBeenCalledWith(
+        expect.objectContaining({queryUid: undefined, pretty: true})
+      );
+    });
+
+    it('passes no UID when apply output is not parseable', async () => {
+      mockExeca.mockResolvedValue({
+        stdout: 'not json',
+        stderr: '',
+        exitCode: 0,
+      });
+
+      await executeQuery({
+        targetType: 'model',
+        targetName: 'default',
+        message: 'Hello',
+        outputFormat: 'events',
+      });
+
+      expect(mockWatchQueryEvents).toHaveBeenCalledWith(
+        expect.objectContaining({queryUid: undefined})
+      );
+    });
+
     it('should create query and output name format', async () => {
       mockExeca.mockImplementation(async (command: string, args: string[]) => {
         if (args.includes('apply')) {

@@ -16,8 +16,12 @@ import {
 } from '../../lib/waitForReady.js';
 import {
   runReadinessChecks,
-  detectStorageBackend,
+  describeStorageBackend,
+  describeNamespaceMemory,
   type ReadinessCheckResult,
+  type BackendDetection,
+  type NamespaceMemoryCheck,
+  type NamespaceMemoryStatus,
 } from '../../lib/readinessChecks.js';
 import {arkServices} from '../../arkServices.js';
 import type {ArkService} from '../../types/arkService.js';
@@ -41,6 +45,7 @@ function enrichServiceDetails(service: ServiceStatus): {
     warning: {icon: '⚠', text: 'warning', color: 'yellow'},
     'not ready': {icon: '○', text: 'not ready', color: 'yellow'},
     'not installed': {icon: '?', text: 'not installed', color: 'yellow'},
+    'no access': {icon: '⊘', text: 'no access', color: 'yellow'},
   };
   const statusInfo = statusMap[service.status] || {
     icon: '?',
@@ -72,9 +77,57 @@ function enrichServiceDetails(service: ServiceStatus): {
   };
 }
 
+function backendStatusLine(detection: BackendDetection) {
+  const display: Record<
+    BackendDetection['status'],
+    {color: StatusColor; details: string}
+  > = {
+    etcd: {color: 'green', details: 'etcd'},
+    postgresql: {color: 'green', details: 'postgresql'},
+    'not-installed': {color: 'yellow', details: 'not installed'},
+    unreachable: {color: 'yellow', details: 'cluster unreachable'},
+    forbidden: {color: 'yellow', details: 'access denied'},
+    undetermined: {color: 'yellow', details: 'undetermined'},
+  };
+  const {color, details} = display[detection.status];
+  return {
+    icon: '●',
+    iconColor: color,
+    status: 'storage backend',
+    statusColor: color,
+    name: '',
+    details,
+  };
+}
+
+function namespaceMemoryStatusLine(check: NamespaceMemoryCheck) {
+  const display: Record<
+    NamespaceMemoryStatus,
+    {icon: string; color: StatusColor; details: string}
+  > = {
+    ready: {icon: '●', color: 'green', details: check.message},
+    unresolved: {icon: '✗', color: 'red', details: 'not resolving'},
+    missing: {icon: '✗', color: 'red', details: 'missing'},
+    'no-broker': {icon: '○', color: 'yellow', details: 'not configured'},
+    undetermined: {icon: '?', color: 'yellow', details: 'undetermined'},
+  };
+  const {icon, color, details} = display[check.status];
+  return {
+    icon,
+    iconColor: color,
+    status: 'default memory',
+    statusColor: color,
+    name: '',
+    details,
+    subtext: check.status === 'ready' ? undefined : check.message,
+  };
+}
+
 function buildStatusSections(
   data: StatusData & {clusterAccess?: boolean; clusterInfo?: any},
-  versionInfo?: ArkVersionInfo
+  versionInfo?: ArkVersionInfo,
+  backend?: BackendDetection,
+  namespaceMemory?: NamespaceMemoryCheck
 ): StatusSection[] {
   const sections: StatusSection[] = [];
 
@@ -280,6 +333,13 @@ function buildStatusSections(
       }
     }
   }
+  if (namespaceMemory) {
+    arkStatusLines.push(namespaceMemoryStatusLine(namespaceMemory));
+  }
+  if (backend) {
+    arkStatusLines.push(backendStatusLine(backend));
+  }
+
   sections.push({title: 'ark status:', lines: arkStatusLines});
 
   return sections;
@@ -305,14 +365,46 @@ export async function checkStatus(
       fetchVersionInfo(),
     ]);
 
+    // Only probe for the storage backend if the cluster is reachable; probing an
+    // unreachable cluster would just retry to its timeout. The memory check is
+    // scoped to the kubeconfig's current namespace: the invariant it reports on
+    // is per-namespace, and that is the namespace the user's queries land in.
+    // Both probes are independent, so they run together rather than in series.
+    const [detection, namespaceMemory] = await Promise.all([
+      statusData.clusterAccess
+        ? describeStorageBackend()
+        : Promise.resolve<BackendDetection>({
+            backend: 'unknown',
+            status: 'unreachable',
+            message:
+              'Cluster is not reachable — cannot determine the storage backend.',
+          }),
+      statusData.clusterAccess && statusData.arkReady
+        ? describeNamespaceMemory(
+            statusData.clusterInfo?.namespace || 'default'
+          )
+        : Promise.resolve(undefined),
+    ]);
+
     spinner.stop();
 
-    const sections = buildStatusSections(statusData, versionInfo);
+    const sections = buildStatusSections(
+      statusData,
+      versionInfo,
+      detection,
+      namespaceMemory
+    );
     StatusFormatter.printSections(sections);
 
     if (options?.waitForReady) {
       const timeoutSeconds = parseTimeoutToSeconds(options.waitForReady);
-      const backend = await detectStorageBackend();
+      const backend = detection.backend;
+
+      if (backend === 'unknown') {
+        output.warning(
+          `${detection.message} Skipping backend-specific readiness checks.`
+        );
+      }
 
       let servicesToWait: ArkService[] = [];
       if (serviceNames && serviceNames.length > 0) {
@@ -386,6 +478,7 @@ export async function checkStatus(
       const remainingSeconds = Math.max(1, timeoutSeconds - elapsedSeconds);
       const deepResults = await runReadinessChecks(
         remainingSeconds,
+        backend,
         (r: ReadinessCheckResult) => {
           const icon = r.passed ? chalk.green('✓') : chalk.red('✗');
           const dur = `${(r.durationMs / 1000).toFixed(1)}s`;

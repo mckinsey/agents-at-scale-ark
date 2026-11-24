@@ -5,9 +5,43 @@ from pages.agents_page import AgentsPage
 from pages.teams_page import TeamsPage
 from pages.sessions_page import SessionsPage
 from conftest import MOCK_LLM_MODEL_NAME
+from shared.ark import submit_query
+from shared.k8s import delete_resource, wait_for_phase
 
 
 logger = logging.getLogger(__name__)
+
+PHASE_DONE = "done"
+QUERY_SETTLE_TIMEOUT_S = 120
+
+
+def _seed_conversation(
+    resources: dict,
+    target: str,
+    user_input: str,
+    target_type: str = "agent",
+    session_id: str | None = None,
+    conversation_id: str | None = None,
+):
+    """Run one query against a target and wait for it to finish.
+
+    The Sessions view is read-only, so conversations are created through the
+    API and the dashboard is used only to read them back.
+    """
+    seeded = submit_query(
+        target,
+        user_input,
+        target_type=target_type,
+        session_id=session_id,
+        conversation_id=conversation_id,
+    )
+    resources["queries"].append(seeded.name)
+
+    finished, message = wait_for_phase(
+        "query", seeded.name, PHASE_DONE, timeout_s=QUERY_SETTLE_TIMEOUT_S
+    )
+    assert finished, f"seeded query {seeded.name} never finished: {message}"
+    return seeded
 
 
 @pytest.fixture(scope="class")
@@ -16,6 +50,7 @@ def sessions_test_resources():
         "agents": {},
         "teams": {},
         "sessions": {},
+        "queries": [],
     }
 
 
@@ -77,15 +112,15 @@ class TestSessionsAndConversations:
         if not agent_name:
             pytest.skip("Primary agent not created")
 
+        seeded = _seed_conversation(
+            sessions_test_resources, agent_name, "What is 2 + 2? Give a brief answer."
+        )
+        sessions_test_resources["sessions"]["agent"] = seeded.session_id
+
         sessions = SessionsPage(page)
-        sessions.navigate_to_session_history()
+        sessions.open_session(seeded.session_id)
 
-        session_id = sessions.create_new_session(agent_name, participant_tab="Agents")
-        assert session_id, "Session ID should be extracted from URL"
-        assert "/sessions/" in page.url, "Should be redirected to session detail page"
-        sessions_test_resources["sessions"]["agent"] = session_id
-
-        sessions.wait_for_session_detail_page()
+        assert "/sessions/" in page.url, "Should be on the session detail page"
         assert sessions.is_visible(sessions.HISTORY_TAB), "History tab should be visible"
         assert sessions.is_participant_shown_in_header(agent_name), \
             f"Agent '{agent_name}' should appear as participant in header"
@@ -95,25 +130,20 @@ class TestSessionsAndConversations:
         if not agent_name:
             pytest.skip("Primary agent not created")
 
-        sessions = SessionsPage(page)
-        sessions.navigate_to_session_history()
-
-        session_id = sessions.create_new_session(agent_name, participant_tab="Agents")
-        assert session_id, "Session should be created for conversation flow"
+        seeded = _seed_conversation(
+            sessions_test_resources, agent_name, "What is 2 + 2? Please give a brief answer."
+        )
+        session_id = seeded.session_id
         sessions_test_resources["sessions"]["agent"] = session_id
 
-        sessions.wait_for_session_detail_page()
+        sessions = SessionsPage(page)
+        sessions.open_session(session_id)
         sessions.click_conversations_tab()
 
-        assert sessions.is_visible(sessions.CHAT_TEXTAREA, timeout=10000), \
-            "Chat textarea should be visible"
-
-        initial_count = sessions.get_assistant_message_count()
-        sessions.send_message_in_conversation("What is 2 + 2? Please give a brief answer.")
-        assert sessions.get_user_message_count() == 1, "Exactly 1 user message should appear after sending"
-
-        assert sessions.wait_for_assistant_response(initial_count, timeout_s=120), \
-            "Agent should respond within timeout"
+        assert sessions.wait_for_assistant_response(0, timeout_s=120), \
+            "The agent's reply should be rendered in the transcript"
+        assert sessions.get_user_message_count() >= 1, \
+            "The question that started the conversation should be shown"
 
         assert sessions.wait_for_conversation_in_sidebar(agent_name, timeout_s=30), \
             f"Conversation with '{agent_name}' should appear in sidebar"
@@ -132,7 +162,7 @@ class TestSessionsAndConversations:
 
         sessions.navigate_to_session_detail(session_id)
         sessions.wait_for_session_detail_page()
-        conv_count = sessions.get_conversation_count_from_header()
+        conv_count = sessions.wait_for_conversation_count_in_header(min_count=1, timeout_s=30)
         assert conv_count >= 1, \
             f"Session {session_id} should show at least 1 conversation in the detail header, got {conv_count}"
         sessions.navigate_back_to_sessions()
@@ -146,15 +176,16 @@ class TestSessionsAndConversations:
         if not team_name:
             pytest.skip("Multi-agent team not created")
 
+        seeded = _seed_conversation(
+            sessions_test_resources,
+            team_name,
+            "Hello, what is the capital of France?",
+            target_type="team",
+        )
+
         sessions = SessionsPage(page)
-        sessions.navigate_to_session_history()
+        sessions.open_session(seeded.session_id)
 
-        session_id = sessions.create_new_session(team_name, participant_tab="Teams")
-        assert session_id, "Session ID should be extracted from URL"
-        assert "/sessions/" in page.url, "Should be redirected to team session detail page"
-        sessions_test_resources["sessions"]["team"] = session_id
-
-        sessions.wait_for_session_detail_page()
         assert sessions.is_participant_shown_in_header(team_name), \
             f"Team '{team_name}' should appear as participant in header"
         assert sessions.get_participants_count_from_header() >= 1, \
@@ -165,25 +196,20 @@ class TestSessionsAndConversations:
         if not team_name:
             pytest.skip("Multi-agent team not created")
 
+        seeded = _seed_conversation(
+            sessions_test_resources,
+            team_name,
+            "Hello, what is the capital of France?",
+            target_type="team",
+        )
+        session_id = seeded.session_id
+
         sessions = SessionsPage(page)
-        sessions.navigate_to_session_history()
-
-        session_id = sessions.create_new_session(team_name, participant_tab="Teams")
-        assert session_id, "Team session should be created for conversation flow"
-        sessions_test_resources["sessions"]["team"] = session_id
-
-        sessions.wait_for_session_detail_page()
+        sessions.open_session(session_id)
         sessions.click_conversations_tab()
 
-        assert sessions.is_visible(sessions.CHAT_TEXTAREA, timeout=10000), \
-            "Chat textarea should be visible for team conversation"
-
-        initial_count = sessions.get_assistant_message_count()
-        sessions.send_message_in_conversation("Hello, what is the capital of France?")
-        assert sessions.get_user_message_count() == 1, "Exactly 1 user message should appear after sending"
-
-        assert sessions.wait_for_assistant_response(initial_count, timeout_s=120), \
-            "Team should respond within timeout"
+        assert sessions.wait_for_assistant_response(0, timeout_s=120), \
+            "The team's reply should be rendered in the transcript"
 
         assert sessions.wait_for_conversation_in_sidebar(team_name, timeout_s=30), \
             f"Conversation with team '{team_name}' should appear in sidebar"
@@ -262,7 +288,7 @@ class TestSessionsAndConversations:
         sessions.navigate_to_session_detail(session_id)
         sessions.wait_for_session_detail_page()
 
-        conv_count = sessions.get_conversation_count_from_header()
+        conv_count = sessions.wait_for_conversation_count_in_header(min_count=1, timeout_s=30)
         assert conv_count >= 1, \
             f"Session detail header should show at least 1 conversation, got {conv_count}"
 
@@ -274,28 +300,6 @@ class TestSessionsAndConversations:
             f"Session detail header should show at least 1 participant, got {participant_count}"
 
     # -------------------------------------------------------------------------
-    # Dialog validation
-    # -------------------------------------------------------------------------
-
-    def test_create_session_dialog_cancel(self, page: Page, sessions_test_resources: dict):
-        sessions = SessionsPage(page)
-        sessions.navigate_to_session_history()
-
-        initial_url = page.url
-        sessions.open_new_session_dialog()
-        assert sessions.is_visible(sessions.SESSION_DIALOG), \
-            "New session dialog should be visible after clicking New session"
-
-        assert sessions.is_create_button_disabled(), \
-            "Create button should be disabled when no participant is selected"
-
-        sessions.cancel_session_dialog()
-        assert page.url == initial_url, \
-            "URL should not change after canceling session dialog"
-        assert not sessions.is_visible(sessions.SESSION_DIALOG, timeout=3000), \
-            "Dialog should close after clicking Cancel"
-
-    # -------------------------------------------------------------------------
     # Sort controls
     # -------------------------------------------------------------------------
 
@@ -303,21 +307,25 @@ class TestSessionsAndConversations:
         sessions = SessionsPage(page)
         sessions.navigate_to_session_history()
 
-        total = sessions.get_visible_session_count()
-        if total < 1:
-            pytest.skip("No sessions available for sort test")
+        # Other xdist workers run queries against the same namespace, and every
+        # query creates a session, so the number of rows can change at any moment.
+        # Assert the order the page renders instead: a row appearing mid-test slots
+        # into its sorted position rather than breaking the assertion.
+        sessions.click_sort_header("Name")
+        first = sessions.get_visible_session_names()
+        assert len(first) >= 2, \
+            f"sorting needs at least two sessions to be observable, saw {first}"
+        assert len(set(first)) == len(first), \
+            f"sorting is only observable when every name is distinct, but the rows read {first}"
+        assert first == sorted(first, reverse=True), \
+            f"the first click on Name should sort descending, but the rows read {first}"
 
         sessions.click_sort_header("Name")
-        assert sessions.get_visible_session_count() == total, \
-            "Sorting by Name should not change the number of visible sessions"
-
-        sessions.click_sort_header("Name")
-        assert sessions.get_visible_session_count() == total, \
-            "Reversing Name sort should not change the number of visible sessions"
-
-        sessions.click_sort_header("Convos")
-        assert sessions.get_visible_session_count() == total, \
-            "Sorting by Convos should not change the number of visible sessions"
+        second = sessions.get_visible_session_names()
+        assert len(set(second)) == len(second), \
+            f"sorting is only observable when every name is distinct, but the rows read {second}"
+        assert second == sorted(second), \
+            f"clicking Name again should sort ascending, but the rows read {second}"
 
     # -------------------------------------------------------------------------
     # Empty search results
@@ -350,30 +358,28 @@ class TestSessionsAndConversations:
         if not agent_name:
             pytest.skip("Primary agent not created")
 
-        sessions = SessionsPage(page)
-        sessions.navigate_to_session_history()
-
-        session_id = sessions.create_new_session(agent_name, participant_tab="Agents")
-        assert session_id, "Session should be created for multi-message test"
-
-        sessions.wait_for_session_detail_page()
-        sessions.click_conversations_tab()
-
-        assert sessions.is_visible(sessions.CHAT_TEXTAREA, timeout=10000), \
-            "Chat textarea should be visible"
-
         messages = [
             "What is 1 + 1? Give a very brief answer.",
             "What is 2 + 2? Give a very brief answer.",
             "What is 3 + 3? Give a very brief answer.",
         ]
 
-        for i, msg in enumerate(messages):
-            initial_count = sessions.get_assistant_message_count()
-            sessions.send_message_in_conversation(msg)
-            assert sessions.wait_for_assistant_response(initial_count, timeout_s=120), \
-                f"Agent should respond to message {i + 1} within timeout"
+        first = _seed_conversation(sessions_test_resources, agent_name, messages[0])
+        for message in messages[1:]:
+            _seed_conversation(
+                sessions_test_resources,
+                agent_name,
+                message,
+                session_id=first.session_id,
+                conversation_id=first.conversation_id,
+            )
 
+        sessions = SessionsPage(page)
+        sessions.open_session(first.session_id)
+        sessions.click_conversations_tab()
+
+        assert sessions.wait_for_assistant_response(len(messages) - 1, timeout_s=120), \
+            "Every turn of the conversation should be rendered"
         assert sessions.get_user_message_count() >= len(messages), \
             f"At least {len(messages)} user messages should be visible"
         assert sessions.get_assistant_message_count() >= len(messages), \
@@ -388,51 +394,31 @@ class TestSessionsAndConversations:
         if not agent_name:
             pytest.skip("Primary agent not created")
 
+        first = _seed_conversation(
+            sessions_test_resources, agent_name, "Hello, this is conversation 1."
+        )
+        _seed_conversation(
+            sessions_test_resources,
+            agent_name,
+            "Hello, this is conversation 2.",
+            session_id=first.session_id,
+        )
+
         sessions = SessionsPage(page)
-        sessions.navigate_to_session_history()
-
-        session_id = sessions.create_new_session(agent_name, participant_tab="Agents")
-        assert session_id, "Session should be created for multi-conversation test"
-
-        sessions.wait_for_session_detail_page()
+        sessions.open_session(first.session_id)
         sessions.click_conversations_tab()
 
-        assert sessions.is_visible(sessions.CHAT_TEXTAREA, timeout=10000), \
-            "Chat textarea should be visible for first conversation"
-
-        initial_count = sessions.get_assistant_message_count()
-        sessions.send_message_in_conversation("Hello, this is conversation 1.")
-        assert sessions.wait_for_assistant_response(initial_count, timeout_s=120), \
-            "Agent should respond in first conversation"
-
-        first_conv_sidebar_count = sessions.get_sidebar_conversation_count()
-        assert first_conv_sidebar_count >= 1, \
-            "At least one conversation should appear in sidebar after first message"
-
-        sessions.click_new_conversation_button()
-        assert sessions.is_visible(sessions.NEW_CONVERSATION_DIALOG, timeout=5000), \
-            "New conversation dialog should open"
-
-        sessions.select_participant_in_dialog(agent_name, participant_tab="Agents")
-        sessions.confirm_new_conversation()
-        sessions.page.wait_for_timeout(1000)
-        sessions.wait_for_navigation_complete()
-
-        second_textarea = sessions.page.locator(sessions.CHAT_TEXTAREA).first
-        if second_textarea.is_visible(timeout=5000):
-            initial_count2 = sessions.get_assistant_message_count()
-            sessions.send_message_in_conversation("Hello, this is conversation 2.")
-            sessions.wait_for_assistant_response(initial_count2, timeout_s=120)
-
-        final_sidebar_count = sessions.get_sidebar_conversation_count()
-        assert final_sidebar_count >= first_conv_sidebar_count, \
-            "Sidebar should have at least as many conversations after starting a second one"
+        assert sessions.get_sidebar_conversation_count() >= 2, \
+            "Both conversations of the session should be listed in the sidebar"
 
     # -------------------------------------------------------------------------
     # Cleanup
     # -------------------------------------------------------------------------
 
     def test_cleanup_sessions_resources(self, page: Page, sessions_test_resources: dict):
+        for query_name in sessions_test_resources["queries"]:
+            delete_resource("query", query_name)
+
         teams = TeamsPage(page)
         teams.navigate_to_teams_tab()
         team_name = sessions_test_resources["teams"].get("multi_agent")

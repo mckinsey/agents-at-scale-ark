@@ -58,6 +58,9 @@ export interface paths {
          * @description Verifies that the ARK API service is ready to handle requests by testing
          *     connectivity to the Kubernetes API.
          *
+         *     Returns HTTP 200 when ready and HTTP 503 when the Kubernetes API is
+         *     unreachable, so a Kubernetes readiness probe can gate traffic correctly.
+         *
          *     Returns: ReadinessResponse: Readiness status with Kubernetes connectivity check
          */
         get: operations["readiness_check_ready_get"];
@@ -78,13 +81,14 @@ export interface paths {
         };
         /**
          * List A2A Servers
-         * @description List all A2AServer CRs in a namespace.
+         * @description List a page of A2AServer CRs in a namespace.
          *
          *     Args:
          *         namespace: The namespace to list A2A servers from
+         *         pagination: limit and continue token for server-side pagination
          *
          *     Returns:
-         *         A2AServerListResponse: List of all A2A servers in the namespace
+         *         A2AServerListResponse: One page of A2A servers plus the continuation token
          */
         get: operations["list_a2a_servers_v1_a2a_servers_get"];
         put?: never;
@@ -139,13 +143,14 @@ export interface paths {
         };
         /**
          * List A2A Tasks
-         * @description List all A2ATask CRs in a namespace.
+         * @description List a page of A2ATask CRs in a namespace.
          *
          *     Args:
          *         namespace: The namespace to list A2A tasks from
+         *         pagination: limit and continue token for server-side pagination
          *
          *     Returns:
-         *         A2ATaskListResponse: List of all A2A tasks in the namespace
+         *         A2ATaskListResponse: One page of A2A tasks plus the continuation token
          */
         get: operations["list_a2a_tasks_v1_a2a_tasks_get"];
         put?: never;
@@ -191,6 +196,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/a2a-tasks/{task_name}/approval": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit A2A Task Approval
+         * @description Submit an approval decision for a HITL A2ATask.
+         *
+         *     The task must be in the 'input-required' phase. The decision is written to
+         *     spec.input as JSON ({"decision": "approved"|"rejected"}); the A2ATask
+         *     controller picks it up and transitions the task to completed or failed.
+         */
+        post: operations["submit_a2a_task_approval_v1_a2a_tasks__task_name__approval_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/agents": {
         parameters: {
             query?: never;
@@ -200,13 +229,15 @@ export interface paths {
         };
         /**
          * List Agents
-         * @description List all Agent CRs in a namespace.
+         * @description List a page of Agent CRs in a namespace.
          *
          *     Args:
          *         namespace: The namespace to list agents from (defaults to current context)
+         *         view: response detail level; 'summary' omits heavy fields for list rendering
+         *         pagination: limit and continue token for server-side pagination
          *
          *     Returns:
-         *         AgentListResponse: List of all agents in the namespace
+         *         AgentListResponse: One page of agents plus the continuation token
          */
         get: operations["list_agents_v1_agents_get"];
         put?: never;
@@ -361,7 +392,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/ark-services/marketplace-items": {
+    "/v1/ark-services/helm-releases": {
         parameters: {
             query?: never;
             header?: never;
@@ -369,11 +400,11 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List Marketplace Items
-         * @description List Helm releases for marketplace item detection.
+         * List Helm Releases
+         * @description List deployed, failed and pending Helm releases in a namespace.
          *
-         *     Returns full Helm release data including chart metadata and annotations
-         *     for marketplace item detection via ark.mckinsey.com/marketplace-item-name.
+         *     Returns full Helm release data including chart metadata and annotations,
+         *     without filtering by Ark service annotation or looking up HTTPRoutes.
          *
          *     Args:
          *         namespace: The namespace to list Helm releases from (defaults to current context)
@@ -382,8 +413,9 @@ export interface paths {
          *         HelmReleaseListResponse containing:
          *         - items: List of Helm releases with chart metadata
          *         - count: Number of releases found
+         *         - errors: Releases whose details could not be read
          */
-        get: operations["list_marketplace_items_v1_ark_services_marketplace_items_get"];
+        get: operations["list_helm_releases_v1_ark_services_helm_releases_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -433,7 +465,9 @@ export interface paths {
         get: operations["get_arkconfig_v1_arkconfig_get"];
         /**
          * Upsert Arkconfig
-         * @description Create or update the singleton ArkConfig with the supplied defaults.
+         * @description Create or update the singleton ArkConfig with the fields the request carried.
+         *
+         *     Fields the request omitted are left untouched; send a field as null to clear it.
          */
         put: operations["upsert_arkconfig_v1_arkconfig_put"];
         post?: never;
@@ -461,11 +495,7 @@ export interface paths {
         get: operations["get_chunks_v1_broker_chunks_get"];
         put?: never;
         post?: never;
-        /**
-         * Purge Chunks
-         * @description Purge all chunks from the broker.
-         */
-        delete: operations["purge_chunks_v1_broker_chunks_delete"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -485,11 +515,7 @@ export interface paths {
         get: operations["get_events_v1_broker_events_get"];
         put?: never;
         post?: never;
-        /**
-         * Purge Events
-         * @description Purge all events from the broker.
-         */
-        delete: operations["purge_events_v1_broker_events_delete"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -529,11 +555,7 @@ export interface paths {
         get: operations["get_messages_v1_broker_messages_get"];
         put?: never;
         post?: never;
-        /**
-         * Purge Messages
-         * @description Purge all messages from the broker.
-         */
-        delete: operations["purge_messages_v1_broker_messages_delete"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -553,11 +575,7 @@ export interface paths {
         get: operations["get_sessions_v1_broker_sessions_get"];
         put?: never;
         post?: never;
-        /**
-         * Purge Sessions
-         * @description Purge all sessions from the broker.
-         */
-        delete: operations["purge_sessions_v1_broker_sessions_delete"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -597,11 +615,7 @@ export interface paths {
         get: operations["get_traces_v1_broker_traces_get"];
         put?: never;
         post?: never;
-        /**
-         * Purge Traces
-         * @description Purge all traces from the broker.
-         */
-        delete: operations["purge_traces_v1_broker_traces_delete"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -627,6 +641,78 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/configurations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Configurations
+         * @description List all configurations in namespace using ark-sdk.
+         */
+        get: operations["list_configurations_v1_configurations_get"];
+        put?: never;
+        /**
+         * Create Configuration
+         * @description Create a new configuration using ark-sdk.
+         */
+        post: operations["create_configuration_v1_configurations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/configurations/{configuration_name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Configuration
+         * @description Get a specific configuration using ark-sdk.
+         */
+        get: operations["get_configuration_v1_configurations__configuration_name__get"];
+        /**
+         * Update Configuration
+         * @description Update a configuration using ark-sdk.
+         */
+        put: operations["update_configuration_v1_configurations__configuration_name__put"];
+        post?: never;
+        /**
+         * Delete Configuration
+         * @description Delete a configuration using ark-sdk.
+         */
+        delete: operations["delete_configuration_v1_configurations__configuration_name__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/configurations/{configuration_name}/references": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Configuration References
+         * @description List the Ark resources that read this configuration.
+         */
+        get: operations["list_configuration_references_v1_configurations__configuration_name__references_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/context": {
         parameters: {
             query?: never;
@@ -644,7 +730,7 @@ export interface paths {
          *     3. Fallback to default
          *
          *     Args:
-         *         namespace: Optional namespace to check for demo mode
+         *         namespace: Optional namespace to resolve/validate
          *
          *     Returns:
          *         ContextResponse: The current namespace, cluster, and read-only mode status
@@ -875,13 +961,14 @@ export interface paths {
         };
         /**
          * List Mcp Servers
-         * @description List all MCPServer CRs in a namespace.
+         * @description List a page of MCPServer CRs in a namespace.
          *
          *     Args:
          *         namespace: The namespace to list MCP servers from
+         *         pagination: limit and continue token for server-side pagination
          *
          *     Returns:
-         *         MCPServerListResponse: List of all MCP servers in the namespace
+         *         MCPServerListResponse: One page of MCP servers plus the continuation token
          */
         get: operations["list_mcp_servers_v1_mcp_servers_get"];
         put?: never;
@@ -1015,7 +1102,7 @@ export interface paths {
         };
         /**
          * List Memories
-         * @description List all memories in a namespace.
+         * @description List a page of memories in a namespace.
          */
         get: operations["list_memories_v1_memories_get"];
         put?: never;
@@ -1107,13 +1194,15 @@ export interface paths {
         };
         /**
          * List Models
-         * @description List all Model CRs in a namespace.
+         * @description List a page of Model CRs in a namespace.
          *
          *     Args:
          *         namespace: The namespace to list models from
+         *         view: response detail level; 'with-secrets' adds referenced secret names
+         *         pagination: limit and continue token for server-side pagination
          *
          *     Returns:
-         *         ModelListResponse: List of all models in the namespace
+         *         ModelListResponse: One page of models plus the continuation token
          */
         get: operations["list_models_v1_models_get"];
         put?: never;
@@ -1511,6 +1600,43 @@ export interface paths {
         patch: operations["cancel_query_v1_queries__query_name__cancel_patch"];
         trace?: never;
     };
+    "/v1/resources/access-review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Access Review
+         * @description Check whether the caller may perform a verb on a resource via SelfSubjectAccessReview.
+         *
+         *     Runs under the impersonated identity, so the result reflects the user's RBAC.
+         *     When impersonation is disabled it runs as the service account.
+         *
+         *     A write the generic resource routes would refuse for this caller, because it
+         *     has to run as the signed-in user and cannot, returns allowed false with the
+         *     reason, without asking Kubernetes.
+         *
+         *     Args:
+         *         body: group, resource, and verb to review
+         *         namespace: The namespace (defaults to current context)
+         *
+         *     Returns:
+         *         AccessReviewResponse: {"allowed": <bool>}
+         *
+         *     Examples:
+         *         - POST /v1/resources/access-review
+         */
+        post: operations["create_access_review_v1_resources_access_review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/resources/api/v1/namespaces/{namespace}/pods/{pod_name}/log": {
         parameters: {
             query?: never;
@@ -1520,7 +1646,9 @@ export interface paths {
         };
         /**
          * Get Pod Logs
-         * @description Get logs from a pod.
+         * @description Get logs from a pod that belongs to an Argo workflow.
+         *
+         *     Pods without the workflows.argoproj.io/workflow label return 404.
          *
          *     Args:
          *         pod_name: Name of the pod
@@ -1545,6 +1673,37 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/resources/api/v1/namespaces/{namespace}/pods/{pod_name}/log/window": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Pod Log Window
+         * @description Get a bounded window of a pod's logs.
+         *
+         *     Only pods that belong to an Argo workflow are served; any other pod
+         *     returns 404.
+         *
+         *     Pages are anchored at the end of the log. Omit skip_tail_lines for the
+         *     tail, raise it by the returned line_count to walk backwards, or pass
+         *     since_timestamp to fetch only lines newer than an earlier page.
+         *
+         *     Examples:
+         *         - GET /v1/resources/api/v1/namespaces/default/pods/my-pod/log/window
+         *         - GET /v1/resources/api/v1/namespaces/default/pods/my-pod/log/window?skip_tail_lines=1000
+         */
+        get: operations["get_pod_log_window_v1_resources_api_v1_namespaces__namespace__pods__pod_name__log_window_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/resources/api/{version}/{kind}": {
         parameters: {
             query?: never;
@@ -1558,89 +1717,179 @@ export interface paths {
          *
          *     Args:
          *         version: API version (e.g., 'v1')
-         *         kind: Kubernetes Kind (e.g., 'Pod', 'Service', 'ConfigMap')
+         *         kind: Kubernetes Kind (e.g., 'Service')
          *         namespace: The namespace (defaults to current context)
          *         label_selector: Label selector for filtering resources (e.g., 'app.kubernetes.io/instance=phoenix')
+         *
+         *     Only (group, version, Kind, verb) tuples on the generic resources allowlist
+         *     are served; everything else returns 403.
          *
          *     Returns:
          *         Response: List of raw Kubernetes resources as JSON
          *
          *     Examples:
-         *         - GET /v1/resources/api/v1/Pod
          *         - GET /v1/resources/api/v1/Service
          *         - GET /v1/resources/api/v1/Service?labelSelector=app.kubernetes.io/instance=phoenix
          */
         get: operations["list_core_resources_v1_resources_api__version___kind__get"];
         put?: never;
-        /**
-         * Create Core Resource
-         * @description Create a core Kubernetes resource.
-         *
-         *     Args:
-         *         version: API version (e.g., 'v1')
-         *         kind: Kubernetes Kind (e.g., 'Pod', 'Service', 'ConfigMap')
-         *         body: The resource definition as JSON
-         *         namespace: The namespace (defaults to current context)
-         *
-         *     Returns:
-         *         Response: The created Kubernetes resource as JSON
-         *
-         *     Examples:
-         *         - POST /v1/resources/api/v1/Pod
-         *         - POST /v1/resources/api/v1/Service
-         */
-        post: operations["create_core_resource_v1_resources_api__version___kind__post"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/v1/resources/api/{version}/{kind}/{resource_name}": {
+    "/v1/resources/apis/argoproj.io/v1alpha1/namespaces/{namespace}/workflows/{workflow_name}/resubmit": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
+        get?: never;
         /**
-         * Get Core Resource
-         * @description Get a core Kubernetes resource by name.
+         * Resubmit Workflow
+         * @description Resubmit a workflow: create a fresh workflow from the existing spec.
          *
-         *     Args:
-         *         version: API version (e.g., 'v1')
-         *         kind: Kubernetes Kind (e.g., 'Pod', 'Service', 'ConfigMap')
-         *         resource_name: The name of the resource
-         *         namespace: The namespace (defaults to current context)
-         *
-         *     Returns:
-         *         Response: The raw Kubernetes resource as JSON
+         *     The new workflow gets a fresh name, an empty status, and a
+         *     workflows.argoproj.io/resubmitted-from-workflow label pointing at the source.
          *
          *     Examples:
-         *         - GET /v1/resources/api/v1/Pod/my-pod
-         *         - GET /v1/resources/api/v1/Service/my-service
+         *         - PUT /v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/my-workflow/resubmit
          */
-        get: operations["get_core_resource_v1_resources_api__version___kind___resource_name__get"];
-        put?: never;
+        put: operations["resubmit_workflow_v1_resources_apis_argoproj_io_v1alpha1_namespaces__namespace__workflows__workflow_name__resubmit_put"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/resources/apis/argoproj.io/v1alpha1/namespaces/{namespace}/workflows/{workflow_name}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
         /**
-         * Delete Core Resource
-         * @description Delete a core Kubernetes resource by name.
+         * Resume Workflow
+         * @description Resume a suspended workflow.
          *
-         *     Args:
-         *         version: API version (e.g., 'v1')
-         *         kind: Kubernetes Kind (e.g., 'Pod', 'Service', 'ConfigMap')
-         *         resource_name: The name of the resource
-         *         namespace: The namespace (defaults to current context)
-         *
-         *     Returns:
-         *         Response: HTTP 204 No Content on success
+         *     Clears spec.suspend and marks active suspend-node gates Succeeded.
          *
          *     Examples:
-         *         - DELETE /v1/resources/api/v1/Pod/my-pod
-         *         - DELETE /v1/resources/api/v1/Service/my-service
+         *         - PUT /v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/my-workflow/resume
          */
-        delete: operations["delete_core_resource_v1_resources_api__version___kind___resource_name__delete"];
+        put: operations["resume_workflow_v1_resources_apis_argoproj_io_v1alpha1_namespaces__namespace__workflows__workflow_name__resume_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/resources/apis/argoproj.io/v1alpha1/namespaces/{namespace}/workflows/{workflow_name}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Retry Workflow
+         * @description Retry a Failed or Error workflow from the point of failure.
+         *
+         *     Successful nodes keep their outputs; failed leaf nodes and their pods are
+         *     dropped, failed group nodes are reset, and the workflow flips back to
+         *     Running with the same name.
+         *
+         *     Examples:
+         *         - PUT /v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/my-workflow/retry
+         */
+        put: operations["retry_workflow_v1_resources_apis_argoproj_io_v1alpha1_namespaces__namespace__workflows__workflow_name__retry_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/resources/apis/argoproj.io/v1alpha1/namespaces/{namespace}/workflows/{workflow_name}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Stop Workflow
+         * @description Stop a workflow: kill running pods, mark it Failed, but still run onExit handlers.
+         *
+         *     Sets spec.shutdown=Stop and clears spec.suspend, since the controller does
+         *     not process a shutdown while the workflow is suspended.
+         *
+         *     Examples:
+         *         - PUT /v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/my-workflow/stop
+         */
+        put: operations["stop_workflow_v1_resources_apis_argoproj_io_v1alpha1_namespaces__namespace__workflows__workflow_name__stop_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/resources/apis/argoproj.io/v1alpha1/namespaces/{namespace}/workflows/{workflow_name}/suspend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Suspend Workflow
+         * @description Suspend a running workflow. No new nodes are scheduled; running pods finish.
+         *
+         *     Sets spec.suspend=true. The workflow stays Running.
+         *
+         *     Examples:
+         *         - PUT /v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/my-workflow/suspend
+         */
+        put: operations["suspend_workflow_v1_resources_apis_argoproj_io_v1alpha1_namespaces__namespace__workflows__workflow_name__suspend_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/resources/apis/argoproj.io/v1alpha1/namespaces/{namespace}/workflows/{workflow_name}/terminate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Terminate Workflow
+         * @description Terminate a workflow: kill running pods and mark it Failed, skipping onExit handlers.
+         *
+         *     Sets spec.shutdown=Terminate and clears spec.suspend, since the controller
+         *     does not process a shutdown while the workflow is suspended.
+         *
+         *     Examples:
+         *         - PUT /v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/my-workflow/terminate
+         */
+        put: operations["terminate_workflow_v1_resources_apis_argoproj_io_v1alpha1_namespaces__namespace__workflows__workflow_name__terminate_put"];
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1655,12 +1904,12 @@ export interface paths {
         };
         /**
          * Get Workflow Logs
-         * @description Get logs for a workflow node by fetching directly from the pod.
-         *     The node_id corresponds to the pod name in most cases.
+         * @description Get logs for a workflow node from the pod that runs it.
+         *     The node is resolved only among the pods labelled with this workflow's name.
          *
          *     Args:
          *         workflow_name: Name of the workflow
-         *         node_id: Node ID within the workflow (typically the pod name)
+         *         node_id: Node ID within the workflow
          *         namespace: Namespace of the workflow
          *         container: Container name (defaults to 'main')
          *         tail_lines: Number of lines to tail from the end
@@ -1680,6 +1929,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/resources/apis/argoproj.io/v1alpha1/namespaces/{namespace}/workflows/{workflow_name}/{node_id}/log/window": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Workflow Log Window
+         * @description Get a bounded window of an Argo workflow node's logs.
+         *
+         *     Resolves the node to a pod labelled with this workflow's name, then pages
+         *     exactly like the pod log window endpoint. Returns 404 with guidance when
+         *     the pod is already gone.
+         *
+         *     Examples:
+         *         - GET /v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/my-workflow/my-node-id/log/window
+         */
+        get: operations["get_workflow_log_window_v1_resources_apis_argoproj_io_v1alpha1_namespaces__namespace__workflows__workflow_name___node_id__log_window_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/resources/apis/{group}/{version}/{kind}": {
         parameters: {
             query?: never;
@@ -1689,27 +1965,55 @@ export interface paths {
         };
         /**
          * List Grouped Resources
-         * @description List grouped Kubernetes resources with optional filtering.
+         * @description List grouped Kubernetes resources with optional filtering and cursor pagination.
          *
          *     Args:
-         *         group: API group (e.g., 'apps', 'batch', 'ark.mckinsey.com')
-         *         version: API version (e.g., 'v1', 'v1alpha1')
-         *         kind: Kubernetes Kind (e.g., 'Deployment', 'Job', 'WorkflowTemplate')
+         *         group: API group (e.g., 'argoproj.io', 'ark.mckinsey.com')
+         *         version: API version (e.g., 'v1alpha1', 'v1prealpha1')
+         *         kind: Kubernetes Kind (e.g., 'WorkflowTemplate', 'ExecutionEngine')
          *         namespace: The namespace (defaults to current context)
          *         label_selector: Label selector for filtering resources (e.g., 'app.kubernetes.io/instance=phoenix')
-         *         workflowName: Filter by workflow name (partial match, case insensitive)
-         *         workflowTemplateName: Filter by workflow template name (partial match, case insensitive)
-         *         status: Filter by workflow status
+         *         workflowName: Filter by workflow name (partial match, case insensitive). Applied by
+         *             Argo Server across the whole collection when it serves the list; otherwise applied
+         *             only to the page returned by this call, so a page can come back with few or no
+         *             matches even though more exist further in the cursor sequence.
+         *         workflowTemplateName: Filter by workflow template name (exact match). Applied
+         *             server-side via a label selector, so pagination stays correct across pages.
+         *         status: Filter by workflow status. Same server-side label selector as
+         *             workflowTemplateName.
+         *         limit: Maximum number of items returned by the underlying Kubernetes list call.
+         *             Omit for the full, unpaginated list (used by non-paginated callers).
+         *         continue_token: Opaque cursor from a previous page's response metadata
+         *
+         *     Only (group, version, Kind, verb) tuples on the generic resources allowlist
+         *     are served; everything else returns 403.
          *
          *     Returns:
-         *         Response: List of raw Kubernetes resources as JSON
+         *         Response: List of raw Kubernetes resources as JSON. When the Kubernetes API has more
+         *             items beyond this page, the response's metadata carries a "continue" token
+         *             (pass it back as ?continue=... for the next page) and "remainingItemCount".
+         *
+         *     Workflows are listed through Argo Server when ARGO_SERVER_URL is set, sorted by start
+         *     time newest first, after a Kubernetes RBAC check for listing workflows in the namespace.
+         *     The continue token is then an item offset. The Kubernetes API is used when the variable
+         *     is unset, when the continue token is a Kubernetes one, or when Argo Server fails.
+         *
+         *     Note:
+         *         This is Kubernetes' cursor-based pagination, not traditional offset pagination:
+         *         there is no "jump to page N" and no reliable total page count. Pages are walked
+         *         forward only, one continue token at a time.
+         *
+         *         Continue-token round trip:
+         *             1. GET .../Workflow?limit=25
+         *                -> response.metadata.continue = "eyJ2IjoxLCJ..."
+         *             2. GET .../Workflow?limit=25&continue=eyJ2IjoxLCJ...
+         *                -> next 25 items, with a new (or absent) "continue" token
          *
          *     Examples:
-         *         - GET /v1/resources/apis/apps/v1/Deployment
-         *         - GET /v1/resources/apis/batch/v1/Job
          *         - GET /v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate
          *         - GET /v1/resources/apis/argoproj.io/v1alpha1/Workflow?workflowName=my-workflow&status=running
-         *         - GET /v1/resources/v1/Service?labelSelector=app.kubernetes.io/instance=phoenix
+         *         - GET /v1/resources/apis/argoproj.io/v1alpha1/Workflow?limit=25
+         *         - GET /v1/resources/apis/ark.mckinsey.com/v1prealpha1/ExecutionEngine
          */
         get: operations["list_grouped_resources_v1_resources_apis__group___version___kind__get"];
         put?: never;
@@ -1718,19 +2022,25 @@ export interface paths {
          * @description Create a grouped Kubernetes resource.
          *
          *     Args:
-         *         group: API group (e.g., 'apps', 'batch', 'argoproj.io')
-         *         version: API version (e.g., 'v1', 'v1alpha1')
-         *         kind: Kubernetes Kind (e.g., 'Deployment', 'Job', 'Workflow')
+         *         group: API group (e.g., 'argoproj.io')
+         *         version: API version (e.g., 'v1alpha1')
+         *         kind: Kubernetes Kind (e.g., 'Workflow', 'WorkflowTemplate')
          *         body: The resource definition as JSON
          *         namespace: The namespace (defaults to current context)
+         *
+         *     Only (group, version, Kind, verb) tuples on the generic resources allowlist
+         *     are served; everything else returns 403.
+         *
+         *     With authentication enabled, a signed-in user's write runs as that user and
+         *     needs impersonation; it is never retried as the service account. API key
+         *     and open-mode requests run as the service account.
          *
          *     Returns:
          *         Response: The created Kubernetes resource as JSON
          *
          *     Examples:
-         *         - POST /v1/resources/apis/apps/v1/Deployment
-         *         - POST /v1/resources/apis/batch/v1/Job
          *         - POST /v1/resources/apis/argoproj.io/v1alpha1/Workflow
+         *         - POST /v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate
          */
         post: operations["create_grouped_resource_v1_resources_apis__group___version___kind__post"];
         delete?: never;
@@ -1751,41 +2061,79 @@ export interface paths {
          * @description Get a grouped Kubernetes resource by name.
          *
          *     Args:
-         *         group: API group (e.g., 'apps', 'batch', 'ark.mckinsey.com')
-         *         version: API version (e.g., 'v1', 'v1alpha1')
-         *         kind: Kubernetes Kind (e.g., 'Deployment', 'Job', 'WorkflowTemplate')
+         *         group: API group (e.g., 'argoproj.io', 'ark.mckinsey.com')
+         *         version: API version (e.g., 'v1alpha1')
+         *         kind: Kubernetes Kind (e.g., 'WorkflowTemplate', 'Agent')
          *         resource_name: The name of the resource
          *         namespace: The namespace (defaults to current context)
+         *
+         *     Only (group, version, Kind, verb) tuples on the generic resources allowlist
+         *     are served; everything else returns 403.
          *
          *     Returns:
          *         Response: The raw Kubernetes resource as JSON
          *
          *     Examples:
-         *         - GET /v1/resources/apis/apps/v1/Deployment/my-deployment
-         *         - GET /v1/resources/apis/batch/v1/Job/my-job
          *         - GET /v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/sparkly-bear
+         *         - GET /v1/resources/apis/ark.mckinsey.com/v1alpha1/Agent/my-agent
          */
         get: operations["get_grouped_resource_v1_resources_apis__group___version___kind___resource_name__get"];
-        put?: never;
+        /**
+         * Update Grouped Resource
+         * @description Update (replace) a grouped Kubernetes resource by name.
+         *
+         *     Honours a caller-supplied resourceVersion for optimistic concurrency; only
+         *     when the caller omits it do we inject the live object's resourceVersion so
+         *     the replace succeeds (last-write-wins convenience). The URL path name is
+         *     authoritative for the target resource.
+         *
+         *     Args:
+         *         group: API group (e.g., 'argoproj.io')
+         *         version: API version (e.g., 'v1alpha1')
+         *         kind: Kubernetes Kind (e.g., 'WorkflowTemplate')
+         *         resource_name: The name of the resource
+         *         body: The resource definition as JSON
+         *         namespace: The namespace (defaults to current context)
+         *
+         *     Only (group, version, Kind, verb) tuples on the generic resources allowlist
+         *     are served; everything else returns 403.
+         *
+         *     With authentication enabled, a signed-in user's write runs as that user and
+         *     needs impersonation; it is never retried as the service account. API key
+         *     and open-mode requests run as the service account.
+         *
+         *     Returns:
+         *         Response: The updated Kubernetes resource as JSON
+         *
+         *     Examples:
+         *         - PUT /v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/sparkly-bear
+         */
+        put: operations["update_grouped_resource_v1_resources_apis__group___version___kind___resource_name__put"];
         post?: never;
         /**
          * Delete Grouped Resource
          * @description Delete a grouped Kubernetes resource by name.
          *
          *     Args:
-         *         group: API group (e.g., 'apps', 'batch', 'ark.mckinsey.com')
-         *         version: API version (e.g., 'v1', 'v1alpha1')
-         *         kind: Kubernetes Kind (e.g., 'Deployment', 'Job', 'WorkflowTemplate')
+         *         group: API group (e.g., 'argoproj.io', 'ark.mckinsey.com')
+         *         version: API version (e.g., 'v1alpha1', 'v1prealpha1')
+         *         kind: Kubernetes Kind (e.g., 'WorkflowTemplate', 'ExecutionEngine')
          *         resource_name: The name of the resource
          *         namespace: The namespace (defaults to current context)
+         *
+         *     Only (group, version, Kind, verb) tuples on the generic resources allowlist
+         *     are served; everything else returns 403.
+         *
+         *     With authentication enabled, a signed-in user's write runs as that user and
+         *     needs impersonation; it is never retried as the service account. API key
+         *     and open-mode requests run as the service account.
          *
          *     Returns:
          *         Response: HTTP 204 No Content on success
          *
          *     Examples:
-         *         - DELETE /v1/resources/apis/apps/v1/Deployment/my-deployment
-         *         - DELETE /v1/resources/apis/batch/v1/Job/my-job
          *         - DELETE /v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/sparkly-bear
+         *         - DELETE /v1/resources/apis/ark.mckinsey.com/v1prealpha1/ExecutionEngine/my-engine
          */
         delete: operations["delete_grouped_resource_v1_resources_apis__group___version___kind___resource_name__delete"];
         options?: never;
@@ -1802,13 +2150,13 @@ export interface paths {
         };
         /**
          * List Secrets
-         * @description List all secrets in namespace using ark-sdk.
+         * @description List the shared and/or personal secrets in namespace using ark-sdk.
          */
         get: operations["list_secrets_v1_secrets_get"];
         put?: never;
         /**
          * Create Secret
-         * @description Create a new secret using ark-sdk.
+         * @description Create a new shared or personal secret using ark-sdk.
          */
         post: operations["create_secret_v1_secrets_post"];
         delete?: never;
@@ -1831,7 +2179,7 @@ export interface paths {
         get: operations["get_secret_v1_secrets__secret_name__get"];
         /**
          * Update Secret
-         * @description Update a secret using ark-sdk.
+         * @description Update a secret using ark-sdk; scope "shared" promotes a personal secret.
          */
         put: operations["update_secret_v1_secrets__secret_name__put"];
         post?: never;
@@ -1871,13 +2219,14 @@ export interface paths {
         };
         /**
          * List Teams
-         * @description List all Team CRs in a namespace.
+         * @description List a page of Team CRs in a namespace.
          *
          *     Args:
          *         namespace: The namespace to list teams from
+         *         pagination: limit and continue token for server-side pagination
          *
          *     Returns:
-         *         TeamListResponse: List of all teams in the namespace
+         *         TeamListResponse: One page of teams plus the continuation token
          */
         get: operations["list_teams_v1_teams_get"];
         put?: never;
@@ -1960,13 +2309,14 @@ export interface paths {
         };
         /**
          * List Tools
-         * @description List all Tool CRs in a namespace.
+         * @description List a page of Tool CRs in a namespace.
          *
          *     Args:
          *         namespace: The namespace to list tools from
+         *         pagination: limit and continue token for server-side pagination
          *
          *     Returns:
-         *         ToolListResponse: List of all tools in the namespace
+         *         ToolListResponse: One page of tools plus the continuation token
          */
         get: operations["list_tools_v1_tools_get"];
         put?: never;
@@ -2043,10 +2393,14 @@ export interface components {
         };
         /** A2AServerListResponse */
         A2AServerListResponse: {
+            /** Continue Token */
+            continue_token?: string | null;
+            /** Count */
+            count: number;
             /** Items */
             items: components["schemas"]["A2AServerResponse"][];
-            /** Total */
-            total: number;
+            /** Remaining Item Count */
+            remaining_item_count?: number | null;
         };
         /**
          * A2AServerRef
@@ -2066,6 +2420,8 @@ export interface components {
             annotations?: {
                 [key: string]: string;
             } | null;
+            /** Card Version */
+            card_version?: string | null;
             /** Description */
             description?: string | null;
             /** Discovering */
@@ -2078,10 +2434,16 @@ export interface components {
             name: string;
             /** Namespace */
             namespace: string;
+            /** Negotiated Protocol */
+            negotiated_protocol?: string | null;
             /** Ready */
             ready?: boolean | null;
+            /** Skill Count */
+            skill_count?: number | null;
             /** Status Message */
             status_message?: string | null;
+            /** Streaming Supported */
+            streaming_supported?: boolean | null;
         };
         /**
          * A2ATaskArtifact
@@ -2106,7 +2468,7 @@ export interface components {
          * @description Detailed A2ATask response model.
          */
         A2ATaskDetailResponse: {
-            a2aServerRef: components["schemas"]["A2AServerRef"];
+            a2aServerRef?: components["schemas"]["A2AServerRef"] | null;
             agentRef: components["schemas"]["AgentRef"];
             /** Contextid */
             contextId?: string | null;
@@ -2142,10 +2504,14 @@ export interface components {
          * @description List of A2ATasks response model.
          */
         A2ATaskListResponse: {
+            /** Continue Token */
+            continue_token?: string | null;
             /** Count */
             count: number;
             /** Items */
             items: components["schemas"]["A2ATaskResponse"][];
+            /** Remaining Item Count */
+            remaining_item_count?: number | null;
         };
         /**
          * A2ATaskMessage
@@ -2368,6 +2734,34 @@ export interface components {
             public_key: string;
         };
         /**
+         * AccessReviewRequest
+         * @description Request body for a generic SelfSubjectAccessReview.
+         */
+        AccessReviewRequest: {
+            /**
+             * Group
+             * @default
+             */
+            group: string;
+            /** Resource */
+            resource: string;
+            /** Verb */
+            verb: string;
+        };
+        /**
+         * AccessReviewResponse
+         * @description Result of a SelfSubjectAccessReview.
+         */
+        AccessReviewResponse: {
+            /** Allowed */
+            allowed: boolean;
+            /**
+             * Reason
+             * @description Set when ark-api refuses the operation for this caller before asking Kubernetes
+             */
+            reason?: string | null;
+        };
+        /**
          * AgentConfigMapKeyRef
          * @description Reference to a key in a ConfigMap.
          */
@@ -2484,10 +2878,14 @@ export interface components {
          * @description List of agents response model.
          */
         AgentListResponse: {
+            /** Continue Token */
+            continue_token?: string | null;
             /** Count */
             count: number;
             /** Items */
             items: components["schemas"]["AgentResponse"][];
+            /** Remaining Item Count */
+            remaining_item_count?: number | null;
         };
         /**
          * AgentOverride
@@ -2549,6 +2947,8 @@ export interface components {
             namespace: string;
             /** Prompt */
             prompt?: string | null;
+            /** Tool Names */
+            tool_names?: string[] | null;
         };
         /**
          * AgentSecretKeyRef
@@ -2581,6 +2981,7 @@ export interface components {
          * @description Tool configuration for an agent.
          */
         AgentTool: {
+            approval?: components["schemas"]["ToolApprovalConfig"] | null;
             labelSelector?: components["schemas"]["AgentLabelSelector"] | null;
             /** Name */
             name?: string | null;
@@ -2592,6 +2993,13 @@ export interface components {
          * @description Request model for updating an agent.
          */
         AgentUpdateRequest: {
+            /**
+             * Annotations
+             * @description Merged into the existing annotations; a null value removes the key. Only the openai-responses output-schema annotation is accepted.
+             */
+            annotations?: {
+                [key: string]: string | null;
+            } | null;
             /** Description */
             description?: string | null;
             executionEngine?: components["schemas"]["ExecutionEngineRef"] | null;
@@ -2616,6 +3024,12 @@ export interface components {
             serviceRef?: components["schemas"]["AgentServiceRef"] | null;
         };
         /**
+         * AgentView
+         * @description Detail level for agent list responses.
+         * @enum {string}
+         */
+        AgentView: "full" | "summary" | "with-tools";
+        /**
          * AnthropicConfig
          * @description Anthropic model configuration.
          */
@@ -2630,10 +3044,63 @@ export interface components {
             version?: string | components["schemas"]["ModelValueSource"] | null;
         };
         /**
+         * ApprovalDecision
+         * @description Approval decision for a HITL tool call.
+         * @enum {string}
+         */
+        ApprovalDecision: "approved" | "rejected";
+        /**
+         * ApprovalSubmissionRequest
+         * @description Request body to approve or reject an A2ATask's pending tool calls.
+         */
+        ApprovalSubmissionRequest: {
+            decision: components["schemas"]["ApprovalDecision"];
+        };
+        /**
+         * ApprovalSubmissionResponse
+         * @description Response after submitting an approval decision.
+         */
+        ApprovalSubmissionResponse: {
+            decision: components["schemas"]["ApprovalDecision"];
+            /** Name */
+            name: string;
+            /** Namespace */
+            namespace: string;
+            /** Taskid */
+            taskId: string;
+        };
+        /**
+         * ArgumentMatch
+         * @description Narrows approval to tool calls whose arguments match a pattern.
+         */
+        ArgumentMatch: {
+            /** Argument */
+            argument: string;
+            /** Pattern */
+            pattern: string;
+        };
+        /**
+         * ArkConfigMemoryRef
+         * @description Name of the Memory used as the cluster-wide default for queries.
+         *
+         *     Extra keys are rejected rather than dropped: a `namespace` here would be
+         *     silently ignored, while the same value applied with kubectl is refused by
+         *     the validating webhook.
+         */
+        ArkConfigMemoryRef: {
+            /**
+             * Name
+             * @description Memory name. Always resolved in the namespace of the query being defaulted; a namespace cannot be set here.
+             */
+            name: string;
+        };
+        /**
          * ArkConfigResponse
          * @description Cluster-wide Ark defaults. Singleton resource named 'default'.
          */
         ArkConfigResponse: {
+            /** @description Memory injected into Query resources that do not specify spec.memory, and only when a Memory with that name exists in the query namespace. */
+            defaultMemory?: components["schemas"]["ArkConfigMemoryRef"] | null;
             /**
              * Exists
              * @description Whether the ArkConfig singleton exists in the cluster.
@@ -2649,8 +3116,14 @@ export interface components {
         /**
          * ArkConfigUpdateRequest
          * @description Update payload for the ArkConfig singleton.
+         *
+         *     Only the fields present in the request body are touched, so a client that
+         *     manages one default cannot wipe another set elsewhere. Send a field as
+         *     null to clear it.
          */
         ArkConfigUpdateRequest: {
+            /** @description Default Memory for queries. Pass null to clear. */
+            defaultMemory?: components["schemas"]["ArkConfigMemoryRef"] | null;
             /**
              * Queryttl
              * @description Default TTL for queries (e.g. '720h'). Pass null to clear.
@@ -2744,6 +3217,12 @@ export interface components {
              * @description Bypass the Authorized preflight and force fresh DCR even when the Secret carries cached client credentials
              */
             force?: boolean | null;
+            /**
+             * Redirect On Complete
+             * @description When true (used by the dashboard), the callback redirects the browser back to the dashboard instead of rendering the HTML completion page. Defaults to false, preserving the CLI's HTML-completion behaviour.
+             * @default false
+             */
+            redirect_on_complete: boolean;
             /**
              * Scopes
              * @description Explicit scopes to request. An empty array opts out of scope negotiation; omit the field entirely to fall back to status.authorization.scopesSupported.
@@ -2843,6 +3322,10 @@ export interface components {
         BedrockConfig: {
             /** Accesskeyid */
             accessKeyId?: string | components["schemas"]["ModelValueSource"] | null;
+            /** Apikey */
+            apiKey?: string | components["schemas"]["ModelValueSource"] | null;
+            /** Baseurl */
+            baseUrl?: string | components["schemas"]["ModelValueSource"] | null;
             /** Maxtokens */
             maxTokens?: number | null;
             /** Modelarn */
@@ -2895,6 +3378,7 @@ export interface components {
          */
         ChatCompletionContentPartImageParam: {
             image_url: components["schemas"]["ImageURL"];
+            prompt_cache_breakpoint?: components["schemas"]["PromptCacheBreakpoint"];
             /**
              * Type
              * @constant
@@ -2907,6 +3391,7 @@ export interface components {
          */
         ChatCompletionContentPartInputAudioParam: {
             input_audio: components["schemas"]["InputAudio"];
+            prompt_cache_breakpoint?: components["schemas"]["PromptCacheBreakpoint"];
             /**
              * Type
              * @constant
@@ -2928,6 +3413,7 @@ export interface components {
          * @description Learn about [text inputs](https://platform.openai.com/docs/guides/text-generation).
          */
         ChatCompletionContentPartTextParam: {
+            prompt_cache_breakpoint?: components["schemas"]["PromptCacheBreakpoint"];
             /** Text */
             text: string;
             /**
@@ -3037,6 +3523,95 @@ export interface components {
              * @constant
              */
             role: "user";
+        };
+        /**
+         * ConfigurationCreateRequest
+         * @description Request model for creating a configuration.
+         */
+        ConfigurationCreateRequest: {
+            /** Alias */
+            alias?: string | null;
+            /** Description */
+            description?: string | null;
+            /**
+             * Labels
+             * @default []
+             */
+            labels: string[];
+            /** Name */
+            name: string;
+            /** Value */
+            value: string;
+        };
+        /**
+         * ConfigurationListResponse
+         * @description List of configurations response model.
+         */
+        ConfigurationListResponse: {
+            /** Count */
+            count: number;
+            /** Items */
+            items: components["schemas"]["ConfigurationResponse"][];
+        };
+        /**
+         * ConfigurationReference
+         * @description A resource that reads a configuration.
+         */
+        ConfigurationReference: {
+            /** Field */
+            field: string;
+            /** Kind */
+            kind: string;
+            /** Name */
+            name: string;
+        };
+        /**
+         * ConfigurationReferenceListResponse
+         * @description Resources that read a configuration.
+         */
+        ConfigurationReferenceListResponse: {
+            /** Count */
+            count: number;
+            /** Items */
+            items: components["schemas"]["ConfigurationReference"][];
+        };
+        /**
+         * ConfigurationResponse
+         * @description Configuration response model.
+         */
+        ConfigurationResponse: {
+            /** Alias */
+            alias?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Id */
+            id: string;
+            /**
+             * Labels
+             * @default []
+             */
+            labels: string[];
+            /** Name */
+            name: string;
+            /** Value */
+            value?: string | null;
+        };
+        /**
+         * ConfigurationUpdateRequest
+         * @description Request model for updating a configuration.
+         */
+        ConfigurationUpdateRequest: {
+            /** Alias */
+            alias?: string | null;
+            /** Description */
+            description?: string | null;
+            /**
+             * Labels
+             * @default []
+             */
+            labels: string[];
+            /** Value */
+            value: string;
         };
         /** ContextResponse */
         ContextResponse: {
@@ -3194,6 +3769,7 @@ export interface components {
          */
         File: {
             file: components["schemas"]["FileFile"];
+            prompt_cache_breakpoint?: components["schemas"]["FilePromptCacheBreakpoint"];
             /**
              * Type
              * @constant
@@ -3217,6 +3793,19 @@ export interface components {
             filename: string;
             /** Mimetype */
             mimeType?: string | null;
+        };
+        /**
+         * FilePromptCacheBreakpoint
+         * @description Marks the exact end of a reusable prompt prefix.
+         *
+         *     The breakpoint inherits its TTL from the request's `prompt_cache_options.ttl`; the boundary is not rounded to a token block.
+         */
+        FilePromptCacheBreakpoint: {
+            /**
+             * Mode
+             * @constant
+             */
+            mode: "explicit";
         };
         /**
          * Function
@@ -3297,10 +3886,10 @@ export interface components {
         };
         /**
          * HelmRelease
-         * @description Helm release information for marketplace item detection.
+         * @description Helm release information.
          *
-         *     Represents a Helm release with chart metadata including annotations
-         *     used for marketplace item identification.
+         *     Represents a Helm release with chart metadata including annotations,
+         *     which the marketplace uses for installed item detection.
          */
         HelmRelease: {
             /** App Version */
@@ -3322,12 +3911,27 @@ export interface components {
             updated: string;
         };
         /**
+         * HelmReleaseError
+         * @description A Helm release whose details could not be read.
+         */
+        HelmReleaseError: {
+            /** Message */
+            message: string;
+            /** Name */
+            name: string;
+        };
+        /**
          * HelmReleaseListResponse
          * @description Response model for listing Helm releases.
          */
         HelmReleaseListResponse: {
             /** Count */
             count: number;
+            /**
+             * Errors
+             * @default []
+             */
+            errors: components["schemas"]["HelmReleaseError"][];
             /** Items */
             items: components["schemas"]["HelmRelease"][];
         };
@@ -3357,6 +3961,71 @@ export interface components {
          * @enum {string}
          */
         InputType: "user" | "messages";
+        /**
+         * LogWindow
+         * @description A bounded slice of a pod log.
+         *
+         *     Pages are anchored at the end of the log: ``skip_tail_lines`` counts lines
+         *     backwards from the last line, and the window covers the ``max_lines``
+         *     immediately older than that point. ``has_more_before`` is a best-effort
+         *     hint that older lines exist, and is ``False`` once a page comes back short.
+         */
+        LogWindow: {
+            /**
+             * Byte Count
+             * @default 0
+             */
+            byte_count: number;
+            /** Content */
+            content: string;
+            /** First Timestamp */
+            first_timestamp?: string | null;
+            /**
+             * Has More Before
+             * @default false
+             */
+            has_more_before: boolean;
+            /** Last Timestamp */
+            last_timestamp?: string | null;
+            /** Line Count */
+            line_count: number;
+            /**
+             * Truncated
+             * @default false
+             */
+            truncated: boolean;
+        };
+        /**
+         * MCPServerAddressSource
+         * @description Read model for spec.address: reports both fields as stored.
+         *
+         *     MCPServerValueSource is the write model and its serializer collapses to
+         *     whichever of value/valueFrom is set, which would hide the origin here.
+         */
+        MCPServerAddressSource: {
+            /** Value */
+            value?: string | null;
+            valueFrom?: components["schemas"]["MCPServerValueFrom"] | null;
+        };
+        /**
+         * MCPServerAuthorization
+         * @description Authorization state of an MCPServer, for rendering state and expiry.
+         *
+         *     Sourced from status.authorization. Never carries token or Secret material.
+         */
+        MCPServerAuthorization: {
+            /** Expiresat */
+            expiresAt?: string | null;
+            /**
+             * Machinemanaged
+             * @default false
+             */
+            machineManaged: boolean;
+            /** Resourcename */
+            resourceName?: string | null;
+            /** State */
+            state: string;
+        };
         /** MCPServerConfigMapKeyRef */
         MCPServerConfigMapKeyRef: {
             /** Key */
@@ -3386,10 +4055,12 @@ export interface components {
         MCPServerDetailResponse: {
             /** Address */
             address?: string | null;
+            address_source?: components["schemas"]["MCPServerAddressSource"] | null;
             /** Annotations */
             annotations?: {
                 [key: string]: string;
             } | null;
+            authorization?: components["schemas"]["MCPServerAuthorization"] | null;
             available?: components["schemas"]["AvailabilityStatus"] | null;
             /** Description */
             description?: string | null;
@@ -3422,10 +4093,14 @@ export interface components {
         };
         /** MCPServerListResponse */
         MCPServerListResponse: {
+            /** Continue Token */
+            continue_token?: string | null;
+            /** Count */
+            count: number;
             /** Items */
             items: components["schemas"]["MCPServerResponse"][];
-            /** Total */
-            total: number;
+            /** Remaining Item Count */
+            remaining_item_count?: number | null;
         };
         /** MCPServerQueryParameterRef */
         MCPServerQueryParameterRef: {
@@ -3440,7 +4115,12 @@ export interface components {
             annotations?: {
                 [key: string]: string;
             } | null;
+            authorization?: components["schemas"]["MCPServerAuthorization"] | null;
             available?: components["schemas"]["AvailabilityStatus"] | null;
+            /** Labels */
+            labels?: {
+                [key: string]: string;
+            } | null;
             /** Name */
             name: string;
             /** Namespace */
@@ -3527,6 +4207,8 @@ export interface components {
             }[] | null;
             /** Source */
             source: string;
+            /** Url */
+            url?: string | null;
         };
         /**
          * MarketplacePermissionsResponse
@@ -3616,47 +4298,104 @@ export interface components {
             /** Namespace */
             namespace?: string | null;
         };
+        /** MemoryAddressValueFrom */
+        MemoryAddressValueFrom: {
+            configMapKeyRef?: components["schemas"]["MemoryConfigMapKeyRef"] | null;
+            secretKeyRef?: components["schemas"]["MemorySecretKeyRef"] | null;
+            serviceRef?: components["schemas"]["MemoryServiceRef"] | null;
+        };
+        /** MemoryAddressValueSource */
+        MemoryAddressValueSource: {
+            /** Value */
+            value?: string | null;
+            valueFrom?: components["schemas"]["MemoryAddressValueFrom"] | null;
+        };
+        /** MemoryConfigMapKeyRef */
+        MemoryConfigMapKeyRef: {
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /** Optional */
+            optional?: boolean | null;
+        };
         /**
          * MemoryCreateRequest
          * @description Request model for creating a memory.
          */
         MemoryCreateRequest: {
-            /** Config */
-            config?: {
-                [key: string]: unknown;
+            /** Annotations */
+            annotations?: {
+                [key: string]: string;
             } | null;
-            /** Description */
-            description?: string | null;
+            /** Labels */
+            labels?: {
+                [key: string]: string;
+            } | null;
             /** Name */
             name: string;
+            spec: components["schemas"]["MemorySpec"];
         };
         /**
          * MemoryDetailResponse
          * @description Response model for detailed memory information.
          */
         MemoryDetailResponse: {
-            /** Config */
-            config?: {
-                [key: string]: unknown;
+            /** Annotations */
+            annotations?: {
+                [key: string]: string;
             } | null;
-            /** Description */
-            description?: string | null;
+            /** Labels */
+            labels?: {
+                [key: string]: string;
+            } | null;
             /** Name */
             name: string;
             /** Namespace */
             namespace: string;
+            spec?: components["schemas"]["MemorySpecResponse"] | null;
             /** Status */
             status?: {
                 [key: string]: unknown;
             } | null;
+        };
+        /** MemoryHeader */
+        MemoryHeader: {
+            /** Name */
+            name: string;
+            value: components["schemas"]["MemoryHeaderValueSource"];
+        };
+        /** MemoryHeaderResponse */
+        MemoryHeaderResponse: {
+            /** Name */
+            name: string;
+            value: components["schemas"]["MemoryValueSourceResponse"];
+        };
+        /** MemoryHeaderValueFrom */
+        MemoryHeaderValueFrom: {
+            configMapKeyRef?: components["schemas"]["MemoryConfigMapKeyRef"] | null;
+            queryParameterRef?: components["schemas"]["MemoryQueryParameterRef"] | null;
+            secretKeyRef?: components["schemas"]["MemorySecretKeyRef"] | null;
+        };
+        /** MemoryHeaderValueSource */
+        MemoryHeaderValueSource: {
+            /** Value */
+            value?: string | null;
+            valueFrom?: components["schemas"]["MemoryHeaderValueFrom"] | null;
         };
         /**
          * MemoryListResponse
          * @description Response model for memory list.
          */
         MemoryListResponse: {
+            /** Continue Token */
+            continue_token?: string | null;
+            /** Count */
+            count: number;
             /** Items */
             items: components["schemas"]["MemoryResponse"][];
+            /** Remaining Item Count */
+            remaining_item_count?: number | null;
         };
         /**
          * MemoryMessageListResponse
@@ -3688,13 +4427,20 @@ export interface components {
             /** Timestamp */
             timestamp?: string | null;
         };
+        /** MemoryQueryParameterRef */
+        MemoryQueryParameterRef: {
+            /** Name */
+            name: string;
+        };
         /**
          * MemoryResponse
          * @description Response model for memory list items.
          */
         MemoryResponse: {
-            /** Description */
-            description?: string | null;
+            /** Labels */
+            labels?: {
+                [key: string]: string;
+            } | null;
             /** Name */
             name: string;
             /** Namespace */
@@ -3702,17 +4448,65 @@ export interface components {
             /** Status */
             status?: string | null;
         };
+        /** MemorySecretKeyRef */
+        MemorySecretKeyRef: {
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /** Optional */
+            optional?: boolean | null;
+        };
+        /** MemoryServiceRef */
+        MemoryServiceRef: {
+            /** Name */
+            name: string;
+            /** Namespace */
+            namespace?: string | null;
+            /** Path */
+            path?: string | null;
+            /** Port */
+            port?: string | null;
+        };
+        /** MemorySpec */
+        MemorySpec: {
+            address: components["schemas"]["MemoryAddressValueSource"];
+            /** Headers */
+            headers?: components["schemas"]["MemoryHeader"][] | null;
+        };
+        /** MemorySpecResponse */
+        MemorySpecResponse: {
+            address?: components["schemas"]["MemoryValueSourceResponse"] | null;
+            /** Headers */
+            headers?: components["schemas"]["MemoryHeaderResponse"][] | null;
+        };
         /**
          * MemoryUpdateRequest
          * @description Request model for updating a memory.
          */
         MemoryUpdateRequest: {
-            /** Config */
-            config?: {
-                [key: string]: unknown;
+            /** Annotations */
+            annotations?: {
+                [key: string]: string;
             } | null;
-            /** Description */
-            description?: string | null;
+            /** Labels */
+            labels?: {
+                [key: string]: string;
+            } | null;
+            spec?: components["schemas"]["MemorySpec"] | null;
+        };
+        /** MemoryValueFrom */
+        MemoryValueFrom: {
+            configMapKeyRef?: components["schemas"]["MemoryConfigMapKeyRef"] | null;
+            queryParameterRef?: components["schemas"]["MemoryQueryParameterRef"] | null;
+            secretKeyRef?: components["schemas"]["MemorySecretKeyRef"] | null;
+            serviceRef?: components["schemas"]["MemoryServiceRef"] | null;
+        };
+        /** MemoryValueSourceResponse */
+        MemoryValueSourceResponse: {
+            /** Value */
+            value?: string | null;
+            valueFrom?: components["schemas"]["MemoryValueFrom"] | null;
         };
         /**
          * ModelConfig
@@ -3783,10 +4577,14 @@ export interface components {
          * @description List of models response model.
          */
         ModelListResponse: {
+            /** Continue Token */
+            continue_token?: string | null;
             /** Count */
             count: number;
             /** Items */
             items: components["schemas"]["ModelResponse"][];
+            /** Remaining Item Count */
+            remaining_item_count?: number | null;
         };
         /**
          * ModelRef
@@ -3819,6 +4617,8 @@ export interface components {
              * @enum {string}
              */
             provider: "openai" | "azure" | "bedrock" | "anthropic";
+            /** Secret Refs */
+            secret_refs?: string[] | null;
             /**
              * Type
              * @default completions
@@ -3849,6 +4649,12 @@ export interface components {
                 };
             } | null;
         };
+        /**
+         * ModelView
+         * @description Detail level for model list responses.
+         * @enum {string}
+         */
+        ModelView: "summary" | "with-secrets";
         /**
          * NamespaceCreateRequest
          * @description Request model for creating a namespace.
@@ -3903,6 +4709,19 @@ export interface components {
              * @enum {string}
              */
             status: "ok" | "unavailable";
+        };
+        /**
+         * PromptCacheBreakpoint
+         * @description Marks the exact end of a reusable prompt prefix.
+         *
+         *     The breakpoint inherits its TTL from the request's `prompt_cache_options.ttl`; the boundary is not rounded to a token block.
+         */
+        PromptCacheBreakpoint: {
+            /**
+             * Mode
+             * @constant
+             */
+            mode: "explicit";
         };
         /**
          * QueryConfigMapKeyRef
@@ -4177,8 +4996,23 @@ export interface components {
          * @description Request model for creating a secret.
          */
         SecretCreateRequest: {
+            /** Alias */
+            alias?: string | null;
+            /** Description */
+            description?: string | null;
+            /**
+             * Labels
+             * @default []
+             */
+            labels: string[];
             /** Name */
             name: string;
+            /**
+             * Scope
+             * @default shared
+             * @enum {string}
+             */
+            scope: "shared" | "personal";
             /** String Data */
             string_data: {
                 [key: string]: string;
@@ -4194,14 +5028,35 @@ export interface components {
          * @description Detailed secret response model.
          */
         SecretDetailResponse: {
+            /** Alias */
+            alias?: string | null;
             /** Annotations */
             annotations?: {
                 [key: string]: string;
             } | null;
+            /** Description */
+            description?: string | null;
+            /** Display Name */
+            display_name: string;
             /** Id */
             id: string;
+            /**
+             * Keys
+             * @default []
+             */
+            keys: string[];
+            /**
+             * Labels
+             * @default []
+             */
+            labels: string[];
             /** Name */
             name: string;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "shared" | "personal";
             /** Secret Length */
             secret_length: number;
             /** Type */
@@ -4222,24 +5077,51 @@ export interface components {
          * @description Kubernetes secret response model.
          */
         SecretResponse: {
+            /** Alias */
+            alias?: string | null;
             /** Annotations */
             annotations?: {
                 [key: string]: string;
             } | null;
+            /** Description */
+            description?: string | null;
+            /** Display Name */
+            display_name: string;
             /** Id */
             id: string;
+            /**
+             * Labels
+             * @default []
+             */
+            labels: string[];
             /** Name */
             name: string;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "shared" | "personal";
         };
         /**
          * SecretUpdateRequest
          * @description Request model for updating a secret.
          */
         SecretUpdateRequest: {
+            /** Alias */
+            alias?: string | null;
+            /** Description */
+            description?: string | null;
+            /**
+             * Labels
+             * @default []
+             */
+            labels: string[];
+            /** Scope */
+            scope?: ("shared" | "personal") | null;
             /** String Data */
-            string_data: {
+            string_data?: {
                 [key: string]: string;
-            };
+            } | null;
         };
         /**
          * Selector
@@ -4290,6 +5172,10 @@ export interface components {
         };
         /** SystemInfo */
         SystemInfo: {
+            /** Argo Server Configured */
+            argo_server_configured: boolean;
+            /** Argo Server Version Supported */
+            argo_server_version_supported?: boolean | null;
             /** Kubernetes Version */
             kubernetes_version: string;
             /** System Version */
@@ -4363,10 +5249,14 @@ export interface components {
          * @description List of teams response model.
          */
         TeamListResponse: {
+            /** Continue Token */
+            continue_token?: string | null;
             /** Count */
             count: number;
             /** Items */
             items: components["schemas"]["TeamResponse"][];
+            /** Remaining Item Count */
+            remaining_item_count?: number | null;
         };
         /**
          * TeamMember
@@ -4383,6 +5273,7 @@ export interface components {
          * @description Team resource response model.
          */
         TeamResponse: {
+            available?: components["schemas"]["AvailabilityStatus"] | null;
             /** Description */
             description?: string | null;
             /** Loops */
@@ -4416,6 +5307,20 @@ export interface components {
             /** Strategy */
             strategy?: string | null;
         };
+        /**
+         * ToolApprovalConfig
+         * @description Approval configuration for human-in-the-loop tool execution.
+         */
+        ToolApprovalConfig: {
+            /** Argumentmatches */
+            argumentMatches?: components["schemas"]["ArgumentMatch"][] | null;
+            /** Ontimeout */
+            onTimeout?: string | null;
+            /** Required */
+            required?: boolean | null;
+            /** Timeout */
+            timeout?: string | null;
+        };
         /** ToolDetailResponse */
         ToolDetailResponse: {
             /** Annotations */
@@ -4443,10 +5348,14 @@ export interface components {
         };
         /** ToolListResponse */
         ToolListResponse: {
+            /** Continue Token */
+            continue_token?: string | null;
+            /** Count */
+            count: number;
             /** Items */
             items: components["schemas"]["ToolResponse"][];
-            /** Total */
-            total: number;
+            /** Remaining Item Count */
+            remaining_item_count?: number | null;
         };
         /** ToolResponse */
         ToolResponse: {
@@ -4549,6 +5458,15 @@ export interface operations {
                     "application/json": components["schemas"]["ReadinessResponse"];
                 };
             };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReadinessResponse"];
+                };
+            };
         };
     };
     list_a2a_servers_v1_a2a_servers_get: {
@@ -4556,6 +5474,10 @@ export interface operations {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
                 namespace?: string | null;
+                /** @description Maximum number of items to return per page */
+                limit?: number;
+                /** @description Continuation token returned by the previous page */
+                continue?: string | null;
             };
             header?: never;
             path?: never;
@@ -4654,6 +5576,10 @@ export interface operations {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
                 namespace?: string | null;
+                /** @description Maximum number of items to return per page */
+                limit?: number;
+                /** @description Continuation token returned by the previous page */
+                continue?: string | null;
             };
             header?: never;
             path?: never;
@@ -4747,11 +5673,55 @@ export interface operations {
             };
         };
     };
+    submit_a2a_task_approval_v1_a2a_tasks__task_name__approval_post: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                task_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApprovalSubmissionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalSubmissionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_agents_v1_agents_get: {
         parameters: {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
                 namespace?: string | null;
+                /** @description Response detail level: 'full' (default) returns every field; 'summary' omits heavy fields (prompt, non-essential annotations) for list rendering */
+                view?: components["schemas"]["AgentView"];
+                /** @description Maximum number of items to return per page */
+                limit?: number;
+                /** @description Continuation token returned by the previous page */
+                continue?: string | null;
             };
             header?: never;
             path?: never;
@@ -5035,7 +6005,7 @@ export interface operations {
             };
         };
     };
-    list_marketplace_items_v1_ark_services_marketplace_items_get: {
+    list_helm_releases_v1_ark_services_helm_releases_get: {
         parameters: {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
@@ -5185,38 +6155,8 @@ export interface operations {
                 limit?: number;
                 /** @description Cursor for pagination */
                 cursor?: number | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    purge_chunks_v1_broker_chunks_delete: {
-        parameters: {
-            query?: {
-                /** @description Memory resource name */
-                memory?: string;
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
             };
             header?: never;
             path?: never;
@@ -5257,38 +6197,6 @@ export interface operations {
                 cursor?: number | null;
                 /** @description Filter by session ID */
                 session_id?: string | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    purge_events_v1_broker_events_delete: {
-        parameters: {
-            query?: {
-                /** @description Memory resource name */
-                memory?: string;
             };
             header?: never;
             path?: never;
@@ -5400,38 +6308,6 @@ export interface operations {
             };
         };
     };
-    purge_messages_v1_broker_messages_delete: {
-        parameters: {
-            query?: {
-                /** @description Memory resource name */
-                memory?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     get_sessions_v1_broker_sessions_get: {
         parameters: {
             query?: {
@@ -5455,38 +6331,6 @@ export interface operations {
                 sort?: string | null;
                 /** @description Sort order (asc/desc) */
                 order?: string | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    purge_sessions_v1_broker_sessions_delete: {
-        parameters: {
-            query?: {
-                /** @description Memory resource name */
-                memory?: string;
             };
             header?: never;
             path?: never;
@@ -5588,38 +6432,6 @@ export interface operations {
             };
         };
     };
-    purge_traces_v1_broker_traces_delete: {
-        parameters: {
-            query?: {
-                /** @description Memory resource name */
-                memory?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     get_trace_v1_broker_traces__trace_id__get: {
         parameters: {
             query?: {
@@ -5647,6 +6459,214 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_configurations_v1_configurations_get: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_configuration_v1_configurations_post: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfigurationCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_configuration_v1_configurations__configuration_name__get: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                configuration_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_configuration_v1_configurations__configuration_name__put: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                configuration_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfigurationUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_configuration_v1_configurations__configuration_name__delete: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                configuration_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_configuration_references_v1_configurations__configuration_name__references_get: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                configuration_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationReferenceListResponse"];
                 };
             };
             /** @description Validation Error */
@@ -6020,6 +7040,10 @@ export interface operations {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
                 namespace?: string | null;
+                /** @description Maximum number of items to return per page */
+                limit?: number;
+                /** @description Continuation token returned by the previous page */
+                continue?: string | null;
             };
             header?: never;
             path?: never;
@@ -6300,6 +7324,10 @@ export interface operations {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
                 namespace?: string | null;
+                /** @description Maximum number of items to return per page */
+                limit?: number;
+                /** @description Continuation token returned by the previous page */
+                continue?: string | null;
             };
             header?: never;
             path?: never;
@@ -6551,6 +7579,12 @@ export interface operations {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
                 namespace?: string | null;
+                /** @description Response detail level: 'full' (default) returns every field; 'summary' omits heavy fields (prompt, non-essential annotations) for list rendering */
+                view?: components["schemas"]["ModelView"];
+                /** @description Maximum number of items to return per page */
+                limit?: number;
+                /** @description Continuation token returned by the previous page */
+                continue?: string | null;
             };
             header?: never;
             path?: never;
@@ -7031,7 +8065,10 @@ export interface operations {
     };
     proxy_services_v1_proxy_services__service_name___api_path__delete: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
             header?: never;
             path: {
                 service_name: string;
@@ -7063,7 +8100,10 @@ export interface operations {
     };
     proxy_services_v1_proxy_services__service_name___api_path__head: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
             header?: never;
             path: {
                 service_name: string;
@@ -7095,7 +8135,10 @@ export interface operations {
     };
     proxy_services_v1_proxy_services__service_name___api_path__patch: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
             header?: never;
             path: {
                 service_name: string;
@@ -7550,6 +8593,42 @@ export interface operations {
             };
         };
     };
+    create_access_review_v1_resources_access_review_post: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccessReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessReviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_pod_logs_v1_resources_api_v1_namespaces__namespace__pods__pod_name__log_get: {
         parameters: {
             query?: {
@@ -7576,6 +8655,51 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_pod_log_window_v1_resources_api_v1_namespaces__namespace__pods__pod_name__log_window_get: {
+        parameters: {
+            query?: {
+                /** @description Container name (defaults to first container) */
+                container?: string | null;
+                /** @description Maximum lines in this page */
+                max_lines?: number;
+                /** @description Lines to skip back from the end of the log */
+                skip_tail_lines?: number;
+                /** @description Return only lines newer than this RFC3339 timestamp */
+                since_timestamp?: string | null;
+                /** @description Return only lines older than this RFC3339 timestamp */
+                before_timestamp?: string | null;
+                /** @description Byte cap for this page */
+                max_bytes?: number;
+            };
+            header?: never;
+            path: {
+                pod_name: string;
+                namespace: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LogWindow"];
                 };
             };
             /** @description Validation Error */
@@ -7626,58 +8750,13 @@ export interface operations {
             };
         };
     };
-    create_core_resource_v1_resources_api__version___kind__post: {
+    resubmit_workflow_v1_resources_apis_argoproj_io_v1alpha1_namespaces__namespace__workflows__workflow_name__resubmit_put: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
             path: {
-                version: string;
-                kind: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_core_resource_v1_resources_api__version___kind___resource_name__get: {
-        parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
-            header?: never;
-            path: {
-                version: string;
-                kind: string;
-                resource_name: string;
+                workflow_name: string;
+                namespace: string;
             };
             cookie?: never;
         };
@@ -7703,17 +8782,141 @@ export interface operations {
             };
         };
     };
-    delete_core_resource_v1_resources_api__version___kind___resource_name__delete: {
+    resume_workflow_v1_resources_apis_argoproj_io_v1alpha1_namespaces__namespace__workflows__workflow_name__resume_put: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
             path: {
-                version: string;
-                kind: string;
-                resource_name: string;
+                workflow_name: string;
+                namespace: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retry_workflow_v1_resources_apis_argoproj_io_v1alpha1_namespaces__namespace__workflows__workflow_name__retry_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workflow_name: string;
+                namespace: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stop_workflow_v1_resources_apis_argoproj_io_v1alpha1_namespaces__namespace__workflows__workflow_name__stop_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workflow_name: string;
+                namespace: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    suspend_workflow_v1_resources_apis_argoproj_io_v1alpha1_namespaces__namespace__workflows__workflow_name__suspend_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workflow_name: string;
+                namespace: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    terminate_workflow_v1_resources_apis_argoproj_io_v1alpha1_namespaces__namespace__workflows__workflow_name__terminate_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workflow_name: string;
+                namespace: string;
             };
             cookie?: never;
         };
@@ -7777,6 +8980,52 @@ export interface operations {
             };
         };
     };
+    get_workflow_log_window_v1_resources_apis_argoproj_io_v1alpha1_namespaces__namespace__workflows__workflow_name___node_id__log_window_get: {
+        parameters: {
+            query?: {
+                /** @description Container name */
+                container?: string | null;
+                /** @description Maximum lines in this page */
+                max_lines?: number;
+                /** @description Lines to skip back from the end of the log */
+                skip_tail_lines?: number;
+                /** @description Return only lines newer than this RFC3339 timestamp */
+                since_timestamp?: string | null;
+                /** @description Return only lines older than this RFC3339 timestamp */
+                before_timestamp?: string | null;
+                /** @description Byte cap for this page */
+                max_bytes?: number;
+            };
+            header?: never;
+            path: {
+                workflow_name: string;
+                node_id: string;
+                namespace: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LogWindow"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_grouped_resources_v1_resources_apis__group___version___kind__get: {
         parameters: {
             query?: {
@@ -7786,10 +9035,14 @@ export interface operations {
                 labelSelector?: string | null;
                 /** @description Filter by workflow name (partial match, case insensitive) */
                 workflowName?: string | null;
-                /** @description Filter by workflow template name (partial match, case insensitive) */
+                /** @description Filter by workflow template name (exact match) */
                 workflowTemplateName?: string | null;
                 /** @description Filter by workflow status (case insensitive). Options: running, succeeded, failed (which matches both failed and error), pending */
                 status?: string | null;
+                /** @description Maximum number of items to return per page (omit for the full list) */
+                limit?: number | null;
+                /** @description Continuation token returned by the previous page */
+                continue?: string | null;
             };
             header?: never;
             path: {
@@ -7900,6 +9153,49 @@ export interface operations {
             };
         };
     };
+    update_grouped_resource_v1_resources_apis__group___version___kind___resource_name__put: {
+        parameters: {
+            query?: {
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
+            };
+            header?: never;
+            path: {
+                group: string;
+                version: string;
+                kind: string;
+                resource_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     delete_grouped_resource_v1_resources_apis__group___version___kind___resource_name__delete: {
         parameters: {
             query?: {
@@ -7942,6 +9238,8 @@ export interface operations {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
                 namespace?: string | null;
+                /** @description Which secrets to list: shared (default), the caller's personal ones, or all of both */
+                scope?: "shared" | "personal" | "all";
             };
             header?: never;
             path?: never;
@@ -8136,6 +9434,10 @@ export interface operations {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
                 namespace?: string | null;
+                /** @description Maximum number of items to return per page */
+                limit?: number;
+                /** @description Continuation token returned by the previous page */
+                continue?: string | null;
             };
             header?: never;
             path?: never;
@@ -8308,6 +9610,10 @@ export interface operations {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
                 namespace?: string | null;
+                /** @description Maximum number of items to return per page */
+                limit?: number;
+                /** @description Continuation token returned by the previous page */
+                continue?: string | null;
             };
             header?: never;
             path?: never;

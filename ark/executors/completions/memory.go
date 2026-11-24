@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"github.com/openai/openai-go"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/crossns"
 	"mckinsey.com/ark/internal/eventing"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -24,6 +26,8 @@ const (
 	MaxRetries            = 3
 	RetryDelay            = 100 * time.Millisecond
 	UserAgent             = "ark-memory-client/1.0"
+	MessagesPageLimit     = 1000
+	MessagesMaxPages      = 1000
 )
 
 // getMemoryTimeout reads ARK_MEMORY_HTTP_TIMEOUT_SECONDS env var or returns default
@@ -72,7 +76,7 @@ type MessagesResponse struct {
 	Items      []MessageRecord `json:"items"`
 	Total      int             `json:"total"`
 	HasMore    bool            `json:"hasMore"`
-	NextCursor *string         `json:"nextCursor,omitempty"`
+	NextCursor *int64          `json:"nextCursor,omitempty"`
 }
 
 func DefaultConfig() Config {
@@ -81,14 +85,6 @@ func DefaultConfig() Config {
 		MaxRetries: MaxRetries,
 		RetryDelay: RetryDelay,
 	}
-}
-
-func ttlSecondsFromQuery(query *arkv1alpha1.Query) *int64 {
-	if query.Spec.TTL == nil {
-		return nil
-	}
-	secs := int64(query.Spec.TTL.Seconds())
-	return &secs
 }
 
 func NewMemory(ctx context.Context, k8sClient client.Client, memoryName, namespace string, memoryRecorder eventing.MemoryRecorder) (MemoryInterface, error) {
@@ -111,13 +107,23 @@ func NewMemoryForQuery(ctx context.Context, k8sClient client.Client, memoryRef *
 		// Try to load "default" memory from the same namespace
 		_, err := getMemoryResource(ctx, k8sClient, "default", namespace)
 		if err != nil {
-			// If default memory doesn't exist, use noop memory
+			// If default memory doesn't exist, use noop memory. When the query
+			// carries a conversationId the caller expected continuity, so warn
+			// at default verbosity instead of hiding it behind V(2).
+			if conversationId != "" {
+				logf.FromContext(ctx).Info("conversationId set but no Memory backend reachable in namespace; conversation history disabled for this query",
+					"conversationId", conversationId, "queryName", queryName, "namespace", namespace)
+			}
 			return NewNoopMemory(), nil
 		}
 		memoryName, memoryNamespace = "default", namespace //nolint:goconst // "default" here is memory name, not model
 	} else {
 		memoryName = memoryRef.Name
 		memoryNamespace = resolveNamespace(memoryRef.Namespace, namespace)
+	}
+
+	if err := checkCrossNamespaceMemory(ctx, k8sClient, memoryName, memoryNamespace, namespace); err != nil {
+		return nil, err
 	}
 
 	memory, err := NewMemoryWithConfig(ctx, k8sClient, memoryName, memoryNamespace, config, memoryRecorder)
@@ -140,6 +146,21 @@ func getMemoryResource(ctx context.Context, k8sClient client.Client, name, names
 	}
 
 	return &memory, nil
+}
+
+func checkCrossNamespaceMemory(ctx context.Context, k8sClient client.Client, name, memoryNamespace, fromNamespace string) error {
+	if memoryNamespace == fromNamespace {
+		return nil
+	}
+	var memory arkv1alpha1.Memory
+	err := k8sClient.Get(ctx, client.ObjectKey{Name: name, Namespace: memoryNamespace}, &memory)
+	if err != nil && !apierrors.IsNotFound(err) {
+		return fmt.Errorf("failed to get memory resource %s/%s: %w", memoryNamespace, name, err)
+	}
+	if err != nil || !crossns.Allowed(&memory, fromNamespace) {
+		return crossns.DeniedError("Memory", memoryNamespace, name, fromNamespace)
+	}
+	return nil
 }
 
 func resolveNamespace(refNamespace, defaultNamespace string) string {

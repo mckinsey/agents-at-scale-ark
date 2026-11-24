@@ -1,4 +1,23 @@
 apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: data-analyst
+spec:
+  prompt: You are a data analyst expert. Analyze datasets, create visualizations, and provide insights.
+  description: Data analysis and visualization specialist
+  tools:
+    - type: built-in
+      name: noop
+---
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: market-analyst
+spec:
+  prompt: You are a market analyst. Summarize market conditions clearly and concisely.
+  description: Market conditions specialist
+---
+apiVersion: ark.mckinsey.com/v1alpha1
 kind: Query
 metadata:
   name: long-running-analysis
@@ -6,7 +25,7 @@ spec:
   input: |
     Perform a comprehensive analysis of the following dataset. This may take some time
     to complete as it involves complex calculations and multiple data processing steps.
-    
+
     Please provide detailed insights and recommendations based on the analysis.
   timeout: "10m"
   target:
@@ -22,6 +41,6 @@ spec:
     Provide a quick summary of the current market conditions.
     This should be a brief overview that can be completed quickly.
   timeout: "30s"
-  targets:
-    - type: agent
+  target:
+    type: agent
     name: market-analyst

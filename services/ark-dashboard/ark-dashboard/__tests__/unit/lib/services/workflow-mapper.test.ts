@@ -1,0 +1,815 @@
+import { describe, expect, it, vi } from 'vitest';
+
+import {
+  isTerminalPhase,
+  mapArgoWorkflowToSession,
+  mapArgoWorkflowsToSessions,
+} from '@/lib/services/workflow-mapper';
+import type { ArgoWorkflow } from '@/lib/types/argo-workflow';
+
+function makeWorkflow(overrides: Partial<ArgoWorkflow> = {}): ArgoWorkflow {
+  return {
+    apiVersion: 'argoproj.io/v1alpha1',
+    kind: 'Workflow',
+    metadata: {
+      name: 'wf-1',
+      namespace: 'default',
+      creationTimestamp: '2024-01-01T00:00:00Z',
+      uid: 'uid-1',
+    },
+    spec: {},
+    ...overrides,
+  } as ArgoWorkflow;
+}
+
+type NodeMap = NonNullable<NonNullable<ArgoWorkflow['status']>['nodes']>;
+
+function pod(
+  id: string,
+  displayName: string,
+  children?: string[],
+): NodeMap[string] {
+  return {
+    id,
+    name: `wf-1.${displayName}`,
+    displayName,
+    type: 'Pod',
+    phase: 'Succeeded',
+    boundaryID: 'wf-1',
+    podName: id,
+    children,
+  };
+}
+
+function stepGroup(
+  id: string,
+  index: number,
+  children: string[],
+): NodeMap[string] {
+  return {
+    id,
+    name: `wf-1[${index}]`,
+    displayName: `[${index}]`,
+    type: 'StepGroup',
+    phase: 'Succeeded',
+    boundaryID: 'wf-1',
+    children,
+  };
+}
+
+function retry(
+  id: string,
+  displayName: string,
+  children: string[],
+): NodeMap[string] {
+  return {
+    id,
+    name: `wf-1.${displayName}`,
+    displayName,
+    type: 'Retry',
+    phase: 'Succeeded',
+    boundaryID: 'wf-1',
+    children,
+  };
+}
+
+function taskGroup(
+  id: string,
+  displayName: string,
+  children: string[],
+  startedAt: string,
+): NodeMap[string] {
+  return {
+    id,
+    name: `wf-1.${displayName}`,
+    displayName,
+    type: 'TaskGroup',
+    phase: 'Succeeded',
+    boundaryID: 'wf-1',
+    startedAt,
+    children,
+  };
+}
+
+function startedPod(
+  id: string,
+  displayName: string,
+  startedAt: string,
+  children?: string[],
+): NodeMap[string] {
+  return { ...pod(id, displayName, children), startedAt };
+}
+
+function stepsWorkflow(nodes: NodeMap): ArgoWorkflow {
+  return makeWorkflow({
+    status: {
+      phase: 'Succeeded',
+      startedAt: '2024-01-01T00:00:00Z',
+      finishedAt: '2024-01-01T00:01:00Z',
+      nodes,
+    },
+  });
+}
+
+function retryChainNodes(): NodeMap {
+  return {
+    'wf-1': {
+      id: 'wf-1',
+      name: 'wf-1',
+      displayName: 'wf-1',
+      type: 'Steps',
+      phase: 'Succeeded',
+      children: ['sg-0'],
+      outboundNodes: ['step-5'],
+    },
+    'sg-0': stepGroup('sg-0', 0, ['step-1']),
+    'step-1': pod('step-1', 'log-step-1', ['sg-1']),
+    'sg-1': stepGroup('sg-1', 1, ['step-2']),
+    'step-2': retry('step-2', 'log-step-2', ['step-2(0)']),
+    'step-2(0)': pod('step-2(0)', 'log-step-2(0)', ['sg-2']),
+    'sg-2': stepGroup('sg-2', 2, ['step-3']),
+    'step-3': pod('step-3', 'log-step-3', ['sg-3']),
+    'sg-3': stepGroup('sg-3', 3, ['step-4']),
+    'step-4': retry('step-4', 'log-step-4', ['step-4(0)']),
+    'step-4(0)': pod('step-4(0)', 'log-step-4(0)', ['sg-4']),
+    'sg-4': stepGroup('sg-4', 4, ['step-5']),
+    'step-5': pod('step-5', 'log-step-5'),
+  };
+}
+
+describe('isTerminalPhase', () => {
+  it.each(['Succeeded', 'Failed', 'Error'])('treats %s as finished', phase => {
+    expect(isTerminalPhase(phase)).toBe(true);
+  });
+
+  it.each(['Pending', 'Running', undefined])(
+    'treats %s as not finished',
+    phase => {
+      expect(isTerminalPhase(phase)).toBe(false);
+    },
+  );
+});
+
+describe('mapArgoWorkflowToSession suspended', () => {
+  function suspendNode(phase: NodeMap[string]['phase']): NodeMap[string] {
+    return {
+      id: 'wf-1-gate',
+      name: 'wf-1.approve',
+      displayName: 'approve',
+      type: 'Suspend',
+      phase,
+      boundaryID: 'wf-1',
+    };
+  }
+
+  it('is suspended when the whole workflow is suspended', () => {
+    const session = mapArgoWorkflowToSession(
+      makeWorkflow({ spec: { suspend: true }, status: { phase: 'Running' } }),
+    );
+
+    expect(session.suspended).toBe(true);
+  });
+
+  it('is suspended while waiting at a suspend step', () => {
+    const session = mapArgoWorkflowToSession(
+      makeWorkflow({
+        status: {
+          phase: 'Running',
+          nodes: { 'wf-1-gate': suspendNode('Running') },
+        },
+      }),
+    );
+
+    expect(session.suspended).toBe(true);
+  });
+
+  it('is not suspended once the suspend step has been resumed', () => {
+    const session = mapArgoWorkflowToSession(
+      makeWorkflow({
+        status: {
+          phase: 'Running',
+          nodes: { 'wf-1-gate': suspendNode('Succeeded') },
+        },
+      }),
+    );
+
+    expect(session.suspended).toBe(false);
+  });
+});
+
+describe('mapArgoWorkflowToSession pauseState', () => {
+  function node(
+    id: string,
+    type: NodeMap[string]['type'],
+    phase: NodeMap[string]['phase'],
+  ): NodeMap[string] {
+    return { id, name: `wf-1.${id}`, displayName: id, type, phase };
+  }
+
+  function pauseStateOf(
+    spec: ArgoWorkflow['spec'],
+    nodes: NodeMap,
+    phase: 'Running' | 'Succeeded' = 'Running',
+  ) {
+    return mapArgoWorkflowToSession(
+      makeWorkflow({ spec, status: { phase, nodes } }),
+    ).pauseState;
+  }
+
+  it('is pausing while a paused run still has a running pod', () => {
+    expect(
+      pauseStateOf({ suspend: true }, { a: node('a', 'Pod', 'Running') }),
+    ).toBe('pausing');
+  });
+
+  it('is pausing while a paused run still has a pending pod', () => {
+    expect(
+      pauseStateOf({ suspend: true }, { a: node('a', 'Pod', 'Pending') }),
+    ).toBe('pausing');
+  });
+
+  it('is paused once a paused run has no active pod', () => {
+    expect(
+      pauseStateOf({ suspend: true }, { a: node('a', 'Pod', 'Succeeded') }),
+    ).toBe('paused');
+  });
+
+  it('is paused while waiting at a suspend step with nothing else running', () => {
+    expect(pauseStateOf({}, { gate: node('gate', 'Suspend', 'Running') })).toBe(
+      'paused',
+    );
+  });
+
+  it('is not paused while other branches run next to a waiting suspend step', () => {
+    expect(
+      pauseStateOf(
+        {},
+        {
+          gate: node('gate', 'Suspend', 'Running'),
+          a: node('a', 'Pod', 'Running'),
+        },
+      ),
+    ).toBeUndefined();
+  });
+
+  it('is not paused once the run has finished', () => {
+    expect(pauseStateOf({ suspend: true }, {}, 'Succeeded')).toBeUndefined();
+  });
+});
+
+describe('mapArgoWorkflowToSession', () => {
+  it('does not throw when status is missing and falls back to creationTimestamp', () => {
+    const workflow = makeWorkflow({ status: undefined });
+
+    const session = mapArgoWorkflowToSession(workflow);
+
+    expect(session.status).toBe('pending');
+    expect(session.startedAt).toBe('2024-01-01T00:00:00Z');
+    expect(session.finishedAt).toBeUndefined();
+    expect(session.steps).toEqual([]);
+    expect(session.namespace).toBe('default');
+    expect(session.uid).toBe('uid-1');
+  });
+
+  it('maps a succeeded workflow with timing information', () => {
+    const workflow = makeWorkflow({
+      status: {
+        phase: 'Succeeded',
+        startedAt: '2024-01-01T00:00:00Z',
+        finishedAt: '2024-01-01T00:00:30Z',
+        nodes: {},
+      },
+    });
+
+    const session = mapArgoWorkflowToSession(workflow);
+
+    expect(session.status).toBe('succeeded');
+    expect(session.startedAt).toBe('2024-01-01T00:00:00Z');
+    expect(session.finishedAt).toBe('2024-01-01T00:00:30Z');
+    expect(session.duration).toBe('30s');
+  });
+
+  it('maps DAG child nodes into steps', () => {
+    const workflow = makeWorkflow({
+      status: {
+        phase: 'Succeeded',
+        startedAt: '2024-01-01T00:00:00Z',
+        finishedAt: '2024-01-01T00:01:00Z',
+        nodes: {
+          'wf-1': {
+            id: 'wf-1',
+            name: 'wf-1',
+            displayName: 'wf-1',
+            type: 'DAG',
+            phase: 'Succeeded',
+            children: ['wf-1-task-a'],
+          },
+          'wf-1-task-a': {
+            id: 'wf-1-task-a',
+            name: 'wf-1.task-a',
+            displayName: 'task-a',
+            type: 'Pod',
+            phase: 'Succeeded',
+            boundaryID: 'wf-1',
+            startedAt: '2024-01-01T00:00:05Z',
+            finishedAt: '2024-01-01T00:00:20Z',
+          },
+        },
+      },
+    });
+
+    const session = mapArgoWorkflowToSession(workflow);
+
+    expect(session.steps).toHaveLength(1);
+    expect(session.steps[0].displayName).toBe('task-a');
+    expect(session.steps[0].status).toBe('succeeded');
+  });
+
+  it('walks past Retry nodes and keeps every step', () => {
+    const session = mapArgoWorkflowToSession(stepsWorkflow(retryChainNodes()));
+
+    expect(session.steps.map(step => step.displayName)).toEqual([
+      'log-step-1',
+      'log-step-2',
+      'log-step-3',
+      'log-step-4',
+      'log-step-5',
+    ]);
+  });
+
+  it('nests a single retry attempt under its retry step', () => {
+    const session = mapArgoWorkflowToSession(stepsWorkflow(retryChainNodes()));
+
+    const retryStep = session.steps[1];
+    expect(retryStep.type).toBe('retry');
+    expect(retryStep.children).toHaveLength(1);
+    expect(retryStep.children?.[0].displayName).toBe('log-step-2(0)');
+    expect(retryStep.children?.[0].detail?.podName).toBe('step-2(0)');
+    expect(retryStep.detail?.podName).toBeUndefined();
+  });
+
+  it('exposes every retry attempt and still reaches the following step', () => {
+    const nodes = retryChainNodes();
+    nodes['step-2'].children = ['step-2(0)', 'step-2(1)'];
+    nodes['step-2(0)'] = {
+      ...pod('step-2(0)', 'log-step-2(0)'),
+      phase: 'Failed',
+    };
+    nodes['step-2(1)'] = pod('step-2(1)', 'log-step-2(1)', ['sg-2']);
+
+    const session = mapArgoWorkflowToSession(stepsWorkflow(nodes));
+
+    const attempts = session.steps[1].children ?? [];
+    expect(attempts.map(attempt => attempt.status)).toEqual([
+      'failed',
+      'succeeded',
+    ]);
+    expect(session.steps.map(step => step.displayName)).toContain('log-step-3');
+  });
+
+  it('does not duplicate retry attempts as DAG siblings', () => {
+    const session = mapArgoWorkflowToSession(
+      stepsWorkflow({
+        'wf-1': {
+          id: 'wf-1',
+          name: 'wf-1',
+          displayName: 'wf-1',
+          type: 'DAG',
+          phase: 'Succeeded',
+          children: ['task-a', 'task-b'],
+        },
+        'task-a': pod('task-a', 'task-a'),
+        'task-b': retry('task-b', 'task-b', ['task-b(0)']),
+        'task-b(0)': pod('task-b(0)', 'task-b(0)'),
+      }),
+    );
+
+    expect(session.steps.map(step => step.displayName)).toEqual([
+      'task-a',
+      'task-b',
+    ]);
+    expect(session.steps[1].children?.[0].displayName).toBe('task-b(0)');
+  });
+
+  it('nests the expansions of a withItems DAG task under its task group', () => {
+    const session = mapArgoWorkflowToSession(
+      stepsWorkflow({
+        'wf-1': {
+          id: 'wf-1',
+          name: 'wf-1',
+          displayName: 'wf-1',
+          type: 'DAG',
+          phase: 'Succeeded',
+          children: ['fo1'],
+        },
+        fo1: taskGroup(
+          'fo1',
+          'fan-out-1',
+          ['fo1-0', 'fo1-1'],
+          '2024-01-01T00:00:01Z',
+        ),
+        'fo1-0': startedPod('fo1-0', 'fan-out-1(0:a)', '2024-01-01T00:00:02Z', [
+          'fi1',
+        ]),
+        'fo1-1': startedPod('fo1-1', 'fan-out-1(1:b)', '2024-01-01T00:00:01Z', [
+          'fi1',
+        ]),
+        fi1: startedPod('fi1', 'fan-in-1', '2024-01-01T00:00:10Z', ['fo2']),
+        fo2: taskGroup(
+          'fo2',
+          'fan-out-2',
+          ['fo2-0', 'fo2-1', 'fo2-2'],
+          '2024-01-01T00:00:20Z',
+        ),
+        'fo2-0': startedPod('fo2-0', 'fan-out-2(0:a)', '2024-01-01T00:00:21Z'),
+        'fo2-1': startedPod('fo2-1', 'fan-out-2(1:b)', '2024-01-01T00:00:21Z'),
+        'fo2-2': startedPod('fo2-2', 'fan-out-2(2:c)', '2024-01-01T00:00:21Z'),
+      }),
+    );
+
+    expect(session.steps.map(step => step.displayName)).toEqual([
+      'fan-out-1',
+      'fan-in-1',
+      'fan-out-2',
+    ]);
+    expect(session.steps[0].type).toBe('taskgroup');
+    expect(session.steps[0].children?.map(step => step.displayName)).toEqual([
+      'fan-out-1(0:a)',
+      'fan-out-1(1:b)',
+    ]);
+    expect(session.steps[0].children?.[0].children).toBeUndefined();
+    expect(session.steps[2].children?.map(step => step.displayName)).toEqual([
+      'fan-out-2(0:a)',
+      'fan-out-2(1:b)',
+      'fan-out-2(2:c)',
+    ]);
+  });
+
+  it('continues past a parallel group whose member is retried', () => {
+    const session = mapArgoWorkflowToSession(
+      stepsWorkflow({
+        'wf-1': {
+          id: 'wf-1',
+          name: 'wf-1',
+          displayName: 'wf-1',
+          type: 'Steps',
+          phase: 'Succeeded',
+          children: ['sg-0'],
+          outboundNodes: ['step-last'],
+        },
+        'sg-0': stepGroup('sg-0', 0, ['step-a', 'step-b']),
+        'step-a': retry('step-a', 'step-a', ['step-a(0)']),
+        'step-a(0)': pod('step-a(0)', 'step-a(0)', ['sg-1']),
+        'step-b': pod('step-b', 'step-b'),
+        'sg-1': stepGroup('sg-1', 1, ['step-last']),
+        'step-last': pod('step-last', 'step-last'),
+      }),
+    );
+
+    expect(session.steps).toHaveLength(2);
+    expect(session.steps[0].children?.map(child => child.displayName)).toEqual([
+      'step-a',
+      'step-b',
+    ]);
+    expect(session.steps[1].displayName).toBe('step-last');
+  });
+
+  it('maps attempts when the root node itself is a Retry node', () => {
+    const session = mapArgoWorkflowToSession(
+      stepsWorkflow({
+        'wf-1': {
+          id: 'wf-1',
+          name: 'wf-1',
+          displayName: 'wf-1',
+          type: 'Retry',
+          phase: 'Succeeded',
+          children: ['wf-1(0)', 'wf-1(1)'],
+        },
+        'wf-1(0)': pod('wf-1(0)', 'wf-1(0)'),
+        'wf-1(1)': pod('wf-1(1)', 'wf-1(1)'),
+      }),
+    );
+
+    expect(session.steps.map(step => step.displayName)).toEqual([
+      'wf-1(0)',
+      'wf-1(1)',
+    ]);
+  });
+
+  it('keeps mapping a plain sequential workflow without retries', () => {
+    const session = mapArgoWorkflowToSession(
+      stepsWorkflow({
+        'wf-1': {
+          id: 'wf-1',
+          name: 'wf-1',
+          displayName: 'wf-1',
+          type: 'Steps',
+          phase: 'Succeeded',
+          children: ['sg-0'],
+          outboundNodes: ['step-2'],
+        },
+        'sg-0': stepGroup('sg-0', 0, ['step-1']),
+        'step-1': pod('step-1', 'step-1', ['sg-1']),
+        'sg-1': stepGroup('sg-1', 1, ['step-2']),
+        'step-2': pod('step-2', 'step-2'),
+      }),
+    );
+
+    expect(session.steps.map(step => step.displayName)).toEqual([
+      'step-1',
+      'step-2',
+    ]);
+  });
+});
+
+describe('nodes left non-terminal by a cancelled workflow', () => {
+  const finishedAt = '2024-01-01T00:00:30Z';
+
+  function cancelledDag(
+    phase: 'Failed' | 'Running',
+    nodes: NodeMap,
+  ): ArgoWorkflow {
+    return makeWorkflow({
+      status: {
+        phase,
+        startedAt: '2024-01-01T00:00:00Z',
+        finishedAt: phase === 'Failed' ? finishedAt : undefined,
+        nodes: {
+          'wf-1': {
+            id: 'wf-1',
+            name: 'wf-1',
+            displayName: 'wf-1',
+            type: 'DAG',
+            phase,
+            children: Object.keys(nodes).filter(id => !id.includes('(')),
+          },
+          ...nodes,
+        },
+      },
+    });
+  }
+
+  function runningTaskGroup(id: string, children: string[]): NodeMap[string] {
+    return {
+      ...taskGroup(id, id, children, '2024-01-01T00:00:01Z'),
+      phase: 'Running',
+    };
+  }
+
+  function failedPod(id: string): NodeMap[string] {
+    return {
+      ...startedPod(id, id, '2024-01-01T00:00:02Z'),
+      phase: 'Failed',
+      finishedAt,
+    };
+  }
+
+  it('settles a running task group with failed items as failed with a finite duration', () => {
+    const session = mapArgoWorkflowToSession(
+      cancelledDag('Failed', {
+        'fan-out-1': runningTaskGroup('fan-out-1', [
+          'fan-out-1(0)',
+          'fan-out-1(1)',
+        ]),
+        'fan-out-1(0)': failedPod('fan-out-1(0)'),
+        'fan-out-1(1)': failedPod('fan-out-1(1)'),
+      }),
+    );
+
+    const group = session.steps[0];
+    expect(group.status).toBe('failed');
+    expect(group.finishedAt).toBe(finishedAt);
+    expect(group.duration).toBe('29s');
+  });
+
+  it('settles a running task group whose items all succeeded as succeeded', () => {
+    const session = mapArgoWorkflowToSession(
+      cancelledDag('Failed', {
+        'fan-out-1': runningTaskGroup('fan-out-1', ['fan-out-1(0)']),
+        'fan-out-1(0)': startedPod(
+          'fan-out-1(0)',
+          'fan-out-1(0)',
+          '2024-01-01T00:00:02Z',
+        ),
+      }),
+    );
+
+    expect(session.steps[0].status).toBe('succeeded');
+  });
+
+  it('keeps a group that finished before the cancel and settles the cancelled one', () => {
+    const session = mapArgoWorkflowToSession(
+      cancelledDag('Failed', {
+        'fan-out-1': {
+          ...taskGroup(
+            'fan-out-1',
+            'fan-out-1',
+            ['fan-out-1(0)'],
+            '2024-01-01T00:00:01Z',
+          ),
+          finishedAt: '2024-01-01T00:00:10Z',
+        },
+        'fan-out-1(0)': startedPod(
+          'fan-out-1(0)',
+          'fan-out-1(0)',
+          '2024-01-01T00:00:02Z',
+        ),
+        'fan-out-2': {
+          ...runningTaskGroup('fan-out-2', ['fan-out-2(0)']),
+          startedAt: '2024-01-01T00:00:11Z',
+        },
+        'fan-out-2(0)': failedPod('fan-out-2(0)'),
+      }),
+    );
+
+    expect(
+      session.steps.map(step => [
+        step.displayName,
+        step.status,
+        step.finishedAt,
+      ]),
+    ).toEqual([
+      ['fan-out-1', 'succeeded', '2024-01-01T00:00:10Z'],
+      ['fan-out-2', 'failed', finishedAt],
+    ]);
+  });
+
+  it('settles a node that never started without inventing a duration', () => {
+    const session = mapArgoWorkflowToSession(
+      cancelledDag('Failed', {
+        'task-a': { ...pod('task-a', 'task-a'), phase: 'Pending' },
+      }),
+    );
+
+    expect(session.steps[0].status).toBe('failed');
+    expect(session.steps[0].duration).toBe('Not started');
+  });
+
+  it('keeps a node of a running workflow live', () => {
+    const session = mapArgoWorkflowToSession(
+      cancelledDag('Running', {
+        'fan-out-1': runningTaskGroup('fan-out-1', ['fan-out-1(0)']),
+        'fan-out-1(0)': {
+          ...startedPod('fan-out-1(0)', 'fan-out-1(0)', '2024-01-01T00:00:02Z'),
+          phase: 'Running',
+        },
+      }),
+    );
+
+    expect(session.steps[0].status).toBe('running');
+    expect(session.steps[0].finishedAt).toBeUndefined();
+    expect(session.steps[0].children?.[0].status).toBe('running');
+  });
+});
+
+describe('mapArgoWorkflowsToSessions', () => {
+  it('maps a list containing a status-less workflow without throwing', () => {
+    const workflows = [
+      makeWorkflow({
+        metadata: {
+          name: 'done',
+          namespace: 'default',
+          creationTimestamp: '2024-01-01T00:00:00Z',
+          uid: 'uid-done',
+        },
+        status: { phase: 'Succeeded', nodes: {} },
+      }),
+      makeWorkflow({
+        metadata: {
+          name: 'pending-no-status',
+          namespace: 'default',
+          creationTimestamp: '2024-01-02T00:00:00Z',
+          uid: 'uid-pending',
+        },
+        status: undefined,
+      }),
+    ];
+
+    const sessions = mapArgoWorkflowsToSessions(workflows);
+
+    expect(sessions).toHaveLength(2);
+    expect(sessions[0].status).toBe('succeeded');
+    expect(sessions[1].status).toBe('pending');
+    expect(sessions[1].startedAt).toBe('2024-01-02T00:00:00Z');
+  });
+
+  it('reuses the session of a terminal workflow object it already mapped', () => {
+    const unchanged = makeWorkflow({
+      metadata: {
+        name: 'unchanged',
+        namespace: 'default',
+        creationTimestamp: '2024-01-01T00:00:00Z',
+        uid: 'uid-unchanged',
+      },
+      status: {
+        phase: 'Succeeded',
+        startedAt: '2024-01-01T00:00:00Z',
+        finishedAt: '2024-01-01T00:01:00Z',
+        nodes: {},
+      },
+    });
+    const before = makeWorkflow({
+      metadata: {
+        name: 'polled',
+        namespace: 'default',
+        creationTimestamp: '2024-01-01T00:00:00Z',
+        uid: 'uid-polled',
+      },
+      status: { phase: 'Running', nodes: {} },
+    });
+    const after = makeWorkflow({
+      ...before,
+      status: { phase: 'Succeeded', nodes: {} },
+    });
+
+    const first = mapArgoWorkflowsToSessions([unchanged, before]);
+    const second = mapArgoWorkflowsToSessions([unchanged, after]);
+
+    expect(second[0]).toBe(first[0]);
+    expect(second[1]).not.toBe(first[1]);
+    expect(second[1].status).toBe('succeeded');
+  });
+
+  it.each(['Running', 'Pending'])(
+    'recomputes the duration of a %s workflow on every mapping',
+    phase => {
+      vi.useFakeTimers();
+      try {
+        vi.setSystemTime(new Date('2024-01-01T00:00:10Z'));
+        const active = makeWorkflow({
+          metadata: {
+            name: 'active',
+            namespace: 'default',
+            creationTimestamp: '2024-01-01T00:00:00Z',
+            uid: 'uid-active',
+          },
+          status: {
+            phase,
+            startedAt: '2024-01-01T00:00:00Z',
+            nodes: {},
+          },
+        });
+
+        const first = mapArgoWorkflowsToSessions([active]);
+        vi.setSystemTime(new Date('2024-01-01T00:00:25Z'));
+        const second = mapArgoWorkflowsToSessions([active]);
+
+        expect(first[0].duration).toBe('10s');
+        expect(second[0].duration).toBe('25s');
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+});
+
+describe('pod step namespace', () => {
+  function makePodWorkflow(namespace: string | undefined): ArgoWorkflow {
+    return makeWorkflow({
+      metadata: {
+        name: 'wf-1',
+        namespace,
+        creationTimestamp: '2024-01-01T00:00:00Z',
+        uid: 'uid-1',
+      },
+      status: {
+        phase: 'Succeeded',
+        startedAt: '2024-01-01T00:00:00Z',
+        finishedAt: '2024-01-01T00:01:00Z',
+        nodes: {
+          'wf-1': {
+            id: 'wf-1',
+            name: 'wf-1',
+            displayName: 'wf-1',
+            type: 'DAG',
+            phase: 'Succeeded',
+            children: ['wf-1-task-a'],
+          },
+          'wf-1-task-a': {
+            id: 'wf-1-task-a',
+            name: 'wf-1.task-a',
+            displayName: 'task-a',
+            type: 'Pod',
+            phase: 'Succeeded',
+            boundaryID: 'wf-1',
+            startedAt: '2024-01-01T00:00:05Z',
+            finishedAt: '2024-01-01T00:00:20Z',
+          },
+        },
+      },
+    } as Partial<ArgoWorkflow>);
+  }
+
+  it("carries the workflow's own namespace onto pod step details", () => {
+    const session = mapArgoWorkflowToSession(makePodWorkflow('tenant-alpha'));
+
+    expect(session.namespace).toBe('tenant-alpha');
+    expect(session.steps[0].detail?.namespace).toBe('tenant-alpha');
+  });
+
+  it('leaves the pod step namespace unset rather than assuming default', () => {
+    const session = mapArgoWorkflowToSession(makePodWorkflow(undefined));
+
+    expect(session.steps[0].detail?.namespace).toBeUndefined();
+  });
+});

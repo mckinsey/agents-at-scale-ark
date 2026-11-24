@@ -27,6 +27,36 @@ type ToolPartial struct {
 	Parameters []ToolFunction `json:"parameters,omitempty"`
 }
 
+type ArgumentMatch struct {
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	// Argument is the JSON field name in the tool call arguments to inspect (e.g. "path").
+	Argument string `json:"argument"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	// Pattern is a regular expression; approval is required when the argument value matches.
+	Pattern string `json:"pattern"`
+}
+
+type ToolApprovalConfig struct {
+	// +kubebuilder:validation:Optional
+	// Required indicates whether human approval is required before executing this tool
+	Required bool `json:"required,omitempty"`
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default="5m"
+	// Timeout specifies how long to wait for approval before timing out
+	Timeout *metav1.Duration `json:"timeout,omitempty"`
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Enum=reject;proceed
+	// +kubebuilder:default=reject
+	// OnTimeout specifies the action to take when approval times out: "reject" fails the query, "proceed" executes the tool
+	OnTimeout string `json:"onTimeout,omitempty"`
+	// +kubebuilder:validation:Optional
+	// ArgumentMatches narrows approval to calls whose arguments match one of these patterns.
+	// Empty means approval applies to every call of this tool.
+	ArgumentMatches []ArgumentMatch `json:"argumentMatches,omitempty"`
+}
+
 type AgentTool struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Enum=built-in;custom;mcp;http;agent;team;builtin
@@ -44,6 +74,9 @@ type AgentTool struct {
 	// from the agent. Parameters defined here are injected at runtime and are not visible or
 	// editable by the agent itself.
 	Partial *ToolPartial `json:"partial,omitempty"`
+	// +kubebuilder:validation:Optional
+	// Approval configuration for human-in-the-loop tool execution
+	Approval *ToolApprovalConfig `json:"approval,omitempty"`
 }
 
 // GetToolCRDName returns the actual Tool CRD name to lookup in Kubernetes.
@@ -119,8 +152,4 @@ type AgentList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []Agent `json:"items"`
-}
-
-func init() {
-	SchemeBuilder.Register(&Agent{}, &AgentList{})
 }

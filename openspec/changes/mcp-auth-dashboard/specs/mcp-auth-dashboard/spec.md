@@ -264,3 +264,31 @@ The **Sign out** action (shown when `authorization.state == Authorized`) SHALL o
 - **GIVEN** an `Authorized` server
 - **WHEN** the user clicks **Sign out** but dismisses the confirmation dialog
 - **THEN** the dashboard SHALL NOT call `auth/logout`
+
+### Requirement: auth/start provisions a default tokenSecretRef when absent
+
+`POST /api/v1/mcp-servers/{name}/auth/start` SHALL NOT require the operator to pre-set `spec.authorization.tokenSecretRef.name`. When the MCPServer has no `spec.authorization.tokenSecretRef.name`, `auth/start` SHALL patch the MCPServer to set it to `<name>-oauth` (the key overrides — `accessTokenKey`, etc. — take their CRD defaults) and then continue the flow using that Secret. An operator-set `tokenSecretRef.name` SHALL be preserved unchanged. The endpoint SHALL error only if the reference is still absent after the patch. This makes the dashboard **Authenticate** action work on a discovered OAuth-protected server with no manual `kubectl` step, and applies equally to the CLI.
+
+#### Scenario: Server without an authorization block is provisioned and proceeds
+
+- **GIVEN** a discovered MCPServer `notion` in state `Required` with no `spec.authorization`
+- **WHEN** `auth/start` is called
+- **THEN** ark-api SHALL patch `spec.authorization.tokenSecretRef.name` to `notion-oauth`
+- **AND** SHALL proceed to registration/authorization using that Secret rather than returning an error
+
+#### Scenario: Operator-set tokenSecretRef is preserved
+
+- **GIVEN** an MCPServer with `spec.authorization.tokenSecretRef.name == "custom-secret"`
+- **WHEN** `auth/start` is called
+- **THEN** ark-api SHALL NOT modify the reference and SHALL use `custom-secret`
+
+### Requirement: Local deployment completes dashboard flows without manual steps
+
+The local devspace deployment SHALL make the dashboard-driven OAuth flow work end to end with no manual `kubectl` commands. ark-api SHALL be reachable at the loopback callback host/port named by `ARK_API_PUBLIC_CALLBACK_URL` for the duration of `devspace dev` (via a devspace port-forward), so the browser's IdP redirect reaches the callback. `ARK_API_DASHBOARD_URL` SHALL default to the local dashboard host so the callback redirects back to the dashboard rather than rendering the HTML page. A loopback literal (`127.0.0.1`) is used for the callback so RFC 8252-strict IdPs accept it without TLS. Non-local deployments SHALL instead expose ark-api on a public `https` ingress and set both variables accordingly.
+
+#### Scenario: Dashboard authenticate succeeds with no manual step under devspace
+
+- **GIVEN** `devspace dev` is running and an OAuth-protected MCPServer exists in the dashboard
+- **WHEN** the user clicks **Authenticate** and approves at the IdP
+- **THEN** the browser SHALL reach the ark-api callback and be redirected to `<ARK_API_DASHBOARD_URL>/mcp`
+- **AND** the card SHALL transition to `Authorized` without any manual `kubectl patch` or `kubectl port-forward`

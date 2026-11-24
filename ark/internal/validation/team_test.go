@@ -8,6 +8,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	arka2a "mckinsey.com/ark/internal/a2a"
 )
 
 func TestValidateTeam(t *testing.T) { //nolint:gocognit
@@ -253,4 +254,195 @@ func TestValidateTeam(t *testing.T) { //nolint:gocognit
 			t.Fatal("expected error for loops on selector strategy")
 		}
 	})
+}
+
+func TestValidateTeamAcceptsMixedMembers(t *testing.T) {
+	engineAgent := func(engine string) *arkv1alpha1.Agent {
+		agent := &arkv1alpha1.Agent{}
+		if engine != "" {
+			agent.Spec.ExecutionEngine = &arkv1alpha1.ExecutionEngineRef{Name: engine}
+		}
+		return agent
+	}
+
+	tests := []struct {
+		name   string
+		agents map[string]*arkv1alpha1.Agent
+	}{
+		{
+			name:   "all internal agents",
+			agents: map[string]*arkv1alpha1.Agent{"a": engineAgent(""), "b": engineAgent("")},
+		},
+		{
+			name:   "all external agents",
+			agents: map[string]*arkv1alpha1.Agent{"a": engineAgent("mock-engine"), "b": engineAgent("mock-engine")},
+		},
+		{
+			name:   "a2a agent beside an internal agent",
+			agents: map[string]*arkv1alpha1.Agent{"a": engineAgent(arka2a.ExecutionEngineA2A), "b": engineAgent("")},
+		},
+		{
+			name:   "internal agent beside an engine-backed agent",
+			agents: map[string]*arkv1alpha1.Agent{"a": engineAgent(""), "b": engineAgent("mock-engine")},
+		},
+		{
+			name:   "a2a agent beside an engine-backed agent",
+			agents: map[string]*arkv1alpha1.Agent{"a": engineAgent(arka2a.ExecutionEngineA2A), "b": engineAgent("mock-engine")},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lookup := newMockLookup()
+			members := make([]arkv1alpha1.TeamMember, 0, len(tt.agents))
+			for _, name := range []string{"a", "b"} {
+				lookup.addResource("Agent", "default", name, tt.agents[name])
+				members = append(members, arkv1alpha1.TeamMember{Name: name, Type: "agent"})
+			}
+
+			team := &arkv1alpha1.Team{
+				ObjectMeta: metav1.ObjectMeta{Name: "t", Namespace: "default"},
+				Spec:       arkv1alpha1.TeamSpec{Strategy: "sequential", Members: members},
+			}
+
+			if _, err := NewValidator(lookup).ValidateTeam(context.Background(), team); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestValidateGraphForSelector(t *testing.T) {
+	members := []arkv1alpha1.TeamMember{
+		{Name: "researcher", Type: MemberTypeAgent},
+		{Name: "writer", Type: MemberTypeAgent},
+	}
+
+	tests := []struct {
+		name    string
+		graph   *arkv1alpha1.TeamGraphSpec
+		wantErr string
+	}{
+		{
+			name:    "nil graph",
+			graph:   nil,
+			wantErr: "graph constraint requires graph configuration",
+		},
+		{
+			name:    "no edges",
+			graph:   &arkv1alpha1.TeamGraphSpec{Edges: []arkv1alpha1.TeamGraphEdge{}},
+			wantErr: "graph constraint requires at least one edge",
+		},
+		{
+			name: "from member not in team",
+			graph: &arkv1alpha1.TeamGraphSpec{Edges: []arkv1alpha1.TeamGraphEdge{
+				{From: "researcher", To: "writer"},
+				{From: "ghost", To: "writer"},
+			}},
+			wantErr: "graph edge 1: 'from' member 'ghost' not found in team members",
+		},
+		{
+			name: "to member not in team",
+			graph: &arkv1alpha1.TeamGraphSpec{Edges: []arkv1alpha1.TeamGraphEdge{
+				{From: "researcher", To: "ghost"},
+			}},
+			wantErr: "graph edge 0: 'to' member 'ghost' not found in team members",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			team := &arkv1alpha1.Team{
+				ObjectMeta: metav1.ObjectMeta{Name: "t", Namespace: "default"},
+				Spec: arkv1alpha1.TeamSpec{
+					Strategy: StrategySelector,
+					Members:  members,
+					Graph:    tt.graph,
+				},
+			}
+
+			err := validateGraphForSelector(team)
+			if err == nil {
+				t.Fatalf("expected error %q, got nil", tt.wantErr)
+			}
+			if err.Error() != tt.wantErr {
+				t.Fatalf("expected error %q, got %q", tt.wantErr, err.Error())
+			}
+		})
+	}
+}
+
+func TestValidateGraphForSelectorAcceptsValidGraphs(t *testing.T) {
+	members := []arkv1alpha1.TeamMember{
+		{Name: "researcher", Type: MemberTypeAgent},
+		{Name: "writer", Type: MemberTypeAgent},
+		{Name: "reviewer", Type: MemberTypeAgent},
+		{Name: "editors", Type: MemberTypeTeam},
+	}
+
+	tests := []struct {
+		name  string
+		edges []arkv1alpha1.TeamGraphEdge
+	}{
+		{
+			name:  "single edge",
+			edges: []arkv1alpha1.TeamGraphEdge{{From: "researcher", To: "writer"}},
+		},
+		{
+			name: "linear chain",
+			edges: []arkv1alpha1.TeamGraphEdge{
+				{From: "researcher", To: "writer"},
+				{From: "writer", To: "reviewer"},
+			},
+		},
+		{
+			name: "fan out",
+			edges: []arkv1alpha1.TeamGraphEdge{
+				{From: "researcher", To: "writer"},
+				{From: "researcher", To: "reviewer"},
+			},
+		},
+		{
+			name: "fan in",
+			edges: []arkv1alpha1.TeamGraphEdge{
+				{From: "researcher", To: "reviewer"},
+				{From: "writer", To: "reviewer"},
+			},
+		},
+		{
+			name: "cycle",
+			edges: []arkv1alpha1.TeamGraphEdge{
+				{From: "writer", To: "reviewer"},
+				{From: "reviewer", To: "writer"},
+			},
+		},
+		{
+			name:  "self loop",
+			edges: []arkv1alpha1.TeamGraphEdge{{From: "writer", To: "writer"}},
+		},
+		{
+			name: "team member as endpoint",
+			edges: []arkv1alpha1.TeamGraphEdge{
+				{From: "researcher", To: "editors"},
+				{From: "editors", To: "writer"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			team := &arkv1alpha1.Team{
+				ObjectMeta: metav1.ObjectMeta{Name: "t", Namespace: "default"},
+				Spec: arkv1alpha1.TeamSpec{
+					Strategy: StrategySelector,
+					Members:  members,
+					Graph:    &arkv1alpha1.TeamGraphSpec{Edges: tt.edges},
+				},
+			}
+
+			if err := validateGraphForSelector(team); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
 }

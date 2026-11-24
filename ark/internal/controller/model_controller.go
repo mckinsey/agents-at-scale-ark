@@ -4,12 +4,12 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"math/rand"
 	"os"
 	"strconv"
 	"time"
 
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -28,6 +28,9 @@ import (
 const (
 	// Condition types
 	ModelAvailable = "ModelAvailable"
+
+	ModelProbeFailedReason  = "ModelProbeFailed"
+	BaseURLNotAllowedReason = "BaseURLNotAllowed"
 )
 
 type ModelReconciler struct {
@@ -68,13 +71,18 @@ func (r *ModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	pollInterval := getPollInterval(model.Spec.PollInterval)
 
 	if !result.Available {
-		changed, err := r.reconcileCondition(ctx, &model, ModelAvailable, metav1.ConditionFalse, "ModelProbeFailed", result.Message)
+		reason := result.Reason
+		if reason == "" {
+			reason = ModelProbeFailedReason
+		}
+		changed, err := r.reconcileCondition(ctx, &model, ModelAvailable, metav1.ConditionFalse, reason, result.Message)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
 		// Log every probe failure for visibility
 		log.Info("model probe failed",
 			"model", model.Name,
+			"reason", reason,
 			"status", result.Message,
 			"details", result.DetailedError)
 		// Only emit event when condition changes to avoid spamming
@@ -106,6 +114,15 @@ func (r *ModelReconciler) probeModel(ctx context.Context, model arkv1alpha1.Mode
 		Name:      model.Name,
 		Namespace: model.Namespace,
 	}, model.Namespace, nil, noopTelemetryRecorder, noopEventingRecorder)
+	var notAllowed *completions.BaseURLNotAllowedError
+	if errors.As(err, &notAllowed) {
+		return ProbeResult{
+			Available:     false,
+			Reason:        BaseURLNotAllowedReason,
+			Message:       notAllowed.Error(),
+			DetailedError: errors.Unwrap(notAllowed),
+		}
+	}
 	if err != nil {
 		return ProbeResult{
 			Available:     false,
@@ -146,18 +163,7 @@ func (r *ModelReconciler) reconcileCondition(ctx context.Context, model *arkv1al
 
 // updateStatus updates the Model status
 func (r *ModelReconciler) updateStatus(ctx context.Context, model *arkv1alpha1.Model) error {
-	if ctx.Err() != nil {
-		return nil
-	}
-
-	err := r.Status().Update(ctx, model)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return nil
-		}
-		logf.FromContext(ctx).Error(err, "failed to update model status")
-	}
-	return err
+	return updateStatusIgnoringDeleted(ctx, r.Client, model, "model")
 }
 
 func (r *ModelReconciler) SetupWithManager(mgr ctrl.Manager) error {

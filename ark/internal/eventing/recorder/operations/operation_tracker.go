@@ -49,6 +49,9 @@ func (ot *OperationTracker) InitializeQueryContext(ctx context.Context, query *a
 	}
 
 	conversationID := query.Status.ConversationId
+	if conversationID == "" {
+		conversationID = query.Spec.ConversationId
+	}
 
 	qd := &QueryDetails{
 		Query:          query,

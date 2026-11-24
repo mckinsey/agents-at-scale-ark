@@ -4,16 +4,20 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"time"
 
 	"golang.org/x/sync/semaphore"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/common"
 	"mckinsey.com/ark/internal/eventing"
 	"mckinsey.com/ark/internal/telemetry/routing"
 )
@@ -21,42 +25,39 @@ import (
 var log = logf.Log.WithName("eventing.broker")
 
 type Event struct {
-	Timestamp string                 `json:"timestamp"`
-	EventType string                 `json:"eventType"`
-	Reason    string                 `json:"reason"`
-	Message   string                 `json:"message"`
-	Data      map[string]interface{} `json:"data"`
+	Timestamp  string                 `json:"timestamp"`
+	EventType  string                 `json:"eventType"`
+	Reason     string                 `json:"reason"`
+	Message    string                 `json:"message"`
+	Data       map[string]interface{} `json:"data"`
+	TtlSeconds *int64                 `json:"ttl_seconds,omitempty"`
 }
 
 type BrokerEventEmitter struct {
 	httpClient *http.Client
-	endpoints  map[string]string
+	k8sClient  client.Client
 	sem        *semaphore.Weighted
+
+	// resolveEndpoint resolves the broker base URL for a namespace. Defaults
+	// to routing.ResolveBrokerEndpoint when nil; tests override it to avoid
+	// depending on real cluster DNS.
+	resolveEndpoint func(ctx context.Context, namespace string) (string, error)
 }
 
-func NewBrokerEventEmitter(endpoints []routing.BrokerEndpoint) eventing.EventEmitter {
-	endpointMap := make(map[string]string)
-	for _, ep := range endpoints {
-		endpointMap[ep.Namespace] = ep.Endpoint + "/events"
-	}
-
+// NewBrokerEventEmitter resolves the broker endpoint live, per event, via
+// routing.ResolveBrokerEndpoint — no endpoint list is cached up front, so a
+// namespace's ark-config-broker ConfigMap takes effect immediately, and a
+// namespace with no ConfigMap of its own gets no broker (see
+// ResolveBrokerEndpoint's doc comment for why there's no cross-namespace
+// fallback).
+func NewBrokerEventEmitter(k8sClient client.Client) eventing.EventEmitter {
 	return &BrokerEventEmitter{
 		httpClient: &http.Client{
 			Timeout: 5 * time.Second,
 		},
-		endpoints: endpointMap,
+		k8sClient: k8sClient,
 		sem:       semaphore.NewWeighted(64),
 	}
-}
-
-func (e *BrokerEventEmitter) getEndpointForNamespace(namespace string) string {
-	if endpoint, ok := e.endpoints[namespace]; ok {
-		return endpoint
-	}
-	for _, endpoint := range e.endpoints {
-		return endpoint
-	}
-	return ""
 }
 
 func (e *BrokerEventEmitter) EmitNormal(ctx context.Context, obj runtime.Object, reason, message string) {
@@ -73,12 +74,6 @@ func (e *BrokerEventEmitter) EmitStructured(ctx context.Context, obj runtime.Obj
 		return
 	}
 
-	endpoint := e.getEndpointForNamespace(query.Namespace)
-	if endpoint == "" {
-		log.V(1).Info("no broker endpoint for namespace, dropping event", "namespace", query.Namespace, "reason", reason)
-		return
-	}
-
 	dataMap, ok := data.(map[string]string)
 	if !ok && data != nil {
 		return
@@ -90,40 +85,71 @@ func (e *BrokerEventEmitter) EmitStructured(ctx context.Context, obj runtime.Obj
 	}
 
 	event := Event{
-		Timestamp: time.Now().Format(time.RFC3339Nano),
-		EventType: eventType,
-		Reason:    reason,
-		Message:   message,
-		Data:      eventData,
+		Timestamp:  time.Now().Format(time.RFC3339Nano),
+		EventType:  eventType,
+		Reason:     reason,
+		Message:    message,
+		Data:       eventData,
+		TtlSeconds: common.TtlSecondsFromQuery(query),
 	}
 
 	if e.sem.TryAcquire(1) {
 		go func() {
 			defer e.sem.Release(1)
-			e.sendEvent(context.WithoutCancel(ctx), endpoint, event)
+			e.sendEvent(context.WithoutCancel(ctx), query.Namespace, event)
 		}()
 	} else {
+		emitDroppedTotal.WithLabelValues(dropReasonSemaphoreFull).Inc()
 		log.V(1).Info("semaphore full, dropping event", "namespace", query.Namespace, "reason", reason)
 	}
 }
 
-func (e *BrokerEventEmitter) sendEvent(ctx context.Context, endpoint string, event Event) {
+func (e *BrokerEventEmitter) getEndpointForNamespace(ctx context.Context, namespace string) (string, error) {
+	if e.resolveEndpoint != nil {
+		return e.resolveEndpoint(ctx, namespace)
+	}
+	return routing.ResolveBrokerEndpoint(ctx, e.k8sClient, namespace)
+}
+
+func (e *BrokerEventEmitter) sendEvent(ctx context.Context, namespace string, event Event) {
+	baseURL, err := e.getEndpointForNamespace(ctx, namespace)
+	if err != nil {
+		emitDroppedTotal.WithLabelValues(dropReasonEndpointError).Inc()
+		log.Error(err, "failed to resolve broker endpoint", "namespace", namespace, "reason", event.Reason)
+		return
+	}
+	if baseURL == "" {
+		log.V(1).Info("no broker endpoint for namespace, dropping event", "namespace", namespace, "reason", event.Reason)
+		return
+	}
+	endpoint := baseURL + "/events"
+
 	body, err := json.Marshal(event)
 	if err != nil {
+		emitDroppedTotal.WithLabelValues(dropReasonMarshalError).Inc()
 		log.Error(err, "failed to marshal event")
 		return
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
+		emitDroppedTotal.WithLabelValues(dropReasonRequestError).Inc()
 		log.Error(err, "failed to create request", "endpoint", endpoint)
 		return
 	}
 
 	req.Header.Set("Content-Type", "application/json")
 
+	start := time.Now()
 	resp, err := e.httpClient.Do(req)
 	if err != nil {
+		reason := dropReasonHTTPError
+		var netErr net.Error
+		if errors.As(err, &netErr) && netErr.Timeout() {
+			reason = dropReasonTimeout
+		}
+		emitLatencySeconds.WithLabelValues(reason).Observe(time.Since(start).Seconds())
+		emitDroppedTotal.WithLabelValues(reason).Inc()
 		log.Error(err, "failed to send event to broker", "endpoint", endpoint)
 		return
 	}
@@ -134,6 +160,11 @@ func (e *BrokerEventEmitter) sendEvent(ctx context.Context, endpoint string, eve
 	}()
 
 	if resp.StatusCode != http.StatusCreated {
+		emitLatencySeconds.WithLabelValues(dropReasonBadStatus).Observe(time.Since(start).Seconds())
+		emitDroppedTotal.WithLabelValues(dropReasonBadStatus).Inc()
 		log.Error(fmt.Errorf("unexpected status code: %d", resp.StatusCode), "failed to send event to broker", "endpoint", endpoint)
+		return
 	}
+
+	emitLatencySeconds.WithLabelValues("ok").Observe(time.Since(start).Seconds())
 }

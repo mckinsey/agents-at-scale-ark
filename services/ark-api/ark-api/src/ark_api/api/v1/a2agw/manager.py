@@ -4,19 +4,30 @@ import logging
 import os
 import threading
 
-from a2a.server.apps import A2AStarletteApplication
 from a2a.server.request_handlers import DefaultRequestHandler
+from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes
 from a2a.server.tasks import InMemoryTaskStore
+from a2a.utils.constants import AGENT_CARD_WELL_KNOWN_PATH, DEFAULT_RPC_URL
 from ark_sdk.k8s import get_namespace, is_k8s
 from starlette.applications import Starlette
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from .execution import ARKAgentExecutor
-from .registry import get_registry
+from .registry import (
+    apply_forwarded_url,
+    external_forwarded_base_from_headers,
+    forwarded_base_ctx,
+    get_registry,
+)
 
 logger = logging.getLogger(__name__)
 
 POLL_INTERVAL = 30 if is_k8s() else int(os.getenv('A2A_POLL_INTERVAL_SECONDS', 3))
+
+# The 1.x a2a-sdk dropped this alias (a2a.utils.constants.PREV_AGENT_CARD_WELL_KNOWN_PATH
+# in 0.3.x); keep serving it ourselves so external A2A callers that only know
+# the pre-0.3 path still find agents through this gateway.
+PREV_AGENT_CARD_WELL_KNOWN_PATH = "/.well-known/agent.json"
 
 
 class ProxyApp:
@@ -41,8 +52,8 @@ class ProxyApp:
     1. Request arrives at FastAPI -> /agent/* 
     2. FastAPI routes to this ProxyApp (stable mount)
     3. ProxyApp forwards to current Starlette app (atomically swapped)
-    4. Starlette routes to specific agent's A2AStarletteApplication
-    5. A2AStarletteApplication handles the agent protocol
+    4. Starlette routes to the specific agent's A2A routes
+    5. The A2A JSON-RPC/agent-card routes handle the agent protocol
     """
     
     def __init__(self):
@@ -67,10 +78,28 @@ class ProxyApp:
             })
             return
         
+        # Publish the request's external base URL (derived from X-Forwarded-*
+        # headers) so the agent-card modifier can advertise a tenant-prefixed
+        # URL. Pure ASGI forwarding keeps us in the same task, so a contextvar
+        # set here is visible to the downstream agent-card handler.
+        token = None
+        if scope.get("type") == "http":
+            headers = {
+                key.decode("latin-1").lower(): value.decode("latin-1")
+                for key, value in scope.get("headers", [])
+            }
+            forwarded_base = external_forwarded_base_from_headers(headers)
+            if forwarded_base:
+                token = forwarded_base_ctx.set(forwarded_base)
+
         # Forward to current app - this is safe because we hold a reference
         # Even if set_app() is called during this await, we continue using
         # the app instance we already have
-        await app(scope, receive, send)
+        try:
+            await app(scope, receive, send)
+        finally:
+            if token is not None:
+                forwarded_base_ctx.reset(token)
     
     def set_app(self, app: ASGIApp):
         """Atomically replace the target app.
@@ -182,14 +211,24 @@ class DynamicManager:
             request_handler = DefaultRequestHandler(
                 agent_executor=ARKAgentExecutor(name, get_namespace()),
                 task_store=InMemoryTaskStore(),
-            )
-
-            server = A2AStarletteApplication(
                 agent_card=agent_card,
-                http_handler=request_handler
             )
 
-            new_app.mount(f"/{name}/", server.build())
+            routes = (
+                create_agent_card_routes(
+                    agent_card, card_modifier=apply_forwarded_url, card_url=AGENT_CARD_WELL_KNOWN_PATH
+                )
+                + create_agent_card_routes(
+                    agent_card, card_modifier=apply_forwarded_url, card_url=PREV_AGENT_CARD_WELL_KNOWN_PATH
+                )
+                + create_jsonrpc_routes(
+                    request_handler,
+                    rpc_url=DEFAULT_RPC_URL,
+                    enable_v0_3_compat=True,
+                )
+            )
+
+            new_app.mount(f"/{name}/", Starlette(routes=routes))
 
         # Atomically swap the entire app
         self.app.set_app(new_app)

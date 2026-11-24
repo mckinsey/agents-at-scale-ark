@@ -1,0 +1,92 @@
+'use client';
+
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { toast } from '@/components/ui/sonner';
+
+import { ResourceFormShell } from '@/components/forms/resource-form-shell';
+import { useNamespacedNavigation } from '@/lib/hooks/use-namespaced-navigation';
+import { mcpServersService } from '@/lib/services';
+import type { MCPServerCreateRequest } from '@/lib/services/mcp-servers';
+import { GET_ALL_MCP_SERVERS_QUERY_KEY } from '@/lib/services/mcp-servers-hooks';
+import { useNamespace } from '@/providers/NamespaceProvider';
+
+import { McpServerFields } from './mcp-server-fields';
+import type { AddressMode, FormValues } from './utils';
+import { buildSpec, createFormSchema, useHeaderRows } from './utils';
+
+const addressMode: AddressMode = { kind: 'configuration' };
+
+export function CreateMcpServerForm() {
+  const { push } = useNamespacedNavigation();
+  const { namespace, readOnlyMode } = useNamespace();
+  const queryClient = useQueryClient();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const headerRows = useHeaderRows();
+
+  const form = useForm<FormValues>({
+    mode: 'onChange',
+    resolver: zodResolver(createFormSchema(addressMode)),
+    defaultValues: {
+      name: '',
+      description: '',
+      configurationName: '',
+      transport: 'http',
+    },
+  });
+
+  const onSubmit = async (values: FormValues) => {
+    const nonEmptyHeaders = headerRows.validate();
+    if (!nonEmptyHeaders) {
+      return;
+    }
+
+    const createData: MCPServerCreateRequest = {
+      name: values.name,
+      namespace,
+      spec: buildSpec(values, nonEmptyHeaders, addressMode),
+    };
+
+    setIsSubmitting(true);
+    try {
+      await mcpServersService.create(namespace, createData);
+      queryClient.invalidateQueries({
+        queryKey: [GET_ALL_MCP_SERVERS_QUERY_KEY],
+      });
+      toast.success('MCP server created successfully');
+      push('/mcp');
+    } catch (error) {
+      toast.error('Failed to Create MCP', {
+        description:
+          error instanceof Error
+            ? error.message
+            : 'An unexpected error occurred',
+      });
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <ResourceFormShell
+      form={form}
+      backHref="/mcp"
+      backLabel="MCPs"
+      heading="Add New MCP Server"
+      subtitle="Fill in the information for the new mcp server."
+      breadcrumbCurrent="New MCP server"
+      submitLabel="Create MCP Server"
+      submittingLabel="Creating MCP Server..."
+      onSubmit={onSubmit}
+      saving={isSubmitting}
+      submitDisabled={readOnlyMode}
+      skeletonFields={[]}>
+      <McpServerFields
+        form={form}
+        headerRows={headerRows}
+        urlState={{ kind: 'create' }}
+      />
+    </ResourceFormShell>
+  );
+}

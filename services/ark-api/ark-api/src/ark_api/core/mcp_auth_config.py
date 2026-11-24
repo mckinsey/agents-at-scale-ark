@@ -17,6 +17,7 @@ from urllib.parse import urlsplit, urlunsplit
 logger = logging.getLogger(__name__)
 
 CALLBACK_PATH = "/v1/mcp/auth/callback"
+DASHBOARD_MCP_PATH = "/mcp"
 
 DEFAULT_CACHE_TTL_SECONDS = 600
 DEFAULT_DCR_TIMEOUT_SECONDS = 15
@@ -140,6 +141,48 @@ def _validate_callback_url(raw: str) -> str:
     return normalised
 
 
+def _validate_dashboard_url(raw: str) -> str:
+    """Validate and normalise ARK_API_DASHBOARD_URL.
+
+    Returns the base URL with any trailing slash stripped; the post-callback
+    redirect target is then ``<base>/mcp``. The value MUST be an absolute
+    ``https`` URL, or an ``http`` loopback host (``127.0.0.1``, ``[::1]``
+    bracketed per RFC 3986 §3.2.2, or ``localhost``) matching the
+    ARK_API_PUBLIC_CALLBACK_URL carve-out. Rejects unbracketed IPv6 literals
+    and non-HTTPS public hosts.
+    """
+    parts = urlsplit(raw)
+    if parts.scheme not in {"http", "https"}:
+        raise McpAuthConfigError(
+            f"ARK_API_DASHBOARD_URL scheme must be http or https (got {parts.scheme!r})"
+        )
+
+    netloc = parts.netloc
+    if not netloc:
+        raise McpAuthConfigError("ARK_API_DASHBOARD_URL is missing host")
+
+    host_in_netloc = netloc.split("@", 1)[-1]
+    if "[" not in host_in_netloc and host_in_netloc.count(":") >= 2:
+        raise McpAuthConfigError(
+            "ARK_API_DASHBOARD_URL must bracket IPv6 host literals "
+            "per RFC 3986 §3.2.2 (e.g. http://[::1]:3000)"
+        )
+
+    host = parts.hostname or ""
+    if not host:
+        raise McpAuthConfigError("ARK_API_DASHBOARD_URL is missing host")
+
+    if parts.scheme == "http" and not _is_loopback_host(host):
+        raise McpAuthConfigError(
+            "ARK_API_DASHBOARD_URL must be https unless host is a "
+            "loopback literal (127.0.0.1, [::1], or localhost); got host "
+            f"{host!r}"
+        )
+
+    path = (parts.path or "").rstrip("/")
+    return urlunsplit((parts.scheme, parts.netloc, path, "", ""))
+
+
 def _read_int(env: str, default: int) -> int:
     raw = os.environ.get(env)
     if raw is None or raw == "":
@@ -160,11 +203,13 @@ class McpAuthConfig:
         cache_ttl_seconds: int,
         dcr_timeout_seconds: int,
         token_timeout_seconds: int,
+        dashboard_url: str | None = None,
     ):
         self._public_callback_url = public_callback_url
         self.cache_ttl_seconds = cache_ttl_seconds
         self.dcr_timeout_seconds = dcr_timeout_seconds
         self.token_timeout_seconds = token_timeout_seconds
+        self._dashboard_url = dashboard_url
 
     @property
     def public_callback_url(self) -> str:
@@ -178,6 +223,21 @@ class McpAuthConfig:
     def is_callback_url_set(self) -> bool:
         return self._public_callback_url is not None
 
+    @property
+    def dashboard_url(self) -> str | None:
+        """The validated dashboard base URL, or None when unset."""
+        return self._dashboard_url
+
+    @property
+    def is_dashboard_url_set(self) -> bool:
+        return self._dashboard_url is not None
+
+    def dashboard_mcp_url(self) -> str | None:
+        """The dashboard ``/mcp`` page URL used as the post-callback redirect base."""
+        if self._dashboard_url is None:
+            return None
+        return self._dashboard_url + DASHBOARD_MCP_PATH
+
 
 def load_mcp_auth_config() -> McpAuthConfig:
     raw_callback = os.environ.get("ARK_API_PUBLIC_CALLBACK_URL", "").strip()
@@ -189,6 +249,18 @@ def load_mcp_auth_config() -> McpAuthConfig:
         callback_url = None
         logger.info("ARK_API_PUBLIC_CALLBACK_URL is unset; MCP auth endpoints will return 503")
 
+    raw_dashboard = os.environ.get("ARK_API_DASHBOARD_URL", "").strip()
+    dashboard_url: str | None
+    if raw_dashboard:
+        dashboard_url = _validate_dashboard_url(raw_dashboard)
+        logger.info("MCP auth dashboard redirect base URL: %s", dashboard_url)
+    else:
+        dashboard_url = None
+        logger.info(
+            "ARK_API_DASHBOARD_URL is unset; dashboard-initiated MCP auth flows "
+            "fall back to the HTML completion page"
+        )
+
     return McpAuthConfig(
         public_callback_url=callback_url,
         cache_ttl_seconds=_read_int("ARK_API_MCP_AUTH_CACHE_TTL_SECONDS", DEFAULT_CACHE_TTL_SECONDS),
@@ -196,6 +268,7 @@ def load_mcp_auth_config() -> McpAuthConfig:
         token_timeout_seconds=_read_int(
             "ARK_API_MCP_AUTH_TOKEN_TIMEOUT_SECONDS", DEFAULT_TOKEN_TIMEOUT_SECONDS
         ),
+        dashboard_url=dashboard_url,
     )
 
 

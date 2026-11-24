@@ -1,25 +1,9 @@
-import { MoreVerticalIcon, Trash } from 'lucide-react';
-import type { ReactNode } from 'react';
-import React, { useCallback, useState } from 'react';
+'use client';
 
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '@/components/ui/alert-dialog';
+import { useState } from 'react';
+
+import { ConfirmationDialog } from '@/components/dialogs/confirmation-dialog';
 import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import {
   useDeleteConversationMemory,
   useDeleteQueryMemory,
@@ -33,224 +17,86 @@ type Query = {
   queryId: string;
 };
 
-type DeleteQueryConfirmationDialogProps = {
-  onSuccess?: () => void;
-  query?: Query;
+type MemoryDeleteActionsProps = {
+  readonly selectedQuery?: Query;
+  readonly selectedConversation?: string | null;
+  readonly onSuccess?: () => void;
 };
 
-function DeleteQueryConfirmationDialog({
-  query,
-  onSuccess,
-}: DeleteQueryConfirmationDialogProps) {
-  const deleteQueryMemory = useDeleteQueryMemory();
-
-  const handleConfirmation = async () => {
-    if (query) {
-      deleteQueryMemory.mutate(query, {
-        onSuccess,
-      });
-    }
-  };
-
-  return (
-    <AlertDialogContent>
-      <AlertDialogHeader>
-        <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-        <AlertDialogDescription>
-          This action cannot be undone.
-          <br />
-          This will <span className="font-bold">permanently delete </span>
-          Query: <span className="font-bold">{query?.queryId}</span> from
-          Memory.
-        </AlertDialogDescription>
-      </AlertDialogHeader>
-      <AlertDialogFooter>
-        <AlertDialogCancel>Cancel</AlertDialogCancel>
-        <Button variant="destructive" asChild>
-          <AlertDialogAction onClick={handleConfirmation}>
-            Delete Query
-          </AlertDialogAction>
-        </Button>
-      </AlertDialogFooter>
-    </AlertDialogContent>
-  );
-}
-
-type DeleteConversationConfirmationDialogProps = {
-  onSuccess?: () => void;
-  conversationId?: string | null;
-};
-
-function DeleteConversationConfirmationDialog({
-  onSuccess,
-  conversationId,
-}: DeleteConversationConfirmationDialogProps) {
-  const deleteConversationMemory = useDeleteConversationMemory();
-
-  const handleConfirmation = async () => {
-    if (conversationId) {
-      deleteConversationMemory.mutate(conversationId, {
-        onSuccess,
-      });
-    }
-  };
-
-  return (
-    <AlertDialogContent>
-      <AlertDialogHeader>
-        <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-        <AlertDialogDescription>
-          This action cannot be undone.
-          <br />
-          This will <span className="font-bold">permanently delete </span>
-          Conversation: <span className="font-bold">{conversationId}</span> from
-          Memory.
-        </AlertDialogDescription>
-      </AlertDialogHeader>
-      <AlertDialogFooter>
-        <AlertDialogCancel>Cancel</AlertDialogCancel>
-        <Button variant="destructive" asChild>
-          <AlertDialogAction onClick={handleConfirmation}>
-            Delete Conversation
-          </AlertDialogAction>
-        </Button>
-      </AlertDialogFooter>
-    </AlertDialogContent>
-  );
-}
-
-type ResetMemoryConfirmationDialogProps = {
-  onSuccess?: () => void;
-};
-
-function ResetMemoryConfirmationDialog({
-  onSuccess,
-}: ResetMemoryConfirmationDialogProps) {
-  const resetMemory = useResetMemory();
-
-  const handleConfirmation = async () => {
-    resetMemory.mutate(undefined, {
-      onSuccess,
-    });
-  };
-
-  return (
-    <AlertDialogContent>
-      <AlertDialogHeader>
-        <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-        <AlertDialogDescription>
-          This action cannot be undone. This will{' '}
-          <span className="font-bold">permanently</span> reset Memory.
-        </AlertDialogDescription>
-      </AlertDialogHeader>
-      <AlertDialogFooter>
-        <AlertDialogCancel>Cancel</AlertDialogCancel>
-        <Button variant="destructive" asChild>
-          <AlertDialogAction onClick={handleConfirmation}>
-            Reset Memory
-          </AlertDialogAction>
-        </Button>
-      </AlertDialogFooter>
-    </AlertDialogContent>
-  );
-}
-
-type DeleteMemoryDropdownMenuProps = {
-  className?: string;
-  selectedQuery?: Query;
-  selectedConversation?: string | null;
-  onSuccess?: () => void;
-};
-
-export function DeleteMemoryDropdownMenu({
-  className,
+export function MemoryDeleteActions({
   selectedQuery,
   selectedConversation,
   onSuccess,
-}: DeleteMemoryDropdownMenuProps) {
-  const [
-    deleteConfirmationDialogToRender,
-    setDeleteConfirmationDialogToRender,
-  ] = useState<DeleteConfirmationType>(null);
+}: MemoryDeleteActionsProps) {
+  const [openDialog, setOpenDialog] = useState<DeleteConfirmationType>(null);
 
-  const renderConfirmationDialogs = useCallback((): ReactNode => {
-    switch (deleteConfirmationDialogToRender) {
-      case 'query':
-        return (
-          <DeleteQueryConfirmationDialog
-            query={selectedQuery}
-            onSuccess={onSuccess}
-          />
-        );
-      case 'conversation':
-        return (
-          <DeleteConversationConfirmationDialog
-            conversationId={selectedConversation}
-            onSuccess={onSuccess}
-          />
-        );
-      case 'reset':
-        return <ResetMemoryConfirmationDialog onSuccess={onSuccess} />;
-      default:
-        return null;
+  const deleteQueryMemory = useDeleteQueryMemory();
+  const deleteConversationMemory = useDeleteConversationMemory();
+  const resetMemory = useResetMemory();
+
+  const handleOpenChange = (open: boolean) => {
+    if (!open) setOpenDialog(null);
+  };
+
+  const handleDeleteQuery = () => {
+    if (selectedQuery) {
+      deleteQueryMemory.mutate(selectedQuery, { onSuccess });
     }
-  }, [
-    deleteConfirmationDialogToRender,
-    onSuccess,
-    selectedQuery,
-    selectedConversation,
-  ]);
+  };
 
-  const onSelectHandlerFactory = useCallback((type: DeleteConfirmationType) => {
-    return () => setDeleteConfirmationDialogToRender(type);
-  }, []);
+  const handleDeleteConversation = () => {
+    if (selectedConversation) {
+      deleteConversationMemory.mutate(selectedConversation, { onSuccess });
+    }
+  };
+
+  const handleResetMemory = () => {
+    resetMemory.mutate(undefined, { onSuccess });
+  };
 
   return (
-    <AlertDialog>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild className={className}>
-          <Button variant="outline">
-            <Trash className="h-4 w-4" />
-            Delete Records
-            <MoreVerticalIcon className="h-4 w-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-52">
-          <AlertDialogTrigger asChild>
-            <DropdownMenuItem
-              disabled={!selectedQuery}
-              onSelect={onSelectHandlerFactory('query')}>
-              <Trash className="text-muted-foreground h-4 w-4" />
-              <div className="min-w-0">
-                <div>Delete selected Query</div>
-                <span className="text-muted-foreground block truncate text-xs">
-                  {selectedQuery?.queryId}
-                </span>
-              </div>
-            </DropdownMenuItem>
-          </AlertDialogTrigger>
-          <AlertDialogTrigger asChild>
-            <DropdownMenuItem
-              disabled={!selectedConversation}
-              onSelect={onSelectHandlerFactory('conversation')}>
-              <Trash className="h-4 w-4" />
-              <div className="min-w-0">
-                <div>Delete selected Conversation</div>
-                <span className="text-muted-foreground block truncate text-xs">
-                  {selectedConversation}
-                </span>
-              </div>
-            </DropdownMenuItem>
-          </AlertDialogTrigger>
-          <AlertDialogTrigger asChild>
-            <DropdownMenuItem onSelect={onSelectHandlerFactory('reset')}>
-              <Trash className="h-4 w-4" />
-              Reset Memory
-            </DropdownMenuItem>
-          </AlertDialogTrigger>
-        </DropdownMenuContent>
-      </DropdownMenu>
-      {renderConfirmationDialogs()}
-    </AlertDialog>
+    <div className="flex items-center gap-3">
+      <Button
+        variant="outline"
+        disabled={!selectedQuery}
+        onClick={() => setOpenDialog('query')}>
+        Delete selected query
+      </Button>
+      <Button
+        variant="outline"
+        disabled={!selectedConversation}
+        onClick={() => setOpenDialog('conversation')}>
+        Delete selected conversation
+      </Button>
+      <Button onClick={() => setOpenDialog('reset')}>Reset memory</Button>
+
+      <ConfirmationDialog
+        open={openDialog === 'query'}
+        onOpenChange={handleOpenChange}
+        title="Delete selected query"
+        description={`This permanently deletes every message stored for query "${selectedQuery?.queryId}". This action cannot be undone.`}
+        confirmText="Delete query"
+        onConfirm={handleDeleteQuery}
+        variant="destructive"
+      />
+      <ConfirmationDialog
+        open={openDialog === 'conversation'}
+        onOpenChange={handleOpenChange}
+        title="Delete selected conversation"
+        description={`This permanently deletes every message stored for conversation "${selectedConversation}". This action cannot be undone.`}
+        confirmText="Delete conversation"
+        onConfirm={handleDeleteConversation}
+        variant="destructive"
+      />
+      <ConfirmationDialog
+        open={openDialog === 'reset'}
+        onOpenChange={handleOpenChange}
+        title="Reset memory"
+        description="This permanently deletes every message from every conversation in memory. This action cannot be undone."
+        confirmText="Reset memory"
+        onConfirm={handleResetMemory}
+        variant="destructive"
+      />
+    </div>
   );
 }

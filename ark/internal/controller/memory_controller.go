@@ -5,16 +5,25 @@ package controller
 import (
 	"context"
 	"fmt"
+	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/common"
 )
+
+// addressResolutionRetryInterval is the safety-net retry poll used when
+// address resolution fails; Watches handle the common recovery case.
+const addressResolutionRetryInterval = time.Minute
 
 // MemoryReconciler reconciles a Memory object
 type MemoryReconciler struct {
@@ -46,14 +55,12 @@ func (r *MemoryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	// State machine approach following MCPServer pattern
 	switch memory.Status.Phase {
-	case statusReady, statusError:
-		// Terminal states - no further processing needed
+	case statusReady:
 		return ctrl.Result{}, nil
-	case statusRunning:
-		// Continue processing
+	case statusRunning, statusError:
+		// error is retryable, not terminal
 		return r.processMemory(ctx, memory)
 	default:
-		// Initialize to running state
 		if err := r.updateStatus(ctx, memory, statusRunning, "Resolving memory address"); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -78,7 +85,7 @@ func (r *MemoryReconciler) processMemory(ctx context.Context, memory arkv1alpha1
 		if err := r.updateStatus(ctx, memory, statusError, fmt.Sprintf("Failed to resolve address: %v", err)); err != nil {
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{}, nil
+		return ctrl.Result{RequeueAfter: addressResolutionRetryInterval}, nil
 	}
 
 	// Update last resolved address in status
@@ -90,7 +97,7 @@ func (r *MemoryReconciler) processMemory(ctx context.Context, memory arkv1alpha1
 		if err := r.updateStatus(ctx, memory, statusError, fmt.Sprintf("Invalid address: %v", err)); err != nil {
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{}, nil
+		return ctrl.Result{RequeueAfter: addressResolutionRetryInterval}, nil
 	}
 
 	// Mark as ready
@@ -127,6 +134,34 @@ func (r *MemoryReconciler) validateMemoryAddress(address string) error {
 func (r *MemoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&arkv1alpha1.Memory{}).
+		Watches(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(r.mapSecretToMemories)).
+		Watches(&corev1.ConfigMap{}, handler.EnqueueRequestsFromMapFunc(r.mapConfigMapToMemories)).
 		Named("memory").
 		Complete(r)
+}
+
+// mapSecretToMemories enqueues Memories whose address references the Secret.
+func (r *MemoryReconciler) mapSecretToMemories(ctx context.Context, obj client.Object) []reconcile.Request {
+	return r.mapDependencyToMemories(ctx, obj, func(vf *arkv1alpha1.ValueFromSource) bool {
+		return vf.SecretKeyRef != nil && vf.SecretKeyRef.Name == obj.GetName()
+	})
+}
+
+// mapConfigMapToMemories enqueues Memories whose address references the ConfigMap.
+func (r *MemoryReconciler) mapConfigMapToMemories(ctx context.Context, obj client.Object) []reconcile.Request {
+	return r.mapDependencyToMemories(ctx, obj, func(vf *arkv1alpha1.ValueFromSource) bool {
+		return vf.ConfigMapKeyRef != nil && vf.ConfigMapKeyRef.Name == obj.GetName()
+	})
+}
+
+func (r *MemoryReconciler) mapDependencyToMemories(ctx context.Context, obj client.Object, matches func(*arkv1alpha1.ValueFromSource) bool) []reconcile.Request {
+	return mapDependencyRequests(ctx, r.Client, obj, &arkv1alpha1.MemoryList{},
+		func(l *arkv1alpha1.MemoryList) []arkv1alpha1.Memory { return l.Items },
+		func(m arkv1alpha1.Memory) bool {
+			vf := m.Spec.Address.ValueFrom
+			return vf != nil && matches(vf)
+		},
+		func(m arkv1alpha1.Memory) types.NamespacedName {
+			return types.NamespacedName{Name: m.Name, Namespace: m.Namespace}
+		})
 }

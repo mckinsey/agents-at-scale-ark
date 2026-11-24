@@ -1,7 +1,7 @@
-import { AlertCircle } from 'lucide-react';
-import { useMemo, useEffect } from 'react';
+import { useMemo } from 'react';
 import type { RefObject } from 'react';
 
+import type { TokenUsage } from '@/atoms/chat-history';
 import { ChatMessage } from '@/components/chat/chat-message';
 import { ConversationStoppedEvent } from '@/components/chat/conversation-stopped-event';
 import { GraphEnd } from '@/components/chat/graph-end';
@@ -11,8 +11,13 @@ import { SelectorFailureEvent } from '@/components/chat/selector-failure-event';
 import { SelectorTransition } from '@/components/chat/selector-transition';
 import { StrategyIndicator } from '@/components/chat/strategy-indicator';
 import { TerminationEvent } from '@/components/chat/termination-event';
-import type { TokenUsage } from '@/atoms/chat-history';
-import type { ChatMessage as ChatMessageType, ExtendedChatMessage, GraphEdge } from '@/lib/types/chat-message';
+import { ErrorIcon } from '@/components/icons';
+import { IconShell } from '@/components/ui/icon-shell';
+import type {
+  ChatMessage as ChatMessageType,
+  ExtendedChatMessage,
+  GraphEdge,
+} from '@/lib/types/chat-message';
 
 interface ChatMessageListProps {
   messages: ExtendedChatMessage[];
@@ -23,11 +28,13 @@ interface ChatMessageListProps {
   debugMode: boolean;
   isProcessing: boolean;
   processingPhase?: string;
-
+  statusText?: string;
+  isWaitingForApprovalResponse: boolean;
   error: string | null;
   viewMode?: 'text' | 'markdown';
   messagesEndRef: RefObject<HTMLDivElement | null>;
   messageTokenUsage?: Record<number, TokenUsage>;
+  pollAfterApproval: () => Promise<void>;
 }
 
 function extractMessageContent(msg: ChatMessageType): string {
@@ -105,7 +112,8 @@ function determineMessageFlags(
   const isMaxTurnsMessage =
     msg.role === 'system' && content.includes('maximum turns limit');
   const isSelectorFailureMessage =
-    msg.role === 'system' && content.includes('Selector returned invalid agent name');
+    msg.role === 'system' &&
+    content.includes('Selector returned invalid agent name');
   const isConversationStoppedMessage =
     msg.role === 'system' && content === 'Conversation stopped by user';
   const hasToolCalls =
@@ -137,11 +145,13 @@ export function ChatMessageList({
   debugMode,
   isProcessing,
   processingPhase,
-
+  statusText,
+  isWaitingForApprovalResponse,
   error,
   viewMode = 'markdown',
   messagesEndRef,
   messageTokenUsage,
+  pollAfterApproval,
 }: Readonly<ChatMessageListProps>) {
   const transitionMap = useMemo(() => {
     if (!graphEdges || graphEdges.length === 0)
@@ -183,6 +193,7 @@ export function ChatMessageList({
       hasToolCalls: boolean;
       hasContent: boolean;
       hasTermination: boolean;
+      hasApprovalRequest: boolean;
     }> = [];
 
     messages.forEach((message, index) => {
@@ -198,7 +209,8 @@ export function ChatMessageList({
         messages,
         index,
       );
-      const { terminateToolCall, terminateMessage } = extractTerminateInfo(toolCallsWithResults);
+      const { terminateToolCall, terminateMessage } =
+        extractTerminateInfo(toolCallsWithResults);
       const {
         isMaxTurnsMessage,
         isSelectorFailureMessage,
@@ -206,7 +218,15 @@ export function ChatMessageList({
         hasToolCalls,
         hasContent,
         hasTermination,
-      } = determineMessageFlags(msg, content, toolCallsWithResults, terminateToolCall, debugMode);
+      } = determineMessageFlags(
+        msg,
+        content,
+        toolCallsWithResults,
+        terminateToolCall,
+        debugMode,
+      );
+
+      const hasApprovalRequest = message.approvalRequest !== undefined;
 
       if (
         !hasToolCalls &&
@@ -214,7 +234,8 @@ export function ChatMessageList({
         !hasTermination &&
         !isMaxTurnsMessage &&
         !isSelectorFailureMessage &&
-        !isConversationStoppedMessage
+        !isConversationStoppedMessage &&
+        !hasApprovalRequest
       ) {
         return;
       }
@@ -241,12 +262,12 @@ export function ChatMessageList({
         hasToolCalls,
         hasContent,
         hasTermination,
+        hasApprovalRequest,
       });
     });
 
     return result;
   }, [messages, debugMode]);
-
 
   const lastAssistantName = useMemo(() => {
     if (!isGraphStrategy) return undefined;
@@ -258,6 +279,11 @@ export function ChatMessageList({
     }
     return undefined;
   }, [processedMessages, isGraphStrategy]);
+
+  const lastUserMessageIndex = useMemo(
+    () => messages.findLastIndex(message => message.role === 'user'),
+    [messages],
+  );
 
   const hasTerminationOrMaxTurns = useMemo(() => {
     return processedMessages.some(
@@ -287,14 +313,16 @@ export function ChatMessageList({
   return (
     <>
       {error && (
-        <div className="text-destructive bg-destructive/10 flex items-center gap-2 rounded-md p-3 text-sm">
-          <AlertCircle className="h-4 w-4 flex-shrink-0" />
+        <div className="text-status-error bg-status-error/10 flex items-center gap-2 p-3 text-sm">
+          <IconShell size="sm" className="flex-shrink-0">
+            <ErrorIcon />
+          </IconShell>
           <span>{error}</span>
         </div>
       )}
 
       {messages.length === 0 && !error && (
-        <div className="text-muted-foreground py-8 text-center">
+        <div className="text-fg-secondary py-8 text-center">
           Start a conversation with the {type}
         </div>
       )}
@@ -308,6 +336,7 @@ export function ChatMessageList({
 
       {processedMessages.map((pm, pmIndex) => {
         let transitionElement: React.ReactNode = null;
+        const isCollapsible = !isProcessing || pm.index <= lastUserMessageIndex;
 
         if (isGraphStrategy && pm.msg.role === 'assistant' && pm.senderName) {
           for (let j = pmIndex - 1; j >= 0; j--) {
@@ -370,6 +399,19 @@ export function ChatMessageList({
                 status={pm.message.metadata?.status}
                 queryName={pm.message.metadata?.queryName}
                 tokenUsage={messageTokenUsage?.[pm.index]}
+                approvalRequest={pm.message.approvalRequest}
+                pollAfterApproval={pollAfterApproval}
+                collapsible={isCollapsible}
+              />
+            )}
+            {!pm.hasContent && pm.message.approvalRequest && (
+              <ChatMessage
+                role="assistant"
+                content=""
+                viewMode={viewMode}
+                queryName={pm.message.metadata?.queryName}
+                approvalRequest={pm.message.approvalRequest}
+                pollAfterApproval={pollAfterApproval}
               />
             )}
             {pm.hasTermination && (
@@ -383,6 +425,7 @@ export function ChatMessageList({
                     content={pm.terminateMessage}
                     viewMode={viewMode}
                     sender={pm.senderName}
+                    collapsible={isCollapsible}
                   />
                 )}
               </div>
@@ -391,7 +434,7 @@ export function ChatMessageList({
               (isGraphStrategy || isSelectorStrategy ? (
                 <MaxTurnsEvent message={pm.content} />
               ) : (
-                <div className="text-muted-foreground text-sm italic">
+                <div className="text-fg-tertiary text-sm italic">
                   {pm.content}
                 </div>
               ))}
@@ -407,22 +450,41 @@ export function ChatMessageList({
 
       {isProcessing && (
         <div className="flex justify-start">
-          <div className="bg-muted max-w-[80%] rounded-lg px-3 py-2">
+          <div className="bg-surface-bg-secondary max-w-[80%] px-3 py-2">
             <div className="flex items-center gap-2">
               <div className="flex space-x-1">
-                <div className="h-2 w-2 animate-bounce rounded-full bg-gray-400"></div>
+                <div className="bg-fg-tertiary h-2 w-2 animate-bounce rounded-full"></div>
                 <div
-                  className="h-2 w-2 animate-bounce rounded-full bg-gray-400"
+                  className="bg-fg-tertiary h-2 w-2 animate-bounce rounded-full"
                   style={{ animationDelay: '0.1s' }}></div>
                 <div
-                  className="h-2 w-2 animate-bounce rounded-full bg-gray-400"
+                  className="bg-fg-tertiary h-2 w-2 animate-bounce rounded-full"
                   style={{ animationDelay: '0.2s' }}></div>
               </div>
-              {processingPhase === 'provisioning' && (
-                <span className="text-xs text-foreground">
-                  Preparing new workspace...
-                </span>
+              {statusText ? (
+                <span className="text-fg-secondary text-xs">{statusText}</span>
+              ) : (
+                processingPhase === 'provisioning' && (
+                  <span className="text-fg-secondary text-xs">
+                    Preparing new workspace...
+                  </span>
+                )
               )}
+            </div>
+          </div>
+        </div>
+      )}
+      {isWaitingForApprovalResponse && (
+        <div className="flex justify-start">
+          <div className="bg-muted max-w-[80%] rounded-lg px-3 py-2">
+            <div className="flex space-x-1">
+              <div className="h-2 w-2 animate-bounce rounded-full bg-gray-400"></div>
+              <div
+                className="h-2 w-2 animate-bounce rounded-full bg-gray-400"
+                style={{ animationDelay: '0.1s' }}></div>
+              <div
+                className="h-2 w-2 animate-bounce rounded-full bg-gray-400"
+                style={{ animationDelay: '0.2s' }}></div>
             </div>
           </div>
         </div>

@@ -23,6 +23,7 @@ export type GetEventsQueryRaw = {
 export const postEventBodySchema = z
   .object({
     data: z.object({queryId: z.string().min(1)}).passthrough(),
+    ttl_seconds: z.coerce.number().int().positive().optional(),
   })
   .passthrough();
 export type PostEventBody = z.infer<typeof postEventBodySchema>;

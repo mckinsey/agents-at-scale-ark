@@ -3,6 +3,8 @@ from datetime import datetime
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 
+from ark_api.utils.helpers import parse_iso_timestamp
+
 
 class EventResponse(BaseModel):
     """Response model for a single Kubernetes event."""
@@ -31,69 +33,46 @@ class EventListResponse(BaseModel):
 
 
 def event_to_response(event_dict: Dict[str, Any]) -> EventResponse:
-    """Convert Kubernetes event dict to EventResponse."""
+    """Convert Kubernetes event dict to EventResponse.
+
+    Events created through the events.k8s.io/v1 API leave the legacy core/v1
+    fields (first_timestamp, last_timestamp, count, source) empty and populate
+    event_time, series, and reporting_component/instance instead. Fall back to
+    those so the response is consistent regardless of which API produced the
+    event.
+    """
     metadata = event_dict.get("metadata", {})
-    
-    # Handle involved object
     involved_object = event_dict.get("involved_object", {})
-    
-    # Handle source
-    source = event_dict.get("source", {})
-    
-    # Parse timestamps
-    first_timestamp = None
-    last_timestamp = None
-    creation_timestamp = metadata.get("creation_timestamp")
+    source = event_dict.get("source") or {}
+    series = event_dict.get("series") or {}
 
-    # Handle first_timestamp
-    if event_dict.get("first_timestamp"):
-        ts = event_dict["first_timestamp"]
-        if isinstance(ts, str):
-            try:
-                first_timestamp = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-            except (ValueError, AttributeError):
-                pass
-        elif hasattr(ts, 'isoformat'):  # datetime object
-            first_timestamp = ts
+    creation_timestamp = parse_iso_timestamp(metadata.get("creation_timestamp")) or datetime.now()
+    event_time = parse_iso_timestamp(event_dict.get("event_time"))
+    series_last = parse_iso_timestamp(series.get("last_observed_time"))
 
-    # Handle last_timestamp
-    if event_dict.get("last_timestamp"):
-        ts = event_dict["last_timestamp"]
-        if isinstance(ts, str):
-            try:
-                last_timestamp = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-            except (ValueError, AttributeError):
-                pass
-        elif hasattr(ts, 'isoformat'):  # datetime object
-            last_timestamp = ts
+    first_timestamp = parse_iso_timestamp(event_dict.get("first_timestamp")) or event_time or creation_timestamp
+    last_timestamp = (
+        parse_iso_timestamp(event_dict.get("last_timestamp"))
+        or series_last
+        or event_time
+        or creation_timestamp
+    )
 
-    # Handle creation_timestamp
-    if creation_timestamp:
-        if isinstance(creation_timestamp, str):
-            try:
-                creation_timestamp = datetime.fromisoformat(creation_timestamp.replace("Z", "+00:00"))
-            except (ValueError, AttributeError):
-                creation_timestamp = datetime.now()
-        elif hasattr(creation_timestamp, 'isoformat'):  # datetime object
-            pass  # already a datetime
-    else:
-        creation_timestamp = datetime.now()
-    
     return EventResponse(
         name=metadata.get("name") or "",
         namespace=metadata.get("namespace") or "",
         type=event_dict.get("type") or "Normal",
         reason=event_dict.get("reason") or "",
         message=event_dict.get("message") or "",
-        source_component=source.get("component"),
-        source_host=source.get("host"),
+        source_component=source.get("component") or event_dict.get("reporting_component"),
+        source_host=source.get("host") or event_dict.get("reporting_instance"),
         involved_object_kind=involved_object.get("kind") or "",
         involved_object_name=involved_object.get("name") or "",
         involved_object_namespace=involved_object.get("namespace"),
         involved_object_uid=involved_object.get("uid"),
         first_timestamp=first_timestamp,
         last_timestamp=last_timestamp,
-        count=event_dict.get("count") or 1,
+        count=event_dict.get("count") or series.get("count") or 1,
         creation_timestamp=creation_timestamp,
         uid=metadata.get("uid") or ""
     )

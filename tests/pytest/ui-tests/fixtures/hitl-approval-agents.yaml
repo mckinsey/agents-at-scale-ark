@@ -1,0 +1,89 @@
+# Agents and tool backing the human-in-the-loop journeys.
+#
+# Both agents run on the suite's shared mock model, which is scripted to answer
+# a rollout request with a single call to hitl-protected-action (see
+# ../mock-llm-values.yaml). So one user message always parks the query in
+# input-required and puts one approval card in front of the tester. The tool
+# itself is served by mock-llm too, so approving it needs no outbound network.
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: hitl-protected-action
+  namespace: default
+spec:
+  type: http
+  description: Rolls out a release version to an environment
+  inputSchema:
+    type: object
+    properties:
+      target:
+        type: string
+        description: Environment to roll out to
+      version:
+        type: string
+        description: Release version to roll out
+    required:
+      - target
+      - version
+  http:
+    method: GET
+    timeout: 30s
+    url: http://mock-llm.default.svc.cluster.local:6556/hitl-protected-action?target={target}&version={version}
+---
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: hitl-approval-agent
+  namespace: default
+spec:
+  description: Rollout agent whose release tool needs human approval
+  prompt: |
+    You perform release rollouts, and the only way you can act is the
+    hitl-protected-action tool.
+
+    For every request, call hitl-protected-action exactly once, passing the
+    target environment and the release version the user asked for. Never
+    answer a rollout request without calling it first, and never ask the user
+    to confirm - approval is handled outside of this conversation.
+
+    Once you receive the tool result, reply with a single short sentence
+    saying what happened.
+  modelRef:
+    name: test-model-mock
+  tools:
+    - type: http
+      name: hitl-protected-action
+      approval:
+        required: true
+        timeout: 5m
+        onTimeout: reject
+---
+# Same agent, but with an approval window short enough for a test to let it
+# lapse on purpose.
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: hitl-expiring-agent
+  namespace: default
+spec:
+  description: Rollout agent whose approval window expires quickly
+  prompt: |
+    You perform release rollouts, and the only way you can act is the
+    hitl-protected-action tool.
+
+    For every request, call hitl-protected-action exactly once, passing the
+    target environment and the release version the user asked for. Never
+    answer a rollout request without calling it first, and never ask the user
+    to confirm - approval is handled outside of this conversation.
+
+    Once you receive the tool result, reply with a single short sentence
+    saying what happened.
+  modelRef:
+    name: test-model-mock
+  tools:
+    - type: http
+      name: hitl-protected-action
+      approval:
+        required: true
+        timeout: 20s
+        onTimeout: reject

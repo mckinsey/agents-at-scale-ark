@@ -6,17 +6,21 @@ from typing import Optional
 from ark_sdk.models.query_v1alpha1 import QueryV1alpha1
 from ark_sdk.models.query_v1alpha1_spec import QueryV1alpha1Spec
 from ark_sdk.impersonation import ImpersonationConfig
+from ark_sdk.secret_scope import SecretScope
 
 from ark_sdk.client import with_ark_client
 
 from ...auth.dependencies import get_impersonation_config
+from ...auth.secret_scope import get_secret_scope
+from ...services.personal_secret_refs import enforce_personal_secret_refs, query_override_header_allows
+from ...utils.helpers import parse_iso_timestamp
 
 from ...models.queries import (
     QueryResponse,
     QueryListResponse,
     QueryCreateRequest,
     QueryUpdateRequest,
-    QueryDetailResponse
+    QueryDetailResponse,
 )
 from .exceptions import handle_k8s_errors
 
@@ -33,11 +37,9 @@ NAMESPACE_QUERY_DESCRIPTION = "Namespace for this request (defaults to current c
 
 def query_to_response(query: dict) -> QueryResponse:
     """Convert a Kubernetes query object to response model."""
-    creation_timestamp = None
-    if "creationTimestamp" in query["metadata"]:
-        creation_timestamp = datetime.fromisoformat(
-            query["metadata"]["creationTimestamp"].replace("Z", "+00:00")
-        )
+    creation_timestamp = parse_iso_timestamp(
+        query["metadata"].get("creationTimestamp")
+    )
     
     # Get query type and determine input field
     spec = query["spec"]
@@ -132,11 +134,13 @@ def _extract_search_text(spec_input) -> str:
 def _creation_timestamp_key(item_dict: dict):
     """Sort key (timestamp, name). Missing timestamp sorts last when reversed."""
     meta = item_dict.get("metadata", {})
-    ts = meta.get("creationTimestamp")
     name = meta.get("name", "")
-    if not ts:
+    # A missing or unparseable creationTimestamp degrades to sort-last rather than
+    # raising: one malformed item must not 500 the entire list endpoint. k8s
+    # always sets a valid creationTimestamp, so None here means missing/corrupt.
+    dt = parse_iso_timestamp(meta.get("creationTimestamp"))
+    if dt is None:
         return (datetime.min.replace(tzinfo=timezone.utc), name)
-    dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
     return (dt, name)
 
 
@@ -185,6 +189,7 @@ async def create_query(
     query: QueryCreateRequest,
     namespace: Optional[str] = Query(None, description=NAMESPACE_QUERY_DESCRIPTION),
     impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
+    secret_scope: SecretScope = Depends(get_secret_scope),
 ) -> QueryDetailResponse:
     """Create a new query."""
     async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
@@ -237,7 +242,13 @@ async def create_query(
             metadata=metadata,
             spec=QueryV1alpha1Spec(**spec)
         )
-        
+        await enforce_personal_secret_refs(
+            query_resource.to_dict()["spec"],
+            namespace=namespace,
+            caller_scope=secret_scope,
+            allow=query_override_header_allows,
+        )
+
         created = await ark_client.queries.a_create(query_resource)
         
         return query_to_detail_response(created.to_dict())
@@ -261,6 +272,7 @@ async def update_query(
     query: QueryUpdateRequest,
     namespace: Optional[str] = Query(None, description=NAMESPACE_QUERY_DESCRIPTION),
     impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
+    secret_scope: SecretScope = Depends(get_secret_scope),
 ) -> QueryDetailResponse:
     """Update a specific query."""
     async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
@@ -300,7 +312,13 @@ async def update_query(
         
         # Create updated query object
         updated_query_obj = QueryV1alpha1(**current_dict)
-        
+        await enforce_personal_secret_refs(
+            updated_query_obj.to_dict()["spec"],
+            namespace=namespace,
+            caller_scope=secret_scope,
+            allow=query_override_header_allows,
+        )
+
         updated = await ark_client.queries.a_update(updated_query_obj)
         
         return query_to_detail_response(updated.to_dict())

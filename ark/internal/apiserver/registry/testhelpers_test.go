@@ -6,8 +6,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"strconv"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
@@ -22,8 +25,10 @@ const testAgentName = "test-agent"
 func testNS() string { return "default" } //nolint:goconst
 
 type mockBackend struct {
-	objects map[string]runtime.Object
-	err     error
+	objects    map[string]runtime.Object
+	err        error
+	requireErr error
+	requiredRV uint64
 }
 
 func newMockBackend() *mockBackend {
@@ -53,26 +58,39 @@ func (m *mockBackend) Get(ctx context.Context, kind, namespace, name string) (ru
 	key := m.key(kind, namespace, name)
 	obj, ok := m.objects[key]
 	if !ok {
-		return nil, errors.New("not found")
+		// The sentinel, matching the PostgreSQL backend: callers distinguish a genuine
+		// miss from a storage failure, and a plain error would make them indistinguishable.
+		return nil, storage.ErrNotFound
 	}
 	return obj, nil
 }
 
-func (m *mockBackend) List(ctx context.Context, kind, namespace string, opts storage.ListOptions) ([]runtime.Object, string, error) {
+func (m *mockBackend) List(ctx context.Context, kind, namespace string, opts storage.ListOptions) ([]runtime.Object, string, int64, error) {
 	if m.err != nil {
-		return nil, "", m.err
+		return nil, "", 0, m.err
+	}
+	if opts.FieldSelector != "" {
+		return nil, "", 0, fmt.Errorf("%w: field selector %q not yet implemented", storage.ErrInvalidRequest, opts.FieldSelector)
 	}
 	var result []runtime.Object
 	prefix := kind + "/"
 	if namespace != "" {
 		prefix = kind + "/" + namespace + "/"
 	}
+	// listRV is the numeric max over stored objects: this in-memory fake has no
+	// purge floor, so the head revision is simply the highest item RV.
+	var listRV int64
 	for key, obj := range m.objects {
 		if len(key) >= len(prefix) && key[:len(prefix)] == prefix {
 			result = append(result, obj)
+			if objMeta, err := meta.Accessor(obj); err == nil {
+				if n, perr := strconv.ParseInt(objMeta.GetResourceVersion(), 10, 64); perr == nil && n > listRV {
+					listRV = n
+				}
+			}
 		}
 	}
-	return result, "", nil
+	return result, "", listRV, nil
 }
 
 func (m *mockBackend) Update(ctx context.Context, kind, namespace, name string, obj runtime.Object) error {
@@ -104,11 +122,19 @@ func (m *mockBackend) Delete(ctx context.Context, kind, namespace, name string) 
 }
 
 func (m *mockBackend) Watch(ctx context.Context, kind, namespace string, opts storage.WatchOptions) (watch.Interface, error) {
+	if opts.FieldSelector != "" {
+		return nil, fmt.Errorf("%w: field selector %q not yet implemented", storage.ErrInvalidRequest, opts.FieldSelector)
+	}
 	return &mockWatcher{ch: make(chan watch.Event)}, nil
 }
 
 func (m *mockBackend) GetResourceVersion(ctx context.Context, kind, namespace, name string) (int64, error) {
 	return 1, nil
+}
+
+func (m *mockBackend) RequireResourceVersion(ctx context.Context, minRV uint64) error {
+	m.requiredRV = minRV
+	return m.requireErr
 }
 
 func (m *mockBackend) Cleanup(ctx context.Context, retention time.Duration) (int64, error) {

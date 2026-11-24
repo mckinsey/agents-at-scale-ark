@@ -1,0 +1,10 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: weather
+spec:
+  prompt: |
+    You are a Weather Agent. Answer questions about the weather.
+    Start your response with "WEATHER:" to identify your contribution.
+  modelRef:
+    name: test-model-mock

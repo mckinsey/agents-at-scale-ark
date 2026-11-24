@@ -1,7 +1,19 @@
 import {ArkApiClient, QueryTarget} from './arkApiClient.js';
 import {QUERY_ANNOTATIONS} from './constants.js';
+import type {QueryParameter, QueryStatus} from './types.js';
 
 export {QueryTarget};
+
+/** Best-effort human-readable error from a failed query's status. */
+function extractQueryError(status?: QueryStatus): string {
+  if (!status) return 'Query failed';
+  if (status.error) return status.error;
+  if (status.message) return status.message;
+  const condition = status.conditions?.find((c) => c.message);
+  if (condition?.message) return condition.message.trim();
+  if (status.response?.content) return status.response.content;
+  return 'Query failed';
+}
 
 export interface ChatConfig {
   streamingEnabled: boolean;
@@ -10,6 +22,7 @@ export interface ChatConfig {
   conversationId?: string;
   queryTimeout?: string;
   a2aContextId?: string;
+  parameters?: QueryParameter[];
 }
 
 export interface ToolCall {
@@ -63,16 +76,13 @@ export class ChatClient {
     if (config.a2aContextId) {
       annotations[QUERY_ANNOTATIONS.A2A_CONTEXT_ID] = config.a2aContextId;
     }
-    if (config.streamingEnabled && onChunk) {
-      annotations['ark.mckinsey.com/streaming-enabled'] = 'true';
-    }
-
     const queryResult = await this.arkApiClient.createQuery({
       input,
       target: {type: targetType, name: targetName},
       sessionId: config.sessionId,
       conversationId: config.conversationId,
       timeout: config.queryTimeout,
+      parameters: config.parameters,
       ...(Object.keys(annotations).length > 0
         ? {metadata: {annotations}}
         : {}),
@@ -82,9 +92,15 @@ export class ChatClient {
     if (!queryName) {
       throw new Error('Query creation did not return a name');
     }
+    const queryNamespace = (queryResult as {namespace?: string}).namespace;
 
     if (config.streamingEnabled && onChunk) {
-      return await this.pollStreamResponse(queryName, onChunk, signal);
+      return await this.pollStreamResponse(
+        queryName,
+        queryNamespace,
+        onChunk,
+        signal
+      );
     } else {
       return await this.pollResponse(queryName, onChunk, signal);
     }
@@ -101,10 +117,8 @@ export class ChatClient {
   ): Promise<string> {
     while (!signal?.aborted) {
       const query = (await this.arkApiClient.getQuery(queryName)) as {
-        status?: {
-          phase?: string;
+        status?: QueryStatus & {
           response?: {content?: string; raw?: string};
-          conversationId?: string;
         };
       };
 
@@ -144,7 +158,7 @@ export class ChatClient {
         }
 
         if (phase === 'error') {
-          throw new Error(content || 'Query failed');
+          throw new Error(extractQueryError(query.status));
         }
 
         return content;
@@ -158,6 +172,7 @@ export class ChatClient {
 
   private async pollStreamResponse(
     queryName: string,
+    queryNamespace: string | undefined,
     onChunk: (
       chunk: string,
       toolCalls?: ToolCall[],
@@ -166,8 +181,11 @@ export class ChatClient {
     signal?: AbortSignal
   ): Promise<string> {
     const baseUrl = this.arkApiClient.getBaseUrl();
+    const namespaceParam = queryNamespace
+      ? `&namespace=${encodeURIComponent(queryNamespace)}`
+      : '';
     const response = await fetch(
-      `${baseUrl}/v1/broker/chunks?watch=true&query-id=${queryName}`,
+      `${baseUrl}/v1/broker/chunks?watch=true&query-id=${queryName}${namespaceParam}`,
       {signal}
     );
 
@@ -249,6 +267,17 @@ export class ChatClient {
       }
     } finally {
       reader.releaseLock();
+    }
+
+    // Empty stream (no content, no tool calls) can mean the query errored — surface it.
+    if (!fullResponse && toolCallsById.size === 0 && !signal?.aborted) {
+      const query = (await this.arkApiClient.getQuery(queryName)) as
+        | {status?: QueryStatus}
+        | undefined;
+      const phase = query?.status?.phase;
+      if (phase === 'error' || phase === 'canceled') {
+        throw new Error(extractQueryError(query?.status));
+      }
     }
 
     return fullResponse;

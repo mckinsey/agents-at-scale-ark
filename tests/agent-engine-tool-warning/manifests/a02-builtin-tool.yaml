@@ -1,0 +1,16 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Tool
+metadata:
+  name: terminate
+spec:
+  type: builtin
+  description: "Terminates the conversation"
+  inputSchema:
+    type: object
+    properties:
+      response:
+        type: string
+        description: The response to send before terminating the conversation
+    required: ["response"]
+  builtin:
+    name: terminate

@@ -1,6 +1,6 @@
 # Ark Broker
 
-Event bus for Ark cluster communication. Stores messages, chunks, traces, events, and sessions. Default backend is in-memory; messages can be persisted to Postgres and completion chunks to Redis Streams.
+Event bus for Ark cluster communication. Stores messages, chunks, traces, events, and sessions. Default backend is in-memory; messages, events, and sessions can be persisted to Postgres, and completion chunks to Redis Streams.
 
 ## Quickstart
 
@@ -17,11 +17,17 @@ devspace dev
 # Run with Postgres message backend.
 BROKER_MESSAGE_BACKEND=postgres devspace dev
 
+# Run with Postgres event backend.
+BROKER_EVENT_BACKEND=postgres devspace dev
+
+# Run with Postgres sessions backend (requires the other two Postgres backends).
+BROKER_MESSAGE_BACKEND=postgres BROKER_EVENT_BACKEND=postgres BROKER_SESSIONS_BACKEND=postgres devspace dev
+
 # Run with Redis chunks backend.
 BROKER_CHUNK_BACKEND=redis devspace dev
 
-# Run with both backends active.
-BROKER_MESSAGE_BACKEND=postgres BROKER_CHUNK_BACKEND=redis devspace dev
+# All backends active at once (profiles are combinable).
+BROKER_MESSAGE_BACKEND=postgres BROKER_EVENT_BACKEND=postgres BROKER_SESSIONS_BACKEND=postgres BROKER_CHUNK_BACKEND=redis devspace dev
 ```
 
 ## Configuration
@@ -36,11 +42,17 @@ BROKER_MESSAGE_BACKEND=postgres BROKER_CHUNK_BACKEND=redis devspace dev
 | `MAX_SPANS` | `0` | Max trace spans to persist (0 = unlimited) |
 | `MAX_EVENTS` | `0` | Max events to persist (0 = unlimited) |
 | `MESSAGE_BACKEND` | `memory` | Message storage backend: `memory` or `postgres` |
-| `DATABASE_URL` | — | Postgres connection string. Required when `MESSAGE_BACKEND=postgres`. |
+| `EVENT_BACKEND` | `memory` | Event storage backend: `memory` or `postgres` |
+| `SESSIONS_BACKEND` | `memory` | Sessions storage backend: `memory` or `postgres`. `postgres` requires `MESSAGE_BACKEND=postgres` and `EVENT_BACKEND=postgres`. |
+| `DATABASE_URL` | — | Postgres connection string. Required when `MESSAGE_BACKEND=postgres`, `EVENT_BACKEND=postgres`, or `SESSIONS_BACKEND=postgres`. All three backends share the same pool. |
 | `DATABASE_POOL_MAX` | `10` | Max connections in the pool |
 | `DATABASE_CONNECT_TIMEOUT_MS` | `10000` | Connection timeout |
 | `DATABASE_STATEMENT_TIMEOUT_MS` | `30000` | Per-statement timeout |
 | `MESSAGE_VISIBILITY_TTL_SECONDS` | `2592000` | Default message TTL (30 days) |
+| `EVENT_VISIBILITY_TTL_SECONDS` | `2592000` | Default event TTL (30 days) |
+| `SESSIONS_VISIBILITY_TTL_SECONDS` | `2592000` | Session TTL (30 days), slid forward on each event or message. Must be >= the message and event TTLs. |
+| `ROW_REAP_INTERVAL_SECONDS` | `3600` | Interval between expired-row reaper runs. `0` disables the reaper. Max `2147483` (~24 days). |
+| `ROW_REAP_BATCH_SIZE` | `10000` | Rows deleted per `DELETE` statement while the reaper drains a backlog |
 | `DATABASE_DEBUG_QUERIES` | `false` | Log SQL queries at debug level (SQL text + param count, never values) |
 | `DATABASE_SSL_ROOT_CERT_PATH` | — | Path to the Postgres CA certificate file. When set, the broker passes it to the Postgres driver for server certificate verification. Set automatically by the Helm chart when `database.tls.enabled=true`. |
 | `CHUNK_BACKEND` | `memory` | Completion chunk storage backend: `memory` or `redis` |
@@ -53,35 +65,51 @@ BROKER_MESSAGE_BACKEND=postgres BROKER_CHUNK_BACKEND=redis devspace dev
 | `REDIS_CONNECT_TIMEOUT_MS` | `10000` | Redis connection timeout |
 | `REDIS_DEBUG_COMMANDS` | `false` | Log Redis connection lifecycle events at debug level (never logs payloads) |
 
-## Database backend
+## Database backend (messages, events, and sessions)
 
-Messages can survive pod restarts by opting in to Postgres storage.
+Messages, operation events, and sessions can survive pod restarts by opting in to Postgres storage. The three backends share a single `DATABASE_URL` and connection pool.
+
+Messages and events can be enabled independently. Sessions cannot: a session is materialized from both streams, so `SESSIONS_BACKEND=postgres` requires the other two to be `postgres` as well, and `SESSIONS_VISIBILITY_TTL_SECONDS` to be at least as long as the message and event TTLs. Both rules are checked at startup and the process exits with an explanatory message if they are not met.
+
+Sessions on Postgres are also shared across replicas: a write is announced with `NOTIFY` after its transaction commits, and every replica `LISTEN`s, so `GET /sessions?watch=true` delivers updates regardless of which replica produced them.
 
 ### Local development with devspace
 
 ```bash
+# Messages only.
 BROKER_MESSAGE_BACKEND=postgres devspace dev
+
+# Events only.
+BROKER_EVENT_BACKEND=postgres devspace dev
+
+# Messages and events.
+BROKER_MESSAGE_BACKEND=postgres BROKER_EVENT_BACKEND=postgres devspace dev
+
+# Sessions — the other two have to be set explicitly alongside it.
+BROKER_MESSAGE_BACKEND=postgres BROKER_EVENT_BACKEND=postgres BROKER_SESSIONS_BACKEND=postgres devspace dev
 ```
 
-This activates the `broker-postgres` profile, which:
+Activating any of these backends triggers the shared `postgres-infra` DevSpace profile, which:
 - Deploys `ark-storage-dev` (Postgres 16-alpine, service `ark-storage-dev`, database `ark`) in the `default` namespace and waits for it to be ready.
 - Builds the `ark-broker-migrate` init container image locally.
 - Sets `DATABASE_URL=postgres://postgres:arkdev123@ark-storage-dev:5432/ark?sslmode=disable` on the broker deployment.
 - Runs `golang-migrate` as an init container before the broker starts.
 
-The same var works standalone: `BROKER_MESSAGE_BACKEND=postgres devspace deploy`.
+The same vars work standalone: `BROKER_MESSAGE_BACKEND=postgres devspace deploy`.
 
 ### Enabling in Helm
 
 ```yaml
 backends:
-  message: postgres
+  message: postgres   # message and event can each be enabled on their own
+  event: postgres
+  sessions: postgres  # requires both of the above
 
 database:
   url: "postgres://user:password@host:5432/ark_broker"
 ```
 
-The chart deploys a `migrate/migrate` init container that applies pending migrations before the broker starts.
+The chart deploys a `migrate/migrate` init container that applies all pending migrations before the broker starts. The `messages`, `events`, `sessions`, and `session_queries` tables share the same schema.
 
 ### Running migrations locally
 
@@ -122,10 +150,10 @@ This activates the `broker-redis` profile, which:
 - Deploys `ark-redis-dev` (Redis 7-alpine, service `ark-redis-dev`, port 6379) in the `default` namespace and waits for it to be ready.
 - Sets `REDIS_URL=redis://:arkredisdev123@ark-redis-dev:6379` on the broker deployment.
 
-Both backends can be activated together:
+All backends can be activated together:
 
 ```bash
-BROKER_MESSAGE_BACKEND=postgres BROKER_CHUNK_BACKEND=redis devspace dev
+BROKER_MESSAGE_BACKEND=postgres BROKER_EVENT_BACKEND=postgres BROKER_SESSIONS_BACKEND=postgres BROKER_CHUNK_BACKEND=redis devspace dev
 ```
 
 ### Enabling in Helm

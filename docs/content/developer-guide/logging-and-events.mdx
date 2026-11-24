@@ -31,6 +31,8 @@ kubectl get events --field-selector involvedObject.kind=Query -o json | jq -r '.
 kubectl get events --field-selector reason=QueryExecutionComplete
 ```
 
+Operation events such as `QueryExecutionComplete` appear as Kubernetes Events only when no broker is configured for the namespace. See [Event and Logging Guidelines](#event-and-logging-guidelines).
+
 You can also view events in `k9s` with the `:events` command:
 
 ![Screenshot of the events view in k9s](./images/events-k9s.png)
@@ -69,7 +71,9 @@ As an example, query execution emits these events following the `{Operation}{Sta
 - `Normal/AgentExecutionComplete`: Agent execution completes with duration
 - `Normal/QueryExecutionComplete`: Query execution completes
 
-All events with structured data store it in the `ark.mckinsey.com/event-data` annotation as JSON.
+Where these events go depends on the broker configured for the Query's namespace. With a broker, the controller and the completions executor send operation events to it, and you can read them with `ark query ... -o events-pretty`, the dashboard, or `GET /v1/broker/events/{queryUid}` on Ark API. Without one, the controller writes its `QueryExecution*` events as Kubernetes Events, and the executor's events, such as `AgentExecution*`, `LLMCall*`, `ToolCall*` and `TeamMember*`, are dropped.
+
+Kubernetes Events with structured data store it in the `ark.mckinsey.com/event-data` annotation as JSON. Broker events carry the same fields in `data`.
 
 Use Logging For:
 
@@ -141,6 +145,18 @@ Warning  ModelProbeFailed  64s (x9 over 10m)  model-controller  The security tok
 ```
 
 The full details of the error can be stored in the logs instead.
+
+#### Unhandled error shapes
+
+Errors the controller does not recognize are still surfaced, not replaced with a generic message. `extractStableError` in `ark/internal/controller/model_probe.go` matches the known shapes first (context deadline, `*openai.Error`, `*smithyhttp.ResponseError`, context cancellation), then falls back to `stabilizeProbeError`, which returns the error text with the unstable parts removed:
+
+- Labelled identifiers and their values - `Trace ID`, `Correlation ID`, `Request ID`, `Activity ID`
+- Bare UUIDs and hex tokens of 16 characters or more
+- `Timestamp` values
+
+The result is collapsed to a single line and capped at 256 characters. Two attempts that differ only in these tokens produce the same message, so the condition converges after one status write.
+
+Extend `volatileTokenPatterns` when a provider introduces a new per-attempt identifier. Without it, a message that changes on every probe writes status, re-triggers reconciliation, and re-probes the provider.
 
 ## Log Verbosity Configuration
 

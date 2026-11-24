@@ -1,0 +1,14 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: hitl-file-write-confirm
+spec:
+  type: user
+  input: "Yes, I approve. Please create the file now."
+  target:
+    name: hitl-agent
+    type: agent
+  sessionId: hitl-file-session
+  conversationId: hitl-file-conv
+  memory:
+    name: default

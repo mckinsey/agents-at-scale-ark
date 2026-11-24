@@ -1,4 +1,4 @@
-FROM migrate/migrate:v4.19.1
+FROM migrate/migrate:v4.20.1
 
 LABEL org.opencontainers.image.title="ark-broker-migrate" \
       org.opencontainers.image.description="Applies database schema migrations for ark-broker using golang-migrate" \

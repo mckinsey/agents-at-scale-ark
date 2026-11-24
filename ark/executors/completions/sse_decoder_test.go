@@ -18,7 +18,6 @@ import (
 // using the keepalive-tolerant decoder, mirroring how openai-go decodes a
 // streaming response.
 func newSSEStream(body string) *ssestream.Stream[openai.ChatCompletionChunk] {
-	registerKeepaliveTolerantSSEDecoder()
 	res := &http.Response{
 		Header: http.Header{"Content-Type": []string{"text/event-stream"}},
 		Body:   io.NopCloser(strings.NewReader(body)),
@@ -85,4 +84,60 @@ func TestKeepaliveTolerantDecoder(t *testing.T) {
 			assert.Equal(t, tt.wantContent, got)
 		})
 	}
+}
+
+type stubRoundTripper struct {
+	contentType string
+}
+
+func (s *stubRoundTripper) RoundTrip(*http.Request) (*http.Response, error) {
+	header := http.Header{}
+	if s.contentType != "" {
+		header.Set("Content-Type", s.contentType)
+	}
+	return &http.Response{StatusCode: http.StatusOK, Header: header, Body: io.NopCloser(strings.NewReader(""))}, nil
+}
+
+func TestSSEContentTypeNormalizer(t *testing.T) {
+	tests := []struct {
+		name     string
+		incoming string
+		want     string
+	}{
+		{"bare event-stream untouched", "text/event-stream", "text/event-stream"},
+		{"lowercase charset canonicalized", "text/event-stream; charset=utf-8", "text/event-stream"},
+		{"uppercase charset canonicalized", "text/event-stream; charset=UTF-8", "text/event-stream"},
+		{"uppercase media type canonicalized", "Text/Event-Stream", "text/event-stream"},
+		{"non-sse left untouched", "application/json", "application/json"},
+		{"empty left untouched", "", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			normalizer := &sseContentTypeNormalizer{base: &stubRoundTripper{contentType: tt.incoming}}
+			req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://example.invalid", nil)
+			require.NoError(t, err)
+
+			resp, err := normalizer.RoundTrip(req)
+			require.NoError(t, err)
+			defer func() { _ = resp.Body.Close() }()
+
+			assert.Equal(t, tt.want, resp.Header.Get("Content-Type"))
+		})
+	}
+}
+
+func TestSSEContentTypeNormalizerRestoresTolerantDecoder(t *testing.T) {
+	normalizer := &sseContentTypeNormalizer{base: &stubRoundTripper{contentType: "text/event-stream; charset=UTF-8"}}
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://example.invalid", nil)
+	require.NoError(t, err)
+
+	resp, err := normalizer.RoundTrip(req)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+
+	resp.Body = io.NopCloser(strings.NewReader(": ping\n\ndata: [DONE]\n\n"))
+	decoder := ssestream.NewDecoder(resp)
+	_, ok := decoder.(*keepaliveTolerantDecoder)
+	assert.True(t, ok, "after normalization openai-go must select the keepalive-tolerant decoder")
 }

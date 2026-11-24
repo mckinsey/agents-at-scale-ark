@@ -6,6 +6,7 @@ import (
 	"os"
 	"testing"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
@@ -377,6 +378,44 @@ func TestValidateModel(t *testing.T) { //nolint:gocognit,gocyclo,cyclop
 		_, err := v.ValidateModel(ctx, model)
 		if err == nil {
 			t.Fatal("expected error for header without name")
+		}
+	})
+
+	t.Run("rejects duplicate header names ignoring case", func(t *testing.T) {
+		headers := []arkv1alpha1.Header{
+			{Name: "X-Tenant", Value: arkv1alpha1.HeaderValue{Value: "a"}},
+			{Name: "x-tenant", Value: arkv1alpha1.HeaderValue{Value: "b"}},
+		}
+		configs := map[string]arkv1alpha1.ModelConfig{
+			ProviderOpenAI: {OpenAI: &arkv1alpha1.OpenAIModelConfig{
+				BaseURL: arkv1alpha1.ValueSource{Value: "https://api.openai.com"},
+				APIKey:  arkv1alpha1.ValueSource{Value: "key"},
+				Headers: headers,
+			}},
+			ProviderAzure: {Azure: &arkv1alpha1.AzureModelConfig{
+				BaseURL: arkv1alpha1.ValueSource{Value: "https://my-resource.openai.azure.com"},
+				APIKey:  &arkv1alpha1.ValueSource{Value: "key"},
+				Headers: headers,
+			}},
+			ProviderAnthropic: {Anthropic: &arkv1alpha1.AnthropicModelConfig{
+				BaseURL: arkv1alpha1.ValueSource{Value: "https://api.anthropic.com"},
+				APIKey:  arkv1alpha1.ValueSource{Value: "sk-ant-test"},
+				Headers: headers,
+			}},
+		}
+		for provider, config := range configs {
+			model := &arkv1alpha1.Model{
+				ObjectMeta: metav1.ObjectMeta{Name: "m", Namespace: "default"},
+				Spec: arkv1alpha1.ModelSpec{
+					Model:    arkv1alpha1.ValueSource{Value: "m"},
+					Provider: provider,
+					Config:   config,
+				},
+			}
+			_, err := v.ValidateModel(ctx, model)
+			if err == nil || !contains(err.Error(), "duplicate header name: x-tenant") {
+				t.Fatalf("%s: expected duplicate header error, got %v", provider, err)
+			}
 		}
 	})
 
@@ -801,49 +840,136 @@ func TestValidateBaseURL(t *testing.T) { //nolint:gocognit,gocyclo,cyclop
 	})
 }
 
-func TestIsWhitelistedDomain(t *testing.T) {
-	whitelist := []string{"api.openai.com", "openai.azure.com", "amazonaws.com"}
+func TestValidateBedrockBaseURL(t *testing.T) {
+	bedrockModel := func(baseURL *arkv1alpha1.ValueSource) *arkv1alpha1.Model {
+		return &arkv1alpha1.Model{
+			ObjectMeta: metav1.ObjectMeta{Name: "m", Namespace: "default"},
+			Spec: arkv1alpha1.ModelSpec{
+				Model:    arkv1alpha1.ValueSource{Value: "claude"},
+				Provider: ProviderBedrock,
+				Config: arkv1alpha1.ModelConfig{
+					Bedrock: &arkv1alpha1.BedrockModelConfig{
+						Region:  &arkv1alpha1.ValueSource{Value: "us-east-1"},
+						BaseURL: baseURL,
+					},
+				},
+			},
+		}
+	}
 
 	tests := []struct {
-		name     string
-		hostname string
-		want     bool
+		name    string
+		baseURL *arkv1alpha1.ValueSource
+		wantErr string
 	}{
-		{"Exact match", "api.openai.com", true},
-		{"Subdomain", "my.openai.azure.com", true},
-		{"AWS subdomain bedrock", "bedrock-runtime.us-east-1.amazonaws.com", true},
-		{"Not in list", "evil.com", false},
+		{
+			name:    "direct https value is accepted",
+			baseURL: &arkv1alpha1.ValueSource{Value: "https://bedrock-runtime.us-east-1.amazonaws.com"},
+		},
+		{
+			name:    "value resolved from a secret is accepted",
+			baseURL: &arkv1alpha1.ValueSource{ValueFrom: &arkv1alpha1.ValueFromSource{SecretKeyRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "bedrock-secret"}, Key: "baseUrl"}}},
+		},
+		{
+			name:    "value resolved from a configmap is accepted",
+			baseURL: &arkv1alpha1.ValueSource{ValueFrom: &arkv1alpha1.ValueFromSource{ConfigMapKeyRef: &corev1.ConfigMapKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "bedrock-config"}, Key: "baseUrl"}}},
+		},
+		{
+			name:    "missing secret key is rejected",
+			baseURL: &arkv1alpha1.ValueSource{ValueFrom: &arkv1alpha1.ValueFromSource{SecretKeyRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "bedrock-secret"}, Key: "absent"}}},
+			wantErr: "spec.config.bedrock.baseUrl",
+		},
+		{
+			name:    "empty valueFrom is rejected as unresolvable",
+			baseURL: &arkv1alpha1.ValueSource{ValueFrom: &arkv1alpha1.ValueFromSource{}},
+			wantErr: "failed to resolve Bedrock BaseURL",
+		},
+		{
+			name:    "plain http is rejected",
+			baseURL: &arkv1alpha1.ValueSource{Value: "http://bedrock-runtime.us-east-1.amazonaws.com"},
+			wantErr: "spec.config.bedrock.baseUrl validation failed",
+		},
+		{
+			name:    "loopback host is rejected",
+			baseURL: &arkv1alpha1.ValueSource{Value: "https://127.0.0.1/v1"},
+			wantErr: "spec.config.bedrock.baseUrl validation failed",
+		},
+		{
+			name:    "private IP resolved from a secret is rejected",
+			baseURL: &arkv1alpha1.ValueSource{ValueFrom: &arkv1alpha1.ValueFromSource{SecretKeyRef: &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "bedrock-secret"}, Key: "privateUrl"}}},
+			wantErr: "spec.config.bedrock.baseUrl validation failed",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := isWhitelistedDomain(tt.hostname, whitelist)
-			if got != tt.want {
-				t.Errorf("isWhitelistedDomain(%s) = %v, want %v", tt.hostname, got, tt.want)
+			lookup := newMockLookup()
+			lookup.addSecret("default", "bedrock-secret", map[string][]byte{
+				"baseUrl":    []byte("https://bedrock-runtime.us-east-1.amazonaws.com"),
+				"privateUrl": []byte("https://10.0.0.1/v1"),
+			})
+			lookup.addConfigMap("default", "bedrock-config", map[string]string{
+				"baseUrl": "https://bedrock-runtime.eu-west-1.amazonaws.com",
+			})
+
+			_, err := NewValidator(lookup).ValidateModel(context.Background(), bedrockModel(tt.baseURL))
+
+			if tt.wantErr == "" {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("expected error containing %q, got nil", tt.wantErr)
+			}
+			if !contains(err.Error(), tt.wantErr) {
+				t.Fatalf("expected error containing %q, got %q", tt.wantErr, err.Error())
 			}
 		})
 	}
 }
 
-func TestMatchDomainPattern(t *testing.T) {
+func TestValidateBaseURLWithEmbeddedWildcardWhitelist(t *testing.T) {
+	t.Setenv("WHITELISTED_MODEL_DOMAINS", "api-*.example.com")
+
 	tests := []struct {
-		name     string
-		hostname string
-		pattern  string
-		want     bool
+		name      string
+		url       string
+		wantError bool
 	}{
-		{"Wildcard prefix match", "llm.prod.example.com", "*.prod.example.com", true},
-		{"Wildcard base match", "prod.example.com", "*.prod.example.com", true},
-		{"Wildcard no match", "dev.example.com", "*.prod.example.com", false},
-		{"Exact match", "api.openai.com", "api.openai.com", true},
-		{"Subdomain match", "sub.example.com", "example.com", true},
+		{"allowed host", "https://api-eu.example.com/v1", false},
+		{"host outside pattern", "https://api-eu.evil.com/v1", true},
+		{"pattern suffix appended to attacker domain", "https://api-eu.example.com.evil.com/v1", true},
+		{"uppercase host is lowered before matching", "https://API-EU.EXAMPLE.COM/v1", false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := matchDomainPattern(tt.hostname, tt.pattern)
-			if got != tt.want {
-				t.Errorf("matchDomainPattern(%s, %s) = %v, want %v", tt.hostname, tt.pattern, got, tt.want)
+			err := ValidateBaseURL(tt.url)
+			if (err != nil) != tt.wantError {
+				t.Errorf("ValidateBaseURL(%s) error = %v, wantError %v", tt.url, err, tt.wantError)
+			}
+		})
+	}
+}
+
+func TestValidateBaseURLBareWildcardStillBlocksIPTargets(t *testing.T) {
+	t.Setenv("WHITELISTED_MODEL_DOMAINS", "*")
+
+	tests := []struct {
+		name string
+		url  string
+	}{
+		{"metadata service", "https://169.254.169.254/latest/meta-data"},
+		{"loopback", "https://127.0.0.1/v1"},
+		{"private range", "https://10.0.0.1/v1"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := ValidateBaseURL(tt.url); err == nil {
+				t.Errorf("ValidateBaseURL(%s) = nil, want error even with a bare wildcard whitelist", tt.url)
 			}
 		})
 	}

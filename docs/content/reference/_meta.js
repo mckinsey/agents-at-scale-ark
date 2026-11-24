@@ -1,11 +1,8 @@
 export default {
   '---interfaces': { type: 'separator', title: 'Interfaces' },
-  'api-specifications': 'API Specifications',
-  'ark-apis': 'Ark APIs',
-  'resources-api': 'Resources API',
+  'ark-apis': 'Ark API',
+  'broker': 'Broker Service',
 
-  '---crds': { type: 'separator', title: 'Kubernetes API' },
-  crds: 'Custom Resource Definitions',
   resources: 'Resources',
   'marketplace-sources': 'Marketplace Sources',
 
@@ -17,7 +14,6 @@ export default {
   '---ops': { type: 'separator', title: 'Operations' },
   upgrading: 'Upgrading',
   troubleshooting: 'Troubleshooting',
-  'utility-images': 'Utility Images',
   'release-process': 'Release Process and Artifacts',
   'secure-sdlc': 'Secure Software Development Lifecycle',
   'secure-software-architecture': 'Secure Software Architecture',
@@ -30,6 +26,10 @@ export default {
   'data-flow': {
     title: 'Data flow and encryption',
     href: '/operations-guide/data-flow-and-encryption'
+  },
+  'logging-contract': {
+    title: 'Logging contract',
+    href: '/operations-guide/logging-contract'
   },
 
   '---project': { type: 'separator', title: 'Project' },

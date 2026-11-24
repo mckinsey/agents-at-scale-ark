@@ -11,6 +11,10 @@ const mockAgents: Agent[] = [
   { id: 'a3', name: 'agent-3' } as Agent,
 ];
 
+const openPopover = async (user: ReturnType<typeof userEvent.setup>) => {
+  await user.click(screen.getByRole('combobox'));
+};
+
 describe('MembersSection', () => {
   it('should render heading', () => {
     render(
@@ -54,7 +58,8 @@ describe('MembersSection', () => {
     expect(screen.getByText('2 members selected')).toBeInTheDocument();
   });
 
-  it('should render agent names', () => {
+  it('should render agent names when opened', async () => {
+    const user = userEvent.setup();
     render(
       <MembersSection
         agents={mockAgents}
@@ -64,12 +69,14 @@ describe('MembersSection', () => {
         onDeleteUnavailable={vi.fn()}
       />,
     );
+    await openPopover(user);
     expect(screen.getByText('agent-1')).toBeInTheDocument();
     expect(screen.getByText('agent-2')).toBeInTheDocument();
     expect(screen.getByText('agent-3')).toBeInTheDocument();
   });
 
-  it('should render agent descriptions', () => {
+  it('should show a checkbox for each agent when opened', async () => {
+    const user = userEvent.setup();
     render(
       <MembersSection
         agents={mockAgents}
@@ -79,25 +86,13 @@ describe('MembersSection', () => {
         onDeleteUnavailable={vi.fn()}
       />,
     );
-    expect(screen.getByText('First agent')).toBeInTheDocument();
-    expect(screen.getByText('Second agent')).toBeInTheDocument();
-  });
-
-  it('should show checkboxes for each agent', () => {
-    render(
-      <MembersSection
-        agents={mockAgents}
-        selectedMembers={[]}
-        unavailableMembers={[]}
-        onMembersChange={vi.fn()}
-        onDeleteUnavailable={vi.fn()}
-      />,
-    );
+    await openPopover(user);
     const checkboxes = screen.getAllByRole('checkbox');
     expect(checkboxes).toHaveLength(3);
   });
 
-  it('should check selected members', () => {
+  it('should check selected members when opened', async () => {
+    const user = userEvent.setup();
     render(
       <MembersSection
         agents={mockAgents}
@@ -107,6 +102,7 @@ describe('MembersSection', () => {
         onDeleteUnavailable={vi.fn()}
       />,
     );
+    await openPopover(user);
     const checkboxes = screen.getAllByRole('checkbox');
     expect(checkboxes[0]).toBeChecked();
     expect(checkboxes[1]).not.toBeChecked();
@@ -125,6 +121,7 @@ describe('MembersSection', () => {
       />,
     );
 
+    await openPopover(user);
     const checkboxes = screen.getAllByRole('checkbox');
     await user.click(checkboxes[0]);
 
@@ -146,32 +143,27 @@ describe('MembersSection', () => {
       />,
     );
 
+    await openPopover(user);
     const checkboxes = screen.getAllByRole('checkbox');
     await user.click(checkboxes[0]);
 
     expect(onMembersChange).toHaveBeenCalledWith([]);
   });
 
-  it('should show unavailable members section when present', () => {
-    const unavailableMembers: TeamMember[] = [
-      { name: 'missing-agent', type: 'agent' },
-    ];
-
+  it('should render selected members as tags in the trigger', () => {
     render(
       <MembersSection
         agents={mockAgents}
-        selectedMembers={[{ name: 'missing-agent', type: 'agent' }]}
-        unavailableMembers={unavailableMembers}
+        selectedMembers={[{ name: 'agent-1', type: 'agent' }]}
+        unavailableMembers={[]}
         onMembersChange={vi.fn()}
         onDeleteUnavailable={vi.fn()}
       />,
     );
-
-    expect(screen.getByText('Unavailable Members')).toBeInTheDocument();
-    expect(screen.getByText('missing-agent')).toBeInTheDocument();
+    expect(screen.getByText('agent-1')).toBeInTheDocument();
   });
 
-  it('should call onDeleteUnavailable when delete button is clicked', async () => {
+  it('should call onDeleteUnavailable when removing an unavailable member tag', async () => {
     const onDeleteUnavailable = vi.fn();
     const unavailableMembers: TeamMember[] = [
       { name: 'missing-agent', type: 'agent' },
@@ -188,26 +180,12 @@ describe('MembersSection', () => {
       />,
     );
 
-    await user.click(screen.getByLabelText('Delete member'));
+    expect(screen.getByText('missing-agent')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /remove/i }));
 
     expect(onDeleteUnavailable).toHaveBeenCalledWith({
       name: 'missing-agent',
       type: 'agent',
     });
-  });
-
-  it('should order selected members before unselected', () => {
-    render(
-      <MembersSection
-        agents={mockAgents}
-        selectedMembers={[{ name: 'agent-3', type: 'agent' }]}
-        unavailableMembers={[]}
-        onMembersChange={vi.fn()}
-        onDeleteUnavailable={vi.fn()}
-      />,
-    );
-
-    const checkboxes = screen.getAllByRole('checkbox');
-    expect(checkboxes[0]).toBeChecked();
   });
 });

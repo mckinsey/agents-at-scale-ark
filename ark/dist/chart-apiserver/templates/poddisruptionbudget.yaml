@@ -1,0 +1,14 @@
+{{- if and (.Values.podDisruptionBudget).enabled (gt (int .Values.replicas) 1) }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: ark-apiserver
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ark-apiserver.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "ark-apiserver.selectorLabels" . | nindent 6 }}
+{{- end }}

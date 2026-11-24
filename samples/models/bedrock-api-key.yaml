@@ -1,0 +1,18 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Model
+metadata:
+  name: bedrock-api-key
+spec:
+  provider: bedrock
+  type: completions
+  model:
+    value: "us.anthropic.claude-3-5-haiku-20241022-v1:0"
+  config:
+    bedrock:
+      region:
+        value: "us-west-2"
+      apiKey:
+        valueFrom:
+          secretKeyRef:
+            name: bedrock-credentials
+            key: bedrock-api-key

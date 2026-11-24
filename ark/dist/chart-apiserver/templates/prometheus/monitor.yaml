@@ -1,0 +1,25 @@
+{{- if and .Values.metrics.enabled .Values.metrics.serviceMonitor.enabled (.Capabilities.APIVersions.Has "monitoring.coreos.com/v1") }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: ark-apiserver-metrics-monitor
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ark-apiserver.labels" . | nindent 4 }}
+spec:
+  endpoints:
+    - path: /metrics
+      port: metrics
+      interval: {{ .Values.metrics.serviceMonitor.interval }}
+      {{- if .Values.metrics.secure }}
+      scheme: https
+      bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+      tlsConfig:
+        # The metrics server uses an ephemeral self-signed cert with no CA to
+        # verify against, so skip verification (still TLS on the wire).
+        insecureSkipVerify: true
+      {{- end }}
+  selector:
+    matchLabels:
+      {{- include "ark-apiserver.selectorLabels" . | nindent 6 }}
+{{- end }}

@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ark-config-broker
+  namespace: ($namespace)
+data:
+  enabled: "true"
+  serviceRef: |
+    name: ark-broker
+    namespace: default
+    port: "http"

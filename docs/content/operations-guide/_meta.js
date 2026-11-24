@@ -5,6 +5,7 @@ export default {
   'postgres-storage-backend': 'PostgreSQL Storage Backend',
   'tenant-namespace-management': 'Tenant and Namespace Management',
   'multi-tenant-dashboard-hosting': 'Multi-Tenant Dashboard Hosting',
+  workflows: 'Workflows',
   marketplace: 'Marketplace',
   monitoring: 'Monitoring',
   'disaster-recovery': 'Disaster Recovery',
@@ -16,7 +17,9 @@ export default {
   'build-pipelines': 'Build Pipelines',
 
   '---security': { type: 'separator', title: 'Security and assurance' },
+  'audit-trail': 'Audit Trail',
   'data-flow-and-encryption': 'Data Flow and Encryption',
+  'logging-contract': 'Logging Contract',
   'model-url-security': 'Model URL Security',
   'penetration-testing-reports': 'Penetration Testing Reports',
 

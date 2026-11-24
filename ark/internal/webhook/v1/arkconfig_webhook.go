@@ -11,7 +11,7 @@ import (
 
 func SetupArkConfigWebhookWithManager(mgr ctrl.Manager) error {
 	v := validation.NewValidator(&validation.WebhookLookup{Client: mgr.GetClient()})
-	return ctrl.NewWebhookManagedBy(mgr).For(&arkv1alpha1.ArkConfig{}).
-		WithValidator(&validation.WebhookValidator{V: v}).
+	return ctrl.NewWebhookManagedBy(mgr, &arkv1alpha1.ArkConfig{}).
+		WithValidator(&validation.WebhookValidator[*arkv1alpha1.ArkConfig]{V: v}).
 		Complete()
 }

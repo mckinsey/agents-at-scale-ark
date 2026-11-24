@@ -14,8 +14,11 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
+	"github.com/modelcontextprotocol/go-sdk/auth"
 	"github.com/modelcontextprotocol/go-sdk/oauthex"
 )
 
@@ -59,27 +62,40 @@ func FetchProtectedResourceMetadata(ctx context.Context, metadataURL, resourceUR
 	return prm, nil
 }
 
-// FetchAuthorizationServerMetadata delegates to oauthex, which derives
-// the RFC 8414 well-known URL for the issuer and validates the
-// response.
+// FetchAuthorizationServerMetadata resolves the issuer's metadata through
+// the well-known candidates mandated by the MCP authorization
+// specification: RFC 8414 with path insertion, then OpenID Connect
+// discovery. An issuer with a path component that only publishes the
+// legacy path-appended RFC 8414 document is tried last. Returns nil, nil
+// when no candidate is published.
 func FetchAuthorizationServerMetadata(ctx context.Context, issuer string, timeout time.Duration) (*AuthorizationServerMetadata, error) {
-	metadataURL := buildAuthServerMetadataURL(issuer)
-	asm, err := oauthex.GetAuthServerMeta(ctx, metadataURL, issuer, discoveryClient(timeout))
+	client := discoveryClient(timeout)
+	asm, err := auth.GetAuthServerMetadata(ctx, issuer, client)
 	if err != nil {
-		return nil, fmt.Errorf("fetch authorization server metadata %s: %w", metadataURL, err)
+		return nil, fmt.Errorf("fetch authorization server metadata for issuer %s: %w", issuer, err)
+	}
+	if asm != nil || !issuerHasPath(issuer) {
+		return asm, nil
+	}
+
+	legacyURL := legacyAuthServerMetadataURL(issuer)
+	asm, err = oauthex.GetAuthServerMeta(ctx, legacyURL, issuer, client)
+	if err != nil {
+		return nil, fmt.Errorf("fetch authorization server metadata %s: %w", legacyURL, err)
 	}
 	return asm, nil
 }
 
-// buildAuthServerMetadataURL constructs the RFC 8414 §3 well-known URL
-// for an issuer by inserting /.well-known/oauth-authorization-server
-// between the authority and any existing path component.
-func buildAuthServerMetadataURL(issuer string) string {
-	base := issuer
-	for len(base) > 0 && base[len(base)-1] == '/' {
-		base = base[:len(base)-1]
-	}
-	return base + "/.well-known/oauth-authorization-server"
+func issuerHasPath(issuer string) bool {
+	u, err := url.Parse(issuer)
+	return err == nil && u.Path != ""
+}
+
+// legacyAuthServerMetadataURL appends /.well-known/oauth-authorization-server
+// to the issuer. This predates RFC 8414 §3.1 path insertion and is kept
+// only as a fallback for servers that still publish it.
+func legacyAuthServerMetadataURL(issuer string) string {
+	return strings.TrimRight(issuer, "/") + "/.well-known/oauth-authorization-server"
 }
 
 var sharedOAuthTransport = &http.Transport{

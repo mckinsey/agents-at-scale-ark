@@ -38,8 +38,15 @@ function makeTab(overrides: Partial<PreviewTab> = {}): PreviewTab {
   };
 }
 
-function renderDialog(activeTab: PreviewTab | null) {
-  const tabs = activeTab ? [activeTab] : [];
+function renderDialog(
+  activeTab: PreviewTab | null,
+  overrides: {
+    tabs?: PreviewTab[];
+    onTabClick?: (key: string) => void;
+    onTabClose?: (key: string) => void;
+  } = {},
+) {
+  const tabs = overrides.tabs ?? (activeTab ? [activeTab] : []);
   return render(
     <MultiTabPreviewDialog
       open={true}
@@ -47,14 +54,36 @@ function renderDialog(activeTab: PreviewTab | null) {
       tabs={tabs}
       activeTab={activeTab}
       activeTabKey={activeTab?.key ?? null}
-      onTabClick={() => {}}
-      onTabClose={() => {}}
+      onTabClick={overrides.onTabClick ?? (() => {})}
+      onTabClose={overrides.onTabClose ?? (() => {})}
       onCloseAll={() => {}}
     />,
   );
 }
 
 describe('MultiTabPreviewDialog', () => {
+  it('renders a tab per open file', () => {
+    const a = makeTab({ key: 'a.txt', fileName: 'a.txt' });
+    const b = makeTab({ key: 'b.txt', fileName: 'b.txt' });
+
+    renderDialog(a, { tabs: [a, b] });
+
+    expect(screen.getByRole('tab', { name: 'a.txt' })).toBeDefined();
+    expect(screen.getByRole('tab', { name: 'b.txt' })).toBeDefined();
+  });
+
+  it('calls onTabClose when a tab close button is clicked', async () => {
+    const user = userEvent.setup();
+    const onTabClose = vi.fn();
+    const a = makeTab({ key: 'a.txt', fileName: 'a.txt' });
+
+    renderDialog(a, { tabs: [a], onTabClose });
+
+    await user.click(screen.getByRole('button', { name: 'Close a.txt' }));
+
+    expect(onTabClose).toHaveBeenCalledWith('a.txt');
+  });
+
   it('renders markdown tables when isMarkdown is true', () => {
     const tableMarkdown = [
       '| Name | Score |',
@@ -92,11 +121,11 @@ describe('MultiTabPreviewDialog', () => {
 
     expect(screen.getByRole('table')).toBeDefined();
 
-    const sourceToggle = screen.getByRole('radio', { name: 'Source view' });
-    await user.click(sourceToggle);
+    const sourceTab = screen.getByRole('tab', { name: 'Source' });
+    await user.click(sourceTab);
 
     expect(screen.queryByRole('table')).toBeNull();
-    expect(sourceToggle.getAttribute('aria-checked')).toBe('true');
+    expect(sourceTab.getAttribute('aria-selected')).toBe('true');
   });
 
   it('renders markdown source as plain pre to avoid Tailwind class collisions with Prism markdown grammar', async () => {
@@ -111,7 +140,7 @@ describe('MultiTabPreviewDialog', () => {
       }),
     );
 
-    await user.click(screen.getByRole('radio', { name: 'Source view' }));
+    await user.click(screen.getByRole('tab', { name: 'Source' }));
 
     const pre = document.querySelector(
       '[role="dialog"] pre',
@@ -122,7 +151,7 @@ describe('MultiTabPreviewDialog', () => {
     expect(pre!.className).toMatch(/whitespace-pre(\s|$)/);
   });
 
-  it('does not render the toggle for non-markdown files (mdx regression)', () => {
+  it('does not render the view toggle for non-markdown files (mdx regression)', () => {
     renderDialog(
       makeTab({
         key: 'readme.mdx',
@@ -133,8 +162,8 @@ describe('MultiTabPreviewDialog', () => {
       }),
     );
 
-    expect(screen.queryByRole('radio', { name: 'Rendered view' })).toBeNull();
-    expect(screen.queryByRole('radio', { name: 'Source view' })).toBeNull();
+    expect(screen.queryByRole('tab', { name: 'Rendered' })).toBeNull();
+    expect(screen.queryByRole('tab', { name: 'Source' })).toBeNull();
     expect(screen.queryByRole('table')).toBeNull();
   });
 

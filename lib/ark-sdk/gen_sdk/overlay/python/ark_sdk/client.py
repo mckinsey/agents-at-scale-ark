@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 from typing import Optional
 
 from ark_sdk import versions
-from ark_sdk.k8s import get_context
+from ark_sdk.k8s import get_context, release_api_client
 from ark_sdk.impersonation import ImpersonationConfig
 from ark_sdk.executor import (
     Parameter,
@@ -19,6 +19,16 @@ from ark_sdk.executor_app import ExecutorApp
 V1_ALPHA1 = "v1alpha1"
 V1_PREALPHA1 = "v1prealpha1"
 
+
+def close_ark_client(ark_client) -> None:
+    """Release every Kubernetes ApiClient owned by an ARK client's resource clients.
+
+    These are the long-lived clients used by create/update/patch/delete. The
+    per-call clients that get/list/list_page build are released by those methods.
+    """
+    for attribute in vars(ark_client).values():
+        release_api_client(getattr(attribute, "api_client", None))
+
 _default_user_agent: Optional[str] = None
 
 def set_default_user_agent(user_agent: str):
@@ -29,9 +39,13 @@ def set_default_user_agent(user_agent: str):
 def _build_headers(impersonation: Optional[ImpersonationConfig] = None) -> Optional[dict]:
     if impersonation is None:
         return None
+    if not impersonation.username or not impersonation.username.strip():
+        raise ValueError("Impersonation requires a non-empty username")
     headers = {"Impersonate-User": impersonation.username}
     if impersonation.groups:
-        headers["Impersonate-Group"] = ",".join(impersonation.groups)
+        # impersonation_patch turns this list into one Impersonate-Group header
+        # per group at the transport layer.
+        headers["Impersonate-Group"] = list(impersonation.groups)
     return headers
 
 def get_client(namespace: Optional[str], version: str, impersonation: Optional[ImpersonationConfig] = None, user_agent: Optional[str] = None):
@@ -61,4 +75,7 @@ async def with_ark_client(namespace: Optional[str], version: str, impersonation:
         ARK client instance
     """
     ark_client = get_client(namespace, version, impersonation, user_agent=user_agent)
-    yield ark_client
+    try:
+        yield ark_client
+    finally:
+        close_ark_client(ark_client)

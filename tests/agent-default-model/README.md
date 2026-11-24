@@ -16,7 +16,7 @@ Tests agent behavior with and without default model present using mock-llm.
 ### Scenario 2: Without default model
 - Agent creation without explicit modelRef
 - Webhook sets modelRef to "default"
-- Agent shows as Unavailable (ModelNotFound) when default model doesn't exist
+- Agent shows as Unavailable (ModelNotConfigured) when default model doesn't exist
 - Admission succeeds but agent cannot be used
 
 ## Running

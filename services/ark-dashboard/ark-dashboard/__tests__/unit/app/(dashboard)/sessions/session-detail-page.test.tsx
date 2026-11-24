@@ -2,18 +2,21 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import SessionDetailPage from '@/app/(dashboard)/sessions/[session_id]/page';
+import { APIError } from '@/lib/api/client';
 import { useGetSession } from '@/lib/services/broker-sessions-hooks';
 import type { BrokerSession } from '@/lib/services/broker-sessions';
 
 vi.mock('@/lib/services/broker-sessions-hooks');
 
 const mockPush = vi.fn();
+const mockReplace = vi.fn();
 const mockUseParams = vi.fn();
 const mockUseSearchParams = vi.fn();
 
 vi.mock('next/navigation', () => ({
   useParams: () => mockUseParams(),
-  useRouter: () => ({ push: mockPush }),
+  useRouter: () => ({ push: mockPush, replace: mockReplace }),
+  usePathname: () => '/sessions/session-123',
   useSearchParams: () => mockUseSearchParams(),
 }));
 
@@ -88,10 +91,10 @@ describe('SessionDetailPage', () => {
     render(<SessionDetailPage />);
 
     await waitFor(() => {
-      // Use heading role to get the session ID from the header (not from mocked child component)
-      expect(screen.getByRole('heading', { name: 'session-123' })).toBeInTheDocument();
+      // Session ID appears in the header (may also appear in child components)
+      expect(screen.getAllByText('session-123')[0]).toBeInTheDocument();
       expect(screen.getByText('5')).toBeInTheDocument(); // conversationCount
-      expect(screen.getByText('Participants')).toBeInTheDocument();
+      expect(screen.getByText('Targets')).toBeInTheDocument();
       expect(screen.getByText('active')).toBeInTheDocument();
     });
   });
@@ -134,7 +137,8 @@ describe('SessionDetailPage', () => {
 
     await waitFor(() => {
       const badge = screen.getByText('active');
-      expect(badge).toHaveClass('border-blue-500');
+      // QBDS uses outline classes for status colors
+      expect(badge).toHaveClass('outline-status-information');
     });
   });
 
@@ -149,7 +153,93 @@ describe('SessionDetailPage', () => {
 
     await waitFor(() => {
       const badge = screen.getByText('error');
-      expect(badge).toHaveClass('border-red-500');
+      // QBDS uses outline classes for status colors
+      expect(badge).toHaveClass('outline-status-error');
     });
+  });
+
+  it('navigates back to the sessions list, stripping new-session params', async () => {
+    const user = userEvent.setup();
+    mockUseSearchParams.mockReturnValue(
+      new URLSearchParams('participant=test-agent&type=agent&namespace=demo'),
+    );
+
+    render(<SessionDetailPage />);
+
+    await user.click(screen.getByText('Back to all sessions'));
+
+    expect(mockPush).toHaveBeenCalledWith('/sessions?namespace=demo');
+  });
+
+  it('should show not found when the session does not exist', () => {
+    vi.mocked(useGetSession).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: new APIError('Session not found', 404),
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useGetSession>);
+
+    render(<SessionDetailPage />);
+
+    expect(screen.getByText('Session not found')).toBeInTheDocument();
+    expect(
+      screen.queryByText('Failed to load session details'),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Retry' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('should show not found when the session disappears after loading', () => {
+    vi.mocked(useGetSession).mockReturnValue({
+      data: mockSession,
+      isLoading: false,
+      isError: true,
+      error: new APIError('Session not found', 404),
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useGetSession>);
+
+    render(<SessionDetailPage />);
+
+    expect(screen.getByText('Session not found')).toBeInTheDocument();
+    expect(screen.queryByTestId('conversations-tab')).not.toBeInTheDocument();
+  });
+
+  it('should keep showing the session when a later poll fails for another reason', () => {
+    vi.mocked(useGetSession).mockReturnValue({
+      data: mockSession,
+      isLoading: false,
+      isError: true,
+      error: new APIError('Internal Server Error', 500),
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useGetSession>);
+
+    render(<SessionDetailPage />);
+
+    expect(screen.getByTestId('conversations-tab')).toBeInTheDocument();
+    expect(
+      screen.queryByText('Failed to load session details'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('should offer a retry when loading fails for a reason other than not found', async () => {
+    const user = userEvent.setup();
+    const refetch = vi.fn();
+    vi.mocked(useGetSession).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: new APIError('Internal Server Error', 500),
+      refetch,
+    } as unknown as ReturnType<typeof useGetSession>);
+
+    render(<SessionDetailPage />);
+
+    expect(
+      screen.getByText('Failed to load session details'),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(refetch).toHaveBeenCalled();
   });
 });

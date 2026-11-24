@@ -1,0 +1,156 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: dashboard-runtime-argo-url
+  labels:
+    requires-images: "true"
+spec:
+  description: |
+    Verifies the ark-dashboard image reads app.config.argoUrl at container
+    startup. Two tenant namespaces with their own Argo installations each get
+    links to their own Argo UI, and a dashboard without the value renders no
+    Argo links. Each dashboard runs in its own namespace, as tenants do.
+  steps:
+  - name: install-tenant-dashboards
+    try:
+    - script:
+        content: |
+          set -eu
+          kubectl create namespace "$NAMESPACE-tenant-b"
+          kubectl create namespace "$NAMESPACE-no-argo"
+
+          install() {
+            RELEASE=$1
+            TARGET_NAMESPACE=$2
+            shift 2
+            helm upgrade --install "$RELEASE" ../../services/ark-dashboard/chart \
+              --namespace "$TARGET_NAMESPACE" \
+              --set app.name="$RELEASE" \
+              --set service.name="$RELEASE" \
+              --set serviceAccount.name="$RELEASE-sa" \
+              ${ARK_DASHBOARD_IMAGE:+--set app.image.repository=${ARK_DASHBOARD_IMAGE}} \
+              ${ARK_DASHBOARD_IMAGE_TAG:+--set app.image.tag=${ARK_DASHBOARD_IMAGE_TAG}} \
+              "$@" \
+              --wait --timeout=240s
+          }
+
+          install argo-tenant-a "$NAMESPACE" --set app.config.argoUrl=https://argo.tenant-a.example/
+          install argo-tenant-b "$NAMESPACE-tenant-b" --set app.config.argoUrl=https://argo.tenant-b.example
+          install argo-unset "$NAMESPACE-no-argo"
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        timeout: 600s
+    catch:
+    - script:
+        content: |
+          for NS in "$NAMESPACE" "$NAMESPACE-tenant-b" "$NAMESPACE-no-argo"; do
+            echo "=== Pods in $NS ==="
+            kubectl -n "$NS" get pods -o wide
+            echo "=== Events in $NS ==="
+            kubectl -n "$NS" get events --sort-by='.lastTimestamp'
+          done
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: check-argo-url-env
+    try:
+    - script:
+        content: |
+          set -eu
+          argo_env() {
+            kubectl -n "$1" get deployment "$2" \
+              -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="ARGO_URL")].value}'
+          }
+
+          A=$(argo_env "$NAMESPACE" argo-tenant-a)
+          echo "argo-tenant-a ARGO_URL=$A"
+          [ "$A" = "https://argo.tenant-a.example/" ]
+
+          B=$(argo_env "$NAMESPACE-tenant-b" argo-tenant-b)
+          echo "argo-tenant-b ARGO_URL=$B"
+          [ "$B" = "https://argo.tenant-b.example" ]
+
+          U=$(argo_env "$NAMESPACE-no-argo" argo-unset)
+          echo "argo-unset ARGO_URL=$U"
+          [ -z "$U" ]
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        timeout: 60s
+
+  - name: deploy-probe-pod
+    try:
+    - apply:
+        file: manifests/a00-probe.yaml
+    - wait:
+        apiVersion: v1
+        kind: Pod
+        name: dashboard-probe
+        timeout: 1m
+        for:
+          condition:
+            name: Ready
+            value: 'True'
+
+  - name: probe-tenant-dashboards
+    try:
+    - script:
+        content: |
+          set -eu
+          # Next.js splits the inlined RSC payload across self.__next_f.push()
+          # calls at arbitrary offsets, so join the chunks before matching.
+          page() {
+            kubectl exec -n "$NAMESPACE" dashboard-probe -- \
+              curl -sS "http://$1:3000/workflow-templates" \
+              | tr -d '\n' \
+              | sed 's/"\])<\/script><script>self\.__next_f\.push(\[1,"//g'
+          }
+
+          A=$(page argo-tenant-a)
+          echo "$A" | grep -q '<title>Ark Dashboard</title>'
+          echo "$A" | grep -q 'https://argo.tenant-a.example'
+          if echo "$A" | grep -q 'https://argo.tenant-a.example/"'; then
+            echo "FAIL: argo-tenant-a kept the trailing slash"
+            exit 1
+          fi
+          if echo "$A" | grep -q 'argo.tenant-b.example'; then
+            echo "FAIL: argo-tenant-a links to tenant B's Argo"
+            exit 1
+          fi
+          echo "argo-tenant-a links to its own Argo UI"
+
+          B=$(page "argo-tenant-b.$NAMESPACE-tenant-b.svc.cluster.local")
+          echo "$B" | grep -q '<title>Ark Dashboard</title>'
+          echo "$B" | grep -q 'https://argo.tenant-b.example'
+          if echo "$B" | grep -q 'argo.tenant-a.example'; then
+            echo "FAIL: argo-tenant-b links to tenant A's Argo"
+            exit 1
+          fi
+          echo "argo-tenant-b links to its own Argo UI"
+
+          U=$(page "argo-unset.$NAMESPACE-no-argo.svc.cluster.local")
+          echo "$U" | grep -q '<title>Ark Dashboard</title>'
+          if echo "$U" | grep -q 'argo\.tenant-[ab]\.example'; then
+            echo "FAIL: argo-unset renders an Argo URL"
+            exit 1
+          fi
+          echo "argo-unset renders no Argo URL"
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+        timeout: 60s
+    catch:
+    - events: {}
+
+    cleanup:
+    - script:
+        content: |
+          helm uninstall argo-unset --namespace "$NAMESPACE-no-argo" --wait --timeout=180s || true
+          helm uninstall argo-tenant-b --namespace "$NAMESPACE-tenant-b" --wait --timeout=180s || true
+          helm uninstall argo-tenant-a --namespace "$NAMESPACE" --wait --timeout=180s || true
+          kubectl delete namespace "$NAMESPACE-no-argo" "$NAMESPACE-tenant-b" --ignore-not-found --wait=false
+        env:
+        - name: NAMESPACE
+          value: ($namespace)

@@ -18,6 +18,8 @@ from ark_sdk.client import with_ark_client
 from ark_sdk.impersonation import ImpersonationConfig
 
 from ...auth.dependencies import get_impersonation_config
+from ...utils.helpers import parse_iso_timestamp
+from .client_utils import get_impersonating_sync_api_client
 from ...models.export import (
     ExportRequest,
     ExportHistoryResponse,
@@ -129,13 +131,14 @@ async def _collect_a2a_servers(
 
 async def _collect_workflows(
     namespace: Optional[str],
-    resource_ids: Optional[Dict[str, List[str]]]
+    resource_ids: Optional[Dict[str, List[str]]],
+    impersonation: Optional[ImpersonationConfig] = None,
 ) -> List[Dict[str, Any]]:
     """Collect Argo WorkflowTemplates."""
     def _fetch_workflows_sync():
         """Synchronous helper to fetch workflow templates."""
         items = []
-        custom_api = CustomObjectsApi(create_sync_api_client())
+        custom_api = CustomObjectsApi(get_impersonating_sync_api_client(impersonation))
 
         try:
             # Determine namespace
@@ -195,7 +198,7 @@ async def collect_resources(
                 if resource_type == "a2a":
                     items = await _collect_a2a_servers(namespace, resource_ids, impersonation=impersonation)
                 elif resource_type == "workflows":
-                    items = await _collect_workflows(namespace, resource_ids)
+                    items = await _collect_workflows(namespace, resource_ids, impersonation=impersonation)
                 # Handle standard resources - now directly using resource_type as the name
                 elif resource_type in standard_resources:
                     items = await _collect_standard_resource(
@@ -332,9 +335,7 @@ async def get_last_export_time() -> ExportHistoryResponse:
     """
     history = await get_export_history()
 
-    last_export = None
-    if history.get("last_export"):
-        last_export = datetime.fromisoformat(history["last_export"])
+    last_export = parse_iso_timestamp(history.get("last_export"))
 
     return ExportHistoryResponse(
         last_export=last_export,

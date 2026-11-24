@@ -1,0 +1,43 @@
+name: Secret Scan
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+  schedule:
+    - cron: "0 4 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  gitleaks:
+    name: Gitleaks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            LOG_OPTS="${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"
+          elif [ "${{ github.event_name }}" = "push" ] && [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]; then
+            LOG_OPTS="${{ github.event.before }}..${{ github.sha }}"
+          else
+            LOG_OPTS="--all"
+          fi
+
+          echo "Running Gitleaks with git log options: ${LOG_OPTS}"
+          docker run --rm -v "$PWD:/repo:ro" ghcr.io/gitleaks/gitleaks:v8.30.0 git /repo \
+            --config /repo/.gitleaks.toml \
+            --log-opts="${LOG_OPTS}" \
+            --redact \
+            --verbose

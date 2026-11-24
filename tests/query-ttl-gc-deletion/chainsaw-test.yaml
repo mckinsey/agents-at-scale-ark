@@ -1,0 +1,115 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: query-ttl-gc-deletion
+spec:
+  description: Regression for #2828 - a terminal Query whose TTL elapses must be fully reaped, not stuck in Terminating with the query finalizer.
+  timeouts:
+    delete: 15s
+    cleanup: 30s
+  steps:
+  - name: setup-mock-llm
+    try:
+    - script:
+        timeout: 180s
+        content: |
+          bash ../shared/install-mock-llm.sh
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: wait-for-model-ready
+    try:
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Model
+        name: test-model-mock
+        timeout: 90s
+        for:
+          condition:
+            name: ModelAvailable
+            value: 'True'
+
+  - name: run-query-with-short-ttl
+    try:
+    - apply:
+        file: manifests/a00-rbac.yaml
+    - apply:
+        file: manifests/a00-memory.yaml
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Memory
+        name: default
+        timeout: 60s
+        for:
+          jsonPath:
+            path: '{.status.lastResolvedAddress}'
+    - apply:
+        file: manifests/a01-agent.yaml
+    - apply:
+        file: manifests/a02-query.yaml
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: ttl-gc-deletion-query
+        timeout: 4m
+        for:
+          jsonPath:
+            path: '{.status.response.content}'
+    - assert:
+        timeout: 1s
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: ttl-gc-deletion-query
+          status:
+            phase: done
+            (response != null): true
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: ttl-gc-deletion-query
+
+  - name: assert-finalizer-was-added
+    try:
+    - assert:
+        timeout: 5s
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Query
+          metadata:
+            name: ttl-gc-deletion-query
+            finalizers:
+            - ark.mckinsey.com/finalizer
+    catch:
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: ttl-gc-deletion-query
+
+  - name: wait-for-ttl-triggered-deletion
+    try:
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: ttl-gc-deletion-query
+        timeout: 15s
+        for:
+          deletion: {}
+    catch:
+    - events: {}
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Query
+        name: ttl-gc-deletion-query
+
+    cleanup:
+    - script:
+        content: |
+          helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=60s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)

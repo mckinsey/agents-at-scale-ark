@@ -44,7 +44,9 @@ fi
 
 uv run python crd_to_openapi.py "${CRD_FILES[@]}" > "$OPENAPI_FILE"
 
-npx --yes @openapitools/openapi-generator-cli generate \
+npm ci
+
+./retry.sh npx @openapitools/openapi-generator-cli generate \
   -i "$OPENAPI_FILE" \
   -g python \
   -o "$PY_SDK_DIR" \

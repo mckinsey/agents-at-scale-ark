@@ -1,0 +1,56 @@
+terminationGracePeriodSeconds: 3
+ark:
+  model:
+    name: test-model-mock
+
+config:
+  rules:
+  - path: "/v1/models"
+    method: "GET"
+    response:
+      status: 200
+      content: |
+        {
+          "object": "list",
+          "data": [
+            {
+              "id": "gpt-4.1-mini",
+              "object": "model",
+              "owned_by": "openai"
+            }
+          ]
+        }
+
+  # Catch-all for model probes and any unmatched agent prompt.
+  - path: "/v1/chat/completions"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"OK"},"finish_reason":"stop"}]}'
+
+  # Weather Agent
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'Weather Agent')"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"WEATHER: Paris is sunny, 21C."},"finish_reason":"stop"}]}'
+
+  # Planner Agent
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'Planner Agent')"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"PLAN: Morning museum, afternoon river walk."},"finish_reason":"stop"}]}'
+
+  # Reviewer Agent
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'Reviewer Agent')"
+    response:
+      status: 200
+      content: '{"choices":[{"message":{"role":"assistant","content":"FINAL: One-day Paris plan approved."},"finish_reason":"stop"}]}'
+
+  # Broken Agent - force an upstream 500 to drive the query to phase: error
+  - path: "/v1/chat/completions"
+    match: "contains(body.messages[0].content || '', 'TRIGGER_ERROR')"
+    response:
+      status: 500
+      content: '"forced error for ark-query e2e"'

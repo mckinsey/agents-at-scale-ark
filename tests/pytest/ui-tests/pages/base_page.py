@@ -104,18 +104,38 @@ class BasePage:
         self.page.locator("[data-slot='dialog-overlay'], [role='dialog'], [data-slot='dialog-content']").first.wait_for(state="visible", timeout=timeout)
     
     def wait_for_modal_close(self, timeout: int = 10000) -> None:
+        # No Escape fallback: a modal that doesn't close on its own means the
+        # submit click didn't reach its handler, which is a real failure.
         try:
             self.page.locator("[data-slot='dialog-overlay'], [role='dialog']").first.wait_for(state="hidden", timeout=timeout)
-        except:
-            logger.info("Modal did not close")
-            self.page.keyboard.press("Escape")
-            self.wait_for_element_hidden("[data-slot='dialog-overlay'], [role='dialog']")
+        except Exception:
+            logger.exception("Modal did not close within %dms (submit click likely didn't reach its handler)", timeout)
+            page_name = urlsplit(self.page.url).path.replace("/", "_")
+            self._capture_failure_debug(f"modal_did_not_close{page_name}")
+            raise
     
     def reload(self) -> None:
         self.page.reload()
     
     def wait_for_timeout(self, milliseconds: int) -> None:
         self.page.wait_for_timeout(milliseconds)
+
+    def wait_for_namespace_in_url(self, timeout: int = 15000) -> bool:
+        """Wait for the dashboard to write the resolved namespace into the URL.
+
+        The dashboard resolves the namespace from /v1/context and then adds it
+        to the URL, so a freshly loaded page briefly has no ?namespace=. Until
+        it lands, the URL and every in-app link on the page are still changing.
+        Non-fatal: a page that never resolves one is left as-is.
+        """
+        try:
+            self.page.wait_for_url(
+                lambda url: "namespace=" in urlsplit(url).query, timeout=timeout
+            )
+            return True
+        except TimeoutError:
+            logger.debug("Namespace was not added to the URL: %s", self.page.url)
+            return False
     
     def get_url(self) -> str:
         return self.page.url

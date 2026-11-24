@@ -7,6 +7,10 @@ repos:
       - id: check-yaml
         args:
           - "--allow-multiple-documents"
+        # Helm chart and ark-cli scaffolding templates contain Go template
+        # syntax ({{ ... }}) and are not valid YAML until rendered. Validate
+        # them with `helm lint` / `helm template` instead of check-yaml.
+        exclude: '(^|/)templates/.*\.ya?ml$'
       - id: check-case-conflict
       - id: check-symlinks
       - id: check-json

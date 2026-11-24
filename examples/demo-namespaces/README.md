@@ -12,9 +12,9 @@ kubectl apply -f kyc-demo.yaml
 
 For a namespace to appear as a demo on the landing page:
 
-- **Label:** `ark.mckinsey.com/demo: "true"` (required)
-- **Annotation:** `ark.mckinsey.com/demo-name: "Display Name"` (optional, defaults to namespace name)
-- **Annotation:** `ark.mckinsey.com/demo-description: "Description text"` (optional)
+- **Label:** `ark.mckinsey.com/landing-page: "true"` (required)
+- **Annotation:** `ark.mckinsey.com/landing-page-name: "Display Name"` (optional, defaults to namespace name)
+- **Annotation:** `ark.mckinsey.com/landing-page-description: "Description text"` (optional)
 
 ## Next Steps
 

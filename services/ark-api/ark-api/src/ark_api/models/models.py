@@ -1,10 +1,10 @@
 """Model CRD response models."""
 from typing import List, Dict, Optional, Literal, Union, Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
-from .common import AvailabilityStatus
-from .agents import AgentHeader
+from .common import AvailabilityStatus, PaginatedListResponse
+from .agents import AgentHeader, ensure_unique_header_names
 
 # Provider constants
 PROVIDER_OPENAI = "openai"
@@ -36,6 +36,11 @@ class OpenAIConfig(BaseModel):
     base_url: Union[str, ModelValueSource] = Field(..., alias="baseUrl")
     headers: Optional[List[AgentHeader]] = None
 
+    @field_validator("headers")
+    @classmethod
+    def validate_headers(cls, headers: Optional[List[AgentHeader]]) -> Optional[List[AgentHeader]]:
+        return ensure_unique_header_names(headers)
+
 
 class AzureManagedIdentityConfig(BaseModel):
     """Azure Managed Identity auth."""
@@ -63,13 +68,20 @@ class AzureConfig(BaseModel):
     auth: Optional[AzureAuthConfig] = None
     headers: Optional[List[AgentHeader]] = None
 
+    @field_validator("headers")
+    @classmethod
+    def validate_headers(cls, headers: Optional[List[AgentHeader]]) -> Optional[List[AgentHeader]]:
+        return ensure_unique_header_names(headers)
+
 
 class BedrockConfig(BaseModel):
     """Bedrock model configuration."""
     region: Optional[Union[str, ModelValueSource]] = None
+    base_url: Optional[Union[str, ModelValueSource]] = Field(None, alias="baseUrl")
     access_key_id: Optional[Union[str, ModelValueSource]] = Field(None, alias="accessKeyId")
     secret_access_key: Optional[Union[str, ModelValueSource]] = Field(None, alias="secretAccessKey")
     session_token: Optional[Union[str, ModelValueSource]] = Field(None, alias="sessionToken")
+    api_key: Optional[Union[str, ModelValueSource]] = Field(None, alias="apiKey")
     model_arn: Optional[Union[str, ModelValueSource]] = Field(None, alias="modelArn")
     max_tokens: Optional[int] = Field(None, alias="maxTokens", ge=1, le=100000)
     temperature: Optional[str] = Field(None, pattern=r"^(0(\.\d+)?|1(\.0+)?)$")
@@ -81,6 +93,11 @@ class AnthropicConfig(BaseModel):
     api_key: Union[str, ModelValueSource] = Field(..., alias="apiKey")
     version: Optional[Union[str, ModelValueSource]] = None
     headers: Optional[List[AgentHeader]] = None
+
+    @field_validator("headers")
+    @classmethod
+    def validate_headers(cls, headers: Optional[List[AgentHeader]]) -> Optional[List[AgentHeader]]:
+        return ensure_unique_header_names(headers)
 
 
 class ModelConfig(BaseModel):
@@ -100,12 +117,12 @@ class ModelResponse(BaseModel):
     model: str
     available: Optional[AvailabilityStatus] = None
     annotations: Optional[Dict[str, str]] = None
+    secret_refs: Optional[List[str]] = None
 
 
-class ModelListResponse(BaseModel):
+class ModelListResponse(PaginatedListResponse):
     """List of models response model."""
     items: List[ModelResponse]
-    count: int
 
 
 class ModelCreateRequest(BaseModel):

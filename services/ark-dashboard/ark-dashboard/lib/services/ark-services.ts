@@ -1,16 +1,21 @@
 import { apiClient } from '@/lib/api/client';
 import type { components } from '@/lib/api/generated/types';
 
-export type HTTPRouteInfo = components['schemas']['HTTPRouteInfo'];
-export type ArkService = components['schemas']['ArkService'];
-export type ArkServiceListResponse =
-  components['schemas']['ArkServiceListResponse'];
+export type HelmRelease = components['schemas']['HelmRelease'];
+export type HelmReleaseError = components['schemas']['HelmReleaseError'];
+type HelmReleaseListResponse = components['schemas']['HelmReleaseListResponse'];
+
+export interface HelmReleaseList {
+  items: HelmRelease[];
+  errors: HelmReleaseError[];
+}
 
 export const arkServicesService = {
-  /**
-   * Get all ARK services
-   */
-  async getAll(): Promise<ArkServiceListResponse> {
-    return apiClient.get<ArkServiceListResponse>(`/api/v1/ark-services`);
+  async getAll(namespace: string): Promise<HelmReleaseList> {
+    const response = await apiClient.get<HelmReleaseListResponse>(
+      '/api/v1/ark-services/helm-releases',
+      { params: { namespace } },
+    );
+    return { items: response.items, errors: response.errors };
   },
 };

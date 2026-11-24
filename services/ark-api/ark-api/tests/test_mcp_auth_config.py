@@ -16,6 +16,7 @@ from ark_api.core.mcp_auth_config import (
     _is_loopback_literal,
     _read_int,
     _validate_callback_url,
+    _validate_dashboard_url,
     is_strict_idp_acceptable,
     load_mcp_auth_config,
 )
@@ -82,6 +83,83 @@ class TestValidateCallbackUrl(unittest.TestCase):
         result = _validate_callback_url("https://ark.example.com/proxy")
         self.assertTrue(result.endswith(CALLBACK_PATH))
         self.assertIn("/proxy", result)
+
+
+class TestValidateDashboardUrl(unittest.TestCase):
+    def test_https_public_host_is_accepted_without_path(self):
+        self.assertEqual(
+            _validate_dashboard_url("https://ark.example.com"),
+            "https://ark.example.com",
+        )
+
+    def test_trailing_slash_is_stripped(self):
+        self.assertEqual(
+            _validate_dashboard_url("https://ark.example.com/"),
+            "https://ark.example.com",
+        )
+
+    def test_path_prefix_is_preserved(self):
+        self.assertEqual(
+            _validate_dashboard_url("https://ark.example.com/dashboard"),
+            "https://ark.example.com/dashboard",
+        )
+
+    def test_http_loopback_literals_accepted(self):
+        for url in (
+            "http://127.0.0.1:3000",
+            "http://[::1]:3000",
+            "http://localhost:3000",
+        ):
+            self.assertEqual(_validate_dashboard_url(url), url)
+
+    def test_http_public_host_rejected(self):
+        with self.assertRaises(McpAuthConfigError):
+            _validate_dashboard_url("http://ark.example.com")
+
+    def test_ftp_scheme_rejected(self):
+        with self.assertRaises(McpAuthConfigError):
+            _validate_dashboard_url("ftp://example.com")
+
+    def test_unbracketed_ipv6_rejected(self):
+        with self.assertRaises(McpAuthConfigError) as ctx:
+            _validate_dashboard_url("http://::1:3000")
+        self.assertIn("RFC 3986", str(ctx.exception))
+
+    def test_missing_host_rejected(self):
+        with self.assertRaises(McpAuthConfigError):
+            _validate_dashboard_url("https:///dashboard")
+
+
+class TestDashboardUrlConfig(unittest.TestCase):
+    def test_unset_dashboard_url_is_none(self):
+        import os
+
+        env = {"ARK_API_PUBLIC_CALLBACK_URL": "https://ark.example.com/v1/mcp/auth/callback"}
+        with patch.dict("os.environ", env, clear=False):
+            os.environ.pop("ARK_API_DASHBOARD_URL", None)
+            cfg = load_mcp_auth_config()
+            self.assertFalse(cfg.is_dashboard_url_set)
+            self.assertIsNone(cfg.dashboard_url)
+            self.assertIsNone(cfg.dashboard_mcp_url())
+
+    def test_set_dashboard_url_builds_mcp_path(self):
+        env = {
+            "ARK_API_PUBLIC_CALLBACK_URL": "https://ark.example.com/v1/mcp/auth/callback",
+            "ARK_API_DASHBOARD_URL": "https://ark.example.com/dashboard",
+        }
+        with patch.dict("os.environ", env, clear=False):
+            cfg = load_mcp_auth_config()
+            self.assertTrue(cfg.is_dashboard_url_set)
+            self.assertEqual(cfg.dashboard_mcp_url(), "https://ark.example.com/dashboard/mcp")
+
+    def test_invalid_dashboard_url_fails_load(self):
+        env = {
+            "ARK_API_PUBLIC_CALLBACK_URL": "https://ark.example.com/v1/mcp/auth/callback",
+            "ARK_API_DASHBOARD_URL": "ftp://example.com",
+        }
+        with patch.dict("os.environ", env, clear=False):
+            with self.assertRaises(McpAuthConfigError):
+                load_mcp_auth_config()
 
 
 class TestStrictIdpWarning(unittest.TestCase):

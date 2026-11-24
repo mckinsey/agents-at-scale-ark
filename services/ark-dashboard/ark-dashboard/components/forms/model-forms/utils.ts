@@ -1,4 +1,5 @@
 import type {
+  AgentHeader,
   Model,
   ModelCreateRequest,
   ModelUpdateRequest,
@@ -6,10 +7,101 @@ import type {
 
 import type { FormValues } from './schema';
 
+export const BASE_URL_CONFIGURATION_KEY = 'value';
+
+// Sentinel written by the Base URL field's "None" option (bedrock only) to
+// mean "explicitly clear", distinct from an untouched field left as ''.
+export const CLEAR_BASE_URL_VALUE = '__none__';
+
+export type BaseUrlFieldState =
+  | {
+      kind: 'configuration';
+      configurationName: string;
+      configurationKey: string;
+    }
+  | { kind: 'literal'; url: string }
+  | { kind: 'unset' };
+
+export type BaseUrlMode = {
+  originalName?: string;
+  originalKey?: string;
+  literalUrl?: string;
+};
+
+type BaseUrlValueSource = {
+  value?: string;
+  valueFrom?: { configMapKeyRef?: { name: string; key: string } };
+};
+
+export function mapBaseUrlState(rawBaseUrl: unknown): BaseUrlFieldState {
+  if (typeof rawBaseUrl === 'string') {
+    return rawBaseUrl ? { kind: 'literal', url: rawBaseUrl } : { kind: 'unset' };
+  }
+  const source =
+    rawBaseUrl && typeof rawBaseUrl === 'object'
+      ? (rawBaseUrl as BaseUrlValueSource)
+      : undefined;
+  const configMapKeyRef = source?.valueFrom?.configMapKeyRef;
+  if (configMapKeyRef?.name) {
+    return {
+      kind: 'configuration',
+      configurationName: configMapKeyRef.name,
+      configurationKey: configMapKeyRef.key || BASE_URL_CONFIGURATION_KEY,
+    };
+  }
+  if (source?.value) {
+    return { kind: 'literal', url: source.value };
+  }
+  return { kind: 'unset' };
+}
+
+export function buildBaseUrlMode(state: BaseUrlFieldState): BaseUrlMode {
+  if (state.kind === 'configuration') {
+    return {
+      originalName: state.configurationName,
+      originalKey: state.configurationKey,
+    };
+  }
+  if (state.kind === 'literal') {
+    return { literalUrl: state.url };
+  }
+  return {};
+}
+
+export function buildBaseUrlValueSource(
+  configurationName: string | undefined | null,
+  mode: BaseUrlMode = {},
+): BaseUrlValueSource | undefined {
+  if (configurationName === CLEAR_BASE_URL_VALUE) {
+    return undefined;
+  }
+  if (!configurationName) {
+    return mode.literalUrl ? { value: mode.literalUrl } : undefined;
+  }
+  const key =
+    mode.originalKey && configurationName === mode.originalName
+      ? mode.originalKey
+      : BASE_URL_CONFIGURATION_KEY;
+  return { valueFrom: { configMapKeyRef: { name: configurationName, key } } };
+}
+
+const HEADER_SUPPORTED_PROVIDERS: ReadonlySet<FormValues['provider']> = new Set(
+  ['openai', 'azure', 'anthropic'],
+);
+
+export function providerSupportsHeaders(
+  provider: FormValues['provider'],
+): boolean {
+  return HEADER_SUPPORTED_PROVIDERS.has(provider);
+}
+
 export function createConfig(
   formValues: FormValues,
+  baseUrlMode: BaseUrlMode = {},
+  headers: AgentHeader[] = [],
 ): ModelCreateRequest['config'] {
   const config: ModelCreateRequest['config'] = {};
+  const headersConfig = headers.length > 0 ? { headers } : {};
   switch (formValues.provider) {
     case 'openai':
       config.openai = {
@@ -21,15 +113,20 @@ export function createConfig(
             },
           },
         },
-        baseUrl: formValues.baseUrl,
+        // Non-null: the schema requires either a selected configuration or a
+        // preserved baseUrlMode.literalUrl for this provider, so one of the
+        // two branches in buildBaseUrlValueSource always returns a value.
+        baseUrl: buildBaseUrlValueSource(formValues.baseUrl, baseUrlMode)!,
+        ...headersConfig,
       };
       return config;
     case 'azure': {
       const azureConfig: Record<string, unknown> = {
-        baseUrl: formValues.baseUrl,
+        baseUrl: buildBaseUrlValueSource(formValues.baseUrl, baseUrlMode)!,
         ...(formValues.azureApiVersion && {
           apiVersion: { value: formValues.azureApiVersion },
         }),
+        ...headersConfig,
       };
       if (formValues.azureAuthMethod === 'apiKey') {
         azureConfig.auth = {
@@ -59,28 +156,46 @@ export function createConfig(
       (config as Record<string, unknown>).azure = azureConfig;
       return config;
     }
-    case 'bedrock':
-      config.bedrock = {
-        accessKeyId: {
+    case 'bedrock': {
+      const bedrockBaseUrl = buildBaseUrlValueSource(
+        formValues.baseUrl,
+        baseUrlMode,
+      );
+      const bedrockConfig: Record<string, unknown> = {
+        ...(bedrockBaseUrl && { baseUrl: bedrockBaseUrl }),
+        ...(formValues.region && { region: formValues.region }),
+        ...(formValues.modelARN && { modelArn: formValues.modelARN }),
+      };
+      if (formValues.bedrockAuthMethod === 'apiKey') {
+        bedrockConfig.apiKey = {
+          valueFrom: {
+            secretKeyRef: {
+              name: formValues.bedrockApiKeySecretName,
+              key: 'token',
+            },
+          },
+        };
+      } else {
+        bedrockConfig.accessKeyId = {
           valueFrom: {
             secretKeyRef: {
               name: formValues.bedrockAccessKeyIdSecretName,
               key: 'token',
             },
           },
-        },
-        secretAccessKey: {
+        };
+        bedrockConfig.secretAccessKey = {
           valueFrom: {
             secretKeyRef: {
               name: formValues.bedrockSecretAccessKeySecretName,
               key: 'token',
             },
           },
-        },
-        ...(formValues.region && { region: formValues.region }),
-        ...(formValues.modelARN && { modelArn: formValues.modelARN }),
-      };
+        };
+      }
+      (config as Record<string, unknown>).bedrock = bedrockConfig;
       return config;
+    }
     case 'anthropic':
       (config as Record<string, unknown>).anthropic = {
         apiKey: {
@@ -91,10 +206,11 @@ export function createConfig(
             },
           },
         },
-        baseUrl: formValues.baseUrl,
+        baseUrl: buildBaseUrlValueSource(formValues.baseUrl, baseUrlMode)!,
         ...(formValues.anthropicVersion && {
           version: { value: formValues.anthropicVersion },
         }),
+        ...headersConfig,
       };
       return config;
   }
@@ -102,8 +218,10 @@ export function createConfig(
 
 export function createModelUpdateConfig(
   formValues: FormValues,
+  baseUrlMode: BaseUrlMode = {},
+  headers: AgentHeader[] = [],
 ): ModelUpdateRequest['config'] {
-  return createConfig(formValues);
+  return createConfig(formValues, baseUrlMode, headers);
 }
 
 export function getResetValues(currentFormValues: FormValues): FormValues {
@@ -133,8 +251,11 @@ export function getResetValues(currentFormValues: FormValues): FormValues {
         name: currentFormValues.name,
         provider: currentFormValues.provider,
         model: currentFormValues.model,
+        bedrockAuthMethod: currentFormValues.bedrockAuthMethod ?? 'iam',
+        bedrockApiKeySecretName: '',
         bedrockAccessKeyIdSecretName: '',
         bedrockSecretAccessKeySecretName: '',
+        baseUrl: '',
         region: '',
         modelARN: '',
       };
@@ -186,6 +307,27 @@ function getAuthSubKey(
   return auth[camelKey] ?? auth[camelToSnake(camelKey)];
 }
 
+export function getBaseUrlState(
+  model: Model,
+  provider: string,
+): BaseUrlFieldState {
+  return mapBaseUrlState(
+    getConfigValue<unknown>(model.config, [provider, 'baseUrl']),
+  );
+}
+
+export function getHeadersForUpdate(model: Model): AgentHeader[] {
+  return (
+    getConfigValue<AgentHeader[]>(model.config, [model.provider, 'headers']) ??
+    []
+  );
+}
+
+function getBaseUrlConfigurationName(model: Model, provider: string): string {
+  const state = getBaseUrlState(model, provider);
+  return state.kind === 'configuration' ? state.configurationName : '';
+}
+
 export function getDefaultValuesForUpdate(model: Model): FormValues {
   switch (model.provider) {
     case 'openai':
@@ -201,12 +343,7 @@ export function getDefaultValuesForUpdate(model: Model): FormValues {
             'secretKeyRef',
             'name',
           ]) || '',
-        baseUrl:
-          getConfigValue<string>(model.config, [
-            'openai',
-            'baseUrl',
-            'value',
-          ]) || '',
+        baseUrl: getBaseUrlConfigurationName(model, 'openai'),
       };
     case 'azure': {
       const auth = getConfigValue<Record<string, unknown>>(model.config, [
@@ -291,9 +428,7 @@ export function getDefaultValuesForUpdate(model: Model): FormValues {
         model: model.model,
         azureAuthMethod,
         secret,
-        baseUrl:
-          getConfigValue<string>(model.config, ['azure', 'baseUrl', 'value']) ||
-          '',
+        baseUrl: getBaseUrlConfigurationName(model, 'azure'),
         azureApiVersion:
           getConfigValue<string>(model.config, [
             'azure',
@@ -304,11 +439,23 @@ export function getDefaultValuesForUpdate(model: Model): FormValues {
         azureTenantId,
       };
     }
-    case 'bedrock':
+    case 'bedrock': {
+      const bedrockApiKeySecretName = getConfigValue<string>(model.config, [
+        'bedrock',
+        'apiKey',
+        'valueFrom',
+        'secretKeyRef',
+        'name',
+      ]);
+      const bedrockAuthMethod: 'apiKey' | 'iam' = bedrockApiKeySecretName
+        ? 'apiKey'
+        : 'iam';
       return {
         name: model.name,
         provider: model.provider,
         model: model.model,
+        bedrockAuthMethod,
+        bedrockApiKeySecretName: bedrockApiKeySecretName || '',
         bedrockAccessKeyIdSecretName:
           getConfigValue<string>(model.config, [
             'bedrock',
@@ -325,6 +472,7 @@ export function getDefaultValuesForUpdate(model: Model): FormValues {
             'secretKeyRef',
             'name',
           ]) || '',
+        baseUrl: getBaseUrlConfigurationName(model, 'bedrock'),
         region:
           getConfigValue<string>(model.config, [
             'bedrock',
@@ -338,6 +486,7 @@ export function getDefaultValuesForUpdate(model: Model): FormValues {
             'value',
           ]) || '',
       };
+    }
     case 'anthropic':
       return {
         name: model.name,
@@ -351,12 +500,7 @@ export function getDefaultValuesForUpdate(model: Model): FormValues {
             'secretKeyRef',
             'name',
           ]) || '',
-        baseUrl:
-          getConfigValue<string>(model.config, [
-            'anthropic',
-            'baseUrl',
-            'value',
-          ]) || '',
+        baseUrl: getBaseUrlConfigurationName(model, 'anthropic'),
         anthropicVersion:
           getConfigValue<string>(model.config, [
             'anthropic',

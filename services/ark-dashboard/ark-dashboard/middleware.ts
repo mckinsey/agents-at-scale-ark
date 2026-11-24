@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { auth, type NextRequestWithAuth } from './auth';
+import { type NextRequestWithAuth, auth } from './auth';
 import { SIGNIN_PATH } from './lib/constants/auth';
 
 // Auth-only edge gate. The proxy logic that used to live here now lives in
@@ -20,26 +20,63 @@ import { SIGNIN_PATH } from './lib/constants/auth';
 const PUBLIC_PREFIXES = [
   '/api/auth',
   '/signout',
+  '/healthz',
   '/_next/static',
   '/_next/image',
 ];
 
+// Strip trailing slashes without a regex (avoids Sonar S5852 ReDoS heuristics).
+function stripTrailingSlashes(value?: string): string | undefined {
+  if (!value) return value;
+  let end = value.length;
+  while (end > 0 && value.charAt(end - 1) === '/') end -= 1;
+  return value.slice(0, end);
+}
+
+// Under a tenant prefix, Next.js does not reliably strip the configured
+// basePath from req.nextUrl.pathname in middleware, so the request arrives as
+// e.g. /tenant-a/api/auth/signin. The public/sign-in allow-list below is
+// expressed with root-absolute paths, so we must normalise the pathname first
+// or /tenant-a/api/auth/signin fails startsWith('/api/auth') and !== SIGNIN_PATH,
+// and the gate redirects the sign-in route to itself forever. No-op when Next
+// already stripped the prefix, or when NEXT_PUBLIC_BASE_PATH is unset (root
+// hosting). Same env var the api-url helper uses; substituted at container start.
+function stripBasePath(pathname: string, basePath: string): string {
+  if (!basePath) return pathname;
+  if (pathname === basePath) return '/';
+  if (pathname.startsWith(`${basePath}/`)) return pathname.slice(basePath.length);
+  return pathname;
+}
+
 export default auth(async (req: NextRequestWithAuth) => {
-  const { pathname } = req.nextUrl;
+  const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
+  const pathname = stripBasePath(req.nextUrl.pathname, basePath);
 
   if (
     pathname === '/favicon.ico' ||
-    PUBLIC_PREFIXES.some((p) => pathname.startsWith(p))
+    PUBLIC_PREFIXES.some(p => pathname.startsWith(p))
   ) {
     return NextResponse.next();
   }
 
   if (!req.auth && pathname !== SIGNIN_PATH) {
-    const signInUrl = new URL(
-      `${SIGNIN_PATH}?callbackUrl=${encodeURIComponent(req.nextUrl.href)}`,
-      process.env.BASE_URL,
-    );
-    return NextResponse.redirect(signInUrl);
+    const callbackUrl = encodeURIComponent(req.nextUrl.href);
+    // Hub model: when AUTH_HUB_URL is set, send unauthenticated users to the
+    // central landing-page login rather than this tenant's own signin. Under a
+    // basePath the local signin path resolves wrong (a leading-slash path drops
+    // the prefix), and the hub issues a Path=/ session cookie shared by every
+    // tenant on the host — so one login at the hub covers them all.
+    //
+    // Both branches concatenate onto the (hub or tenant) base URL rather than
+    // using `new URL(SIGNIN_PATH, base)`: SIGNIN_PATH is root-absolute, so
+    // `new URL` would discard the base's path segment and drop the tenant
+    // prefix (e.g. https://host/tenant-a -> https://host/api/auth/signin).
+    const hubUrl = stripTrailingSlashes(process.env.AUTH_HUB_URL);
+    const baseUrl = stripTrailingSlashes(process.env.BASE_URL) ?? '';
+    const target = hubUrl
+      ? `${hubUrl}${SIGNIN_PATH}?callbackUrl=${callbackUrl}`
+      : `${baseUrl}${SIGNIN_PATH}?callbackUrl=${callbackUrl}`;
+    return NextResponse.redirect(target);
   }
   return NextResponse.next();
 });

@@ -14,9 +14,8 @@ import (
 func SetupModelWebhookWithManager(mgr ctrl.Manager) error {
 	lookup := &validation.WebhookLookup{Client: mgr.GetClient()}
 	v := validation.NewValidator(lookup)
-	return ctrl.NewWebhookManagedBy(mgr).
-		For(&arkv1alpha1.Model{}).
-		WithDefaulter(&validation.WebhookDefaulter{Lookup: lookup}).
-		WithValidator(&validation.WebhookValidator{V: v}).
+	return ctrl.NewWebhookManagedBy(mgr, &arkv1alpha1.Model{}).
+		WithDefaulter(&validation.WebhookDefaulter[*arkv1alpha1.Model]{Lookup: lookup}).
+		WithValidator(&validation.WebhookValidator[*arkv1alpha1.Model]{V: v}).
 		Complete()
 }

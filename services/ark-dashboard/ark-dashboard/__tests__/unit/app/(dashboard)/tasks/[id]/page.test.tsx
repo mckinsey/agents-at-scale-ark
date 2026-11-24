@@ -8,12 +8,10 @@ import type { A2ATaskDetailResponse } from '@/lib/api/a2a-tasks-types';
 import { useA2ATask } from '@/lib/services/a2a-tasks-hooks';
 
 // Mock next/navigation
-const mockBack = vi.fn();
 vi.mock('next/navigation', () => ({
   useParams: vi.fn(),
-  useRouter: vi.fn(() => ({
-    back: mockBack,
-  })),
+  usePathname: vi.fn(() => '/tasks/task-1'),
+  useRouter: vi.fn(() => ({ back: vi.fn(), push: vi.fn() })),
   useSearchParams: vi.fn(() => new URLSearchParams()),
 }));
 
@@ -22,12 +20,24 @@ vi.mock('@/lib/services/a2a-tasks-hooks', () => ({
   useA2ATask: vi.fn(),
 }));
 
-// Mock components that might cause issues in unit tests
-vi.mock('@/components/common/page-header', () => ({
-  PageHeader: () => (
-    <div data-testid="page-header">Page Header</div>
-  ),
-}));
+/**
+ * DetailRow renders its label as a tooltip trigger (a button) followed by the
+ * value, both inside the row element — so the row's text is "<label><value>".
+ * Querying by button role also disambiguates labels like "Completed", which
+ * appear both as a Timing label and as a status value.
+ */
+function rowText(label: string) {
+  return screen.getByRole('button', { name: label }).parentElement?.textContent;
+}
+
+function mockTaskResult(data: Partial<A2ATaskDetailResponse> | undefined) {
+  vi.mocked(useParams).mockReturnValue({ id: 'task-1' });
+  vi.mocked(useA2ATask).mockReturnValue({
+    isLoading: false,
+    data,
+    error: null,
+  } as any);
+}
 
 describe('A2ATaskPage', () => {
   it('should show loading state', () => {
@@ -39,7 +49,7 @@ describe('A2ATaskPage', () => {
     } as any);
 
     render(<A2ATaskPage />);
-    expect(screen.getByText('Loading task...')).toBeInTheDocument();
+    expect(screen.getByText('Loading...')).toBeInTheDocument();
   });
 
   it('should show error state', () => {
@@ -51,267 +61,166 @@ describe('A2ATaskPage', () => {
     } as any);
 
     render(<A2ATaskPage />);
-    expect(screen.getByText('Error loading task')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /back/i })).toBeInTheDocument();
+    expect(screen.getByText("Couldn't load this A2A task")).toBeInTheDocument();
+    expect(screen.getByText('Failed to load')).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: /back to a2a tasks/i }),
+    ).toBeInTheDocument();
   });
 
-  it('should render task details', async () => {
-    vi.mocked(useParams).mockReturnValue({ id: 'task-1' });
-    const mockTask: Partial<A2ATaskDetailResponse> = {
+  it('should show not-found state when the task is missing', () => {
+    mockTaskResult(undefined);
+
+    render(<A2ATaskPage />);
+    expect(screen.getByText('A2A task not found')).toBeInTheDocument();
+  });
+
+  it('should render task details', () => {
+    mockTaskResult({
       name: 'Test Task',
       taskId: 'task-1',
       agentRef: { name: 'Agent Smith' },
       queryRef: { name: 'Query 1' },
       a2aServerRef: { name: 'Server 1' },
-      metadata: {
-        creationTimestamp: '2023-01-01T10:00:00Z',
-      },
+      metadata: { creationTimestamp: '2023-01-01T10:00:00Z' },
       status: {
         phase: 'completed',
         protocolState: 'finished',
         completionTime: '2023-01-01T10:05:00Z',
       },
       input: 'Do something',
-      parameters: { param1: 'value1' },
-    };
-
-    vi.mocked(useA2ATask).mockReturnValue({
-      isLoading: false,
-      data: mockTask,
-      error: null,
-    } as any);
+    });
 
     render(<A2ATaskPage />);
 
-    expect(screen.getByTestId('page-header')).toBeInTheDocument();
-    expect(screen.getByText('task-1')).toBeInTheDocument();
-    expect(screen.getByText('completed')).toBeInTheDocument();
-    expect(screen.getByText('Agent Smith')).toBeInTheDocument();
+    // Breadcrumb back to the list, then the task id as the page title.
+    expect(
+      screen.getByRole('link', { name: /a2a tasks/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'task-1' })).toBeInTheDocument();
+
+    expect(rowText('Status')).toBe('StatusCompleted');
+    expect(rowText('Protocol state')).toBe('Protocol statefinished');
+    expect(rowText('Agent')).toBe('AgentAgent Smith');
+    expect(rowText('Query')).toBe('QueryQuery 1');
+    expect(rowText('Server')).toBe('ServerServer 1');
     expect(screen.getByText('Do something')).toBeInTheDocument();
+    expect(screen.getByText('Raw Data')).toBeInTheDocument();
   });
 
   it('should display creation timestamp when present', () => {
-    vi.mocked(useParams).mockReturnValue({ id: 'task-1' });
-    const mockTask: Partial<A2ATaskDetailResponse> = {
+    mockTaskResult({
       name: 'Test Task',
       taskId: 'task-1',
-      metadata: {
-        creationTimestamp: '2023-01-01T10:00:00Z',
-      },
-      status: {
-        phase: 'running',
-      },
-    };
-
-    vi.mocked(useA2ATask).mockReturnValue({
-      isLoading: false,
-      data: mockTask,
-      error: null,
-    } as any);
+      metadata: { creationTimestamp: '2023-01-01T10:00:00Z' },
+      status: { phase: 'running' },
+    });
 
     render(<A2ATaskPage />);
 
     const expectedDate = new Date('2023-01-01T10:00:00Z').toLocaleString();
-    expect(screen.getByText(expectedDate)).toBeInTheDocument();
+    expect(rowText('Created')).toBe(`Created${expectedDate}`);
   });
 
   it('should display dash when creation timestamp is missing', () => {
-    vi.mocked(useParams).mockReturnValue({ id: 'task-1' });
-    const mockTask: Partial<A2ATaskDetailResponse> = {
+    mockTaskResult({
       name: 'Test Task',
       taskId: 'task-1',
-      metadata: {
-        creationTimestamp: undefined,
-      },
-      status: {
-        phase: 'running',
-      },
-    };
-
-    vi.mocked(useA2ATask).mockReturnValue({
-      isLoading: false,
-      data: mockTask,
-      error: null,
-    } as any);
+      metadata: { creationTimestamp: undefined },
+      status: { phase: 'running' },
+    });
 
     render(<A2ATaskPage />);
-
-    // Find the "Created" label and check the next element shows "-"
-    const createdLabel = screen.getByText('Created');
-    const timingSection = createdLabel.closest('.space-y-2');
-    expect(timingSection).toHaveTextContent('Created-');
+    expect(rowText('Created')).toBe('Created—');
   });
 
   it('should display completion timestamp when present', () => {
-    vi.mocked(useParams).mockReturnValue({ id: 'task-1' });
-    const mockTask: Partial<A2ATaskDetailResponse> = {
+    mockTaskResult({
       name: 'Test Task',
       taskId: 'task-1',
-      metadata: {
-        creationTimestamp: '2023-01-01T10:00:00Z',
-      },
-      status: {
-        phase: 'completed',
-        completionTime: '2023-01-01T10:05:00Z',
-      },
-    };
-
-    vi.mocked(useA2ATask).mockReturnValue({
-      isLoading: false,
-      data: mockTask,
-      error: null,
-    } as any);
+      metadata: { creationTimestamp: '2023-01-01T10:00:00Z' },
+      status: { phase: 'completed', completionTime: '2023-01-01T10:05:00Z' },
+    });
 
     render(<A2ATaskPage />);
 
     const expectedDate = new Date('2023-01-01T10:05:00Z').toLocaleString();
-    expect(screen.getByText(expectedDate)).toBeInTheDocument();
+    expect(rowText('Completed')).toBe(`Completed${expectedDate}`);
   });
 
   it('should display dash when completion timestamp is missing', () => {
-    vi.mocked(useParams).mockReturnValue({ id: 'task-1' });
-    const mockTask: Partial<A2ATaskDetailResponse> = {
+    mockTaskResult({
       name: 'Test Task',
       taskId: 'task-1',
-      metadata: {
-        creationTimestamp: '2023-01-01T10:00:00Z',
-      },
-      status: {
-        phase: 'running',
-      },
-    };
-
-    vi.mocked(useA2ATask).mockReturnValue({
-      isLoading: false,
-      data: mockTask,
-      error: null,
-    } as any);
+      metadata: { creationTimestamp: '2023-01-01T10:00:00Z' },
+      status: { phase: 'running' },
+    });
 
     render(<A2ATaskPage />);
-
-    // Find the "Completed" label and check the next element shows "-"
-    const completedLabel = screen.getByText('Completed');
-    const timingSection = completedLabel.closest('.space-y-2');
-    expect(timingSection).toHaveTextContent('Completed-');
+    expect(rowText('Completed')).toBe('Completed—');
   });
 
   it('should calculate and display duration when both timestamps are present', () => {
-    vi.mocked(useParams).mockReturnValue({ id: 'task-1' });
-    const mockTask: Partial<A2ATaskDetailResponse> = {
+    mockTaskResult({
       name: 'Test Task',
       taskId: 'task-1',
-      metadata: {
-        creationTimestamp: '2023-01-01T10:00:00Z',
-      },
-      status: {
-        phase: 'completed',
-        completionTime: '2023-01-01T10:05:00Z', // 5 minutes later
-      },
-    };
-
-    vi.mocked(useA2ATask).mockReturnValue({
-      isLoading: false,
-      data: mockTask,
-      error: null,
-    } as any);
+      metadata: { creationTimestamp: '2023-01-01T10:00:00Z' },
+      status: { phase: 'completed', completionTime: '2023-01-01T10:05:00Z' },
+    });
 
     render(<A2ATaskPage />);
 
-    // The duration should be 300 seconds
-    // simplifyDuration doesn't convert units, it only removes trailing zeros
-    const durationLabel = screen.getByText('Duration');
-    const timingSection = durationLabel.closest('.space-y-2');
-    expect(timingSection).toHaveTextContent('Duration300s');
+    // simplifyDuration only strips trailing zero units, so 5 minutes is "300s".
+    expect(rowText('Duration')).toBe('Duration300s');
   });
 
   it('should display dash for duration when creation timestamp is missing', () => {
-    vi.mocked(useParams).mockReturnValue({ id: 'task-1' });
-    const mockTask: Partial<A2ATaskDetailResponse> = {
+    mockTaskResult({
       name: 'Test Task',
       taskId: 'task-1',
-      metadata: {
-        creationTimestamp: undefined,
-      },
-      status: {
-        phase: 'completed',
-        completionTime: '2023-01-01T10:05:00Z',
-      },
-    };
-
-    vi.mocked(useA2ATask).mockReturnValue({
-      isLoading: false,
-      data: mockTask,
-      error: null,
-    } as any);
+      metadata: { creationTimestamp: undefined },
+      status: { phase: 'completed', completionTime: '2023-01-01T10:05:00Z' },
+    });
 
     render(<A2ATaskPage />);
-
-    const durationLabel = screen.getByText('Duration');
-    const timingSection = durationLabel.closest('.space-y-2');
-    expect(timingSection).toHaveTextContent('Duration-');
+    expect(rowText('Duration')).toBe('Duration—');
   });
 
   it('should display dash for duration when completion timestamp is missing', () => {
-    vi.mocked(useParams).mockReturnValue({ id: 'task-1' });
-    const mockTask: Partial<A2ATaskDetailResponse> = {
+    mockTaskResult({
       name: 'Test Task',
       taskId: 'task-1',
-      metadata: {
-        creationTimestamp: '2023-01-01T10:00:00Z',
-      },
-      status: {
-        phase: 'running',
-      },
-    };
-
-    vi.mocked(useA2ATask).mockReturnValue({
-      isLoading: false,
-      data: mockTask,
-      error: null,
-    } as any);
+      metadata: { creationTimestamp: '2023-01-01T10:00:00Z' },
+      status: { phase: 'running' },
+    });
 
     render(<A2ATaskPage />);
-
-    const durationLabel = screen.getByText('Duration');
-    const timingSection = durationLabel.closest('.space-y-2');
-    expect(timingSection).toHaveTextContent('Duration-');
+    expect(rowText('Duration')).toBe('Duration—');
   });
 
-  it('should display both timestamps correctly for a completed task', () => {
-    vi.mocked(useParams).mockReturnValue({ id: 'task-1' });
-    const creationTime = '2023-06-15T14:30:00Z';
-    const completionTime = '2023-06-15T14:45:30Z';
-
-    const mockTask: Partial<A2ATaskDetailResponse> = {
-      name: 'Completed Task',
+  it('should render parameters only when present', () => {
+    mockTaskResult({
+      name: 'Test Task',
       taskId: 'task-1',
-      metadata: {
-        creationTimestamp: creationTime,
-      },
-      status: {
-        phase: 'completed',
-        completionTime: completionTime,
-      },
-    };
+      metadata: { creationTimestamp: '2023-01-01T10:00:00Z' },
+      status: { phase: 'running' },
+    });
 
-    vi.mocked(useA2ATask).mockReturnValue({
-      isLoading: false,
-      data: mockTask,
-      error: null,
-    } as any);
+    const { unmount } = render(<A2ATaskPage />);
+    expect(screen.queryByText('Parameters')).not.toBeInTheDocument();
+    unmount();
+
+    mockTaskResult({
+      name: 'Test Task',
+      taskId: 'task-1',
+      metadata: { creationTimestamp: '2023-01-01T10:00:00Z' },
+      status: { phase: 'running' },
+      parameters: { region: 'emea' },
+    });
 
     render(<A2ATaskPage />);
-
-    // Verify both timestamps are displayed
-    const expectedCreationDate = new Date(creationTime).toLocaleString();
-    const expectedCompletionDate = new Date(completionTime).toLocaleString();
-
-    expect(screen.getByText(expectedCreationDate)).toBeInTheDocument();
-    expect(screen.getByText(expectedCompletionDate)).toBeInTheDocument();
-
-    // Verify duration is calculated (15 minutes 30 seconds = 930 seconds)
-    const durationLabel = screen.getByText('Duration');
-    const timingSection = durationLabel.closest('.space-y-2');
-    expect(timingSection).toHaveTextContent('Duration930s');
+    expect(screen.getByText('Parameters')).toBeInTheDocument();
+    expect(screen.getByText('region')).toBeInTheDocument();
+    expect(screen.getByText('emea')).toBeInTheDocument();
   });
 });

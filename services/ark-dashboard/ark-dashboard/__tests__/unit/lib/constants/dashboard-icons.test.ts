@@ -59,9 +59,6 @@ describe('dashboard-icons', () => {
       expect(
         AGENT_BUILDER_SECTIONS.find(s => s.key === 'teams'),
       ).toBeDefined();
-      expect(
-        AGENT_BUILDER_SECTIONS.find(s => s.key === 'queries'),
-      ).toBeDefined();
     });
 
     it('should filter monitoring sections correctly', () => {
@@ -80,10 +77,6 @@ describe('dashboard-icons', () => {
   describe('enablerFeature', () => {
     it('should have enabler feature for files section', () => {
       expect(DASHBOARD_SECTIONS.files.enablerFeature).toBeDefined();
-    });
-
-    it('should have enabler feature for broker section', () => {
-      expect(DASHBOARD_SECTIONS.broker.enablerFeature).toBeDefined();
     });
   });
 });

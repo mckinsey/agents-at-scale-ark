@@ -15,10 +15,20 @@ func loadBedrockConfig(ctx context.Context, resolver *common.ValueSourceResolver
 
 	region := resolveOptionalValue(ctx, resolver, config.Region, namespace)
 	baseURL := resolveOptionalValue(ctx, resolver, config.BaseURL, namespace)
+	if baseURL != "" {
+		if err := checkBaseURL("spec.config.bedrock.baseUrl", baseURL); err != nil {
+			return err
+		}
+	}
 	accessKeyID := resolveOptionalValue(ctx, resolver, config.AccessKeyID, namespace)
 	secretAccessKey := resolveOptionalValue(ctx, resolver, config.SecretAccessKey, namespace)
 	sessionToken := resolveOptionalValue(ctx, resolver, config.SessionToken, namespace)
 	modelArn := resolveOptionalValue(ctx, resolver, config.ModelArn, namespace)
+
+	apiKey, err := resolveBedrockAPIKey(ctx, resolver, config.APIKey, namespace)
+	if err != nil {
+		return err
+	}
 
 	var properties map[string]string
 	if config.Properties != nil {
@@ -46,7 +56,7 @@ func loadBedrockConfig(ctx context.Context, resolver *common.ValueSourceResolver
 		properties["temperature"] = *config.Temperature
 	}
 
-	bedrockModel := NewBedrockModel(modelName, region, baseURL, accessKeyID, secretAccessKey, sessionToken, modelArn, properties)
+	bedrockModel := NewBedrockModel(modelName, region, baseURL, accessKeyID, secretAccessKey, sessionToken, apiKey, modelArn, properties)
 	model.Provider = bedrockModel
 	model.Properties = properties
 
@@ -59,6 +69,20 @@ func resolveOptionalValue(ctx context.Context, resolver *common.ValueSourceResol
 	}
 	value, _ := resolver.ResolveValueSource(ctx, *valueSource, namespace)
 	return value
+}
+
+func resolveBedrockAPIKey(ctx context.Context, resolver *common.ValueSourceResolver, valueSource *arkv1alpha1.ValueSource, namespace string) (string, error) {
+	if valueSource == nil {
+		return "", nil
+	}
+	value, err := resolver.ResolveValueSource(ctx, *valueSource, namespace)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve Bedrock apiKey: %w", err)
+	}
+	if value == "" {
+		return "", fmt.Errorf("bedrock apiKey is configured but resolved to an empty value")
+	}
+	return value, nil
 }
 
 func resolveProperties(ctx context.Context, resolver *common.ValueSourceResolver, properties map[string]arkv1alpha1.ValueSource, namespace, providerName string) (map[string]string, error) {

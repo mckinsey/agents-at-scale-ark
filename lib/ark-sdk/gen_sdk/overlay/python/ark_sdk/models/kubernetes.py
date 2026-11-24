@@ -1,7 +1,16 @@
 """Kubernetes-related response models."""
 from typing import List, Dict, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator, model_validator
+
+from ..annotations import filter_ark_annotations
+from ..labels import validate_legacy_tag, validate_tag
+from ..secret_scope import (
+    MAX_SECRET_NAME_LENGTH,
+    PERSONAL_NAME_PREFIX_LENGTH,
+    SecretScopeKind,
+    validate_secret_name,
+)
 
 
 class NamespaceResponse(BaseModel):
@@ -30,7 +39,17 @@ class SecretResponse(BaseModel):
     """Kubernetes secret response model."""
     name: str
     id: str
+    display_name: str
+    scope: SecretScopeKind
+    description: Optional[str] = None
+    alias: Optional[str] = None
+    labels: List[str] = []
     annotations: Optional[Dict[str, str]] = None
+
+    @field_validator("annotations")
+    @classmethod
+    def _filter_annotations(cls, value: Optional[Dict[str, str]]) -> Dict[str, str]:
+        return filter_ark_annotations(value)
 
 
 class SecretListResponse(BaseModel):
@@ -44,17 +63,120 @@ class SecretCreateRequest(BaseModel):
     name: str
     string_data: Dict[str, str]
     type: Optional[str] = "Opaque"
+    description: Optional[str] = None
+    alias: Optional[str] = None
+    labels: List[str] = []
+    scope: SecretScopeKind = "shared"
+
+    @field_validator("name")
+    @classmethod
+    def _validate_name(cls, value: str) -> str:
+        return validate_secret_name(value)
+
+    @field_validator("labels")
+    @classmethod
+    def _validate_labels(cls, value: List[str]) -> List[str]:
+        return [validate_tag(label) for label in value]
+
+    @model_validator(mode="after")
+    def _validate_personal_name_length(self) -> "SecretCreateRequest":
+        limit = MAX_SECRET_NAME_LENGTH - PERSONAL_NAME_PREFIX_LENGTH
+        if self.scope == "personal" and len(self.name) > limit:
+            raise ValueError(f"Secret name is too long for a personal secret: at most {limit} characters")
+        return self
 
 
 class SecretUpdateRequest(BaseModel):
     """Request model for updating a secret."""
-    string_data: Dict[str, str]
+    string_data: Optional[Dict[str, str]] = None
+    description: Optional[str] = None
+    alias: Optional[str] = None
+    labels: List[str] = []
+    scope: Optional[SecretScopeKind] = None
+
+    @field_validator("labels")
+    @classmethod
+    def _validate_labels(cls, value: List[str]) -> List[str]:
+        # A tag pre-dating the alphanumeric-only rule may still be sent back
+        # unchanged here; SecretClient.update_secret enforces the current
+        # rule on anything that isn't already on the resource.
+        return [validate_legacy_tag(label) for label in value]
 
 
 class SecretDetailResponse(BaseModel):
     """Detailed secret response model."""
     name: str
     id: str
+    display_name: str
+    scope: SecretScopeKind
     type: str
     secret_length: int  # Total length of all secret data in bytes
+    keys: List[str] = []  # Names of the keys in the secret data (never the values)
+    description: Optional[str] = None
+    alias: Optional[str] = None
+    labels: List[str] = []
     annotations: Optional[Dict[str, str]] = None
+
+    @field_validator("annotations")
+    @classmethod
+    def _filter_annotations(cls, value: Optional[Dict[str, str]]) -> Dict[str, str]:
+        return filter_ark_annotations(value)
+
+
+class ConfigurationResponse(BaseModel):
+    """Configuration response model."""
+    name: str
+    id: str
+    value: Optional[str] = None
+    description: Optional[str] = None
+    alias: Optional[str] = None
+    labels: List[str] = []
+
+
+class ConfigurationListResponse(BaseModel):
+    """List of configurations response model."""
+    items: List[ConfigurationResponse]
+    count: int
+
+
+class ConfigurationCreateRequest(BaseModel):
+    """Request model for creating a configuration."""
+    name: str
+    value: str
+    description: Optional[str] = None
+    alias: Optional[str] = None
+    labels: List[str] = []
+
+    @field_validator("labels")
+    @classmethod
+    def _validate_labels(cls, value: List[str]) -> List[str]:
+        return [validate_tag(label) for label in value]
+
+
+class ConfigurationUpdateRequest(BaseModel):
+    """Request model for updating a configuration."""
+    value: str
+    description: Optional[str] = None
+    alias: Optional[str] = None
+    labels: List[str] = []
+
+    @field_validator("labels")
+    @classmethod
+    def _validate_labels(cls, value: List[str]) -> List[str]:
+        # A tag pre-dating the alphanumeric-only rule may still be sent back
+        # unchanged here; ConfigurationClient.update_configuration enforces
+        # the current rule on anything that isn't already on the resource.
+        return [validate_legacy_tag(label) for label in value]
+
+
+class ConfigurationReference(BaseModel):
+    """A resource that reads a configuration."""
+    kind: str
+    name: str
+    field: str
+
+
+class ConfigurationReferenceListResponse(BaseModel):
+    """Resources that read a configuration."""
+    items: List[ConfigurationReference]
+    count: int

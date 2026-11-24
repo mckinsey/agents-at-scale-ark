@@ -11,8 +11,7 @@ import (
 
 func SetupA2AServerWebhookWithManager(mgr ctrl.Manager) error {
 	v := validation.NewValidator(&validation.WebhookLookup{Client: mgr.GetClient()})
-	return ctrl.NewWebhookManagedBy(mgr).
-		For(&arkv1prealpha1.A2AServer{}).
-		WithValidator(&validation.WebhookValidator{V: v}).
+	return ctrl.NewWebhookManagedBy(mgr, &arkv1prealpha1.A2AServer{}).
+		WithValidator(&validation.WebhookValidator[*arkv1prealpha1.A2AServer]{V: v}).
 		Complete()
 }

@@ -1,5 +1,7 @@
 
 import re
+from datetime import datetime
+from typing import Any, Optional
 
 RFC1123_SEGMENT_MAX = 63        # bytes per DNS label
 RFC1123_NAME_MAX    = 253       # bytes total (incl. dots)
@@ -55,3 +57,23 @@ def to_rfc1123(name: str) -> str:
         raise ValueError("Cannot coerce {!r} to a valid RFC-1123 name".format(name))
 
     return s
+
+
+def parse_iso_timestamp(value: Any) -> Optional[datetime]:
+    """Parse a Kubernetes / ISO-8601 timestamp into a datetime.
+
+    Accepts an ISO-8601 string (with or without a trailing ``Z``), an already
+    parsed ``datetime`` (returned as-is — the k8s client hands these back for
+    some fields), or ``None``/empty (returns ``None``). Returns ``None`` on an
+    unparseable value rather than raising.
+    """
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    return None

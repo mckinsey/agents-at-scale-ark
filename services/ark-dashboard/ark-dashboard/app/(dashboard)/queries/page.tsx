@@ -1,15 +1,21 @@
 'use client';
 
-import { Plus, Search } from 'lucide-react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect } from 'react';
 
-import { PageHeader } from '@/components/common/page-header';
+import { ResourcePageHeader } from '@/components/common/resource-page-header';
+import { Autorenew, DatabaseSearch } from '@/components/icons';
+import { NamespacedLink } from '@/components/namespaced-link';
 import { QueriesSection } from '@/components/sections/queries-section';
+import {
+  LearnMoreButton,
+  ResourceEmptyState,
+  ResourceSearchInput,
+} from '@/components/sections/resource-list-states';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { IconShell } from '@/components/ui/icon-shell';
 import { Pagination } from '@/components/ui/pagination';
-import { BASE_BREADCRUMBS } from '@/lib/constants/breadcrumbs';
+import { DOCS_URLS } from '@/lib/constants/docs';
+import { SEARCH_DEBOUNCE_MS, useUrlState } from '@/lib/hooks/use-url-state';
 import { useListQueries } from '@/lib/services/queries-hooks';
 import {
   DEFAULT_PAGE_SIZE,
@@ -18,18 +24,19 @@ import {
 } from '@/lib/utils/pagination';
 
 const PAGE_SIZE_OPTIONS = [10, 15, 25, 50, 100];
-const SEARCH_DEBOUNCE_MS = 400;
+
+const URL_STATE_SPEC = {
+  q: { default: '', debounceMs: SEARCH_DEBOUNCE_MS },
+  page: { default: 1, parse: parsePage },
+  pageSize: { default: DEFAULT_PAGE_SIZE, parse: parsePageSize },
+};
 
 export default function QueriesPage() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const queriesSectionRef = useRef<{ openAddEditor: () => void }>(null);
+  const [urlState, setUrlState, committedState] = useUrlState(URL_STATE_SPEC);
 
-  const page = parsePage(searchParams.get('page'));
-  const pageSize = parsePageSize(searchParams.get('pageSize'));
-  const urlSearch = searchParams.get('q') ?? '';
-
-  const [searchInput, setSearchInput] = useState<string>(urlSearch);
+  const page = urlState.page;
+  const pageSize = urlState.pageSize;
+  const urlSearch = committedState.q;
 
   const queriesQuery = useListQueries({
     page,
@@ -37,113 +44,95 @@ export default function QueriesPage() {
     search: urlSearch || undefined,
   });
 
-  const { data } = queriesQuery;
+  const { data, isLoading, isFetching, isError, refetch } = queriesQuery;
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  const pageTitle = data ? `Queries (${total})` : 'Queries';
-
-  const searchParamsRef = useRef(searchParams);
-  useEffect(() => {
-    searchParamsRef.current = searchParams;
-  }, [searchParams]);
-
-  const updateParams = useCallback(
-    (next: Record<string, string | null>) => {
-      const params = new URLSearchParams(searchParamsRef.current.toString());
-      for (const [key, value] of Object.entries(next)) {
-        if (value === null || value === '') {
-          params.delete(key);
-        } else {
-          params.set(key, value);
-        }
-      }
-      const qs = params.toString();
-      router.replace(qs ? `?${qs}` : '?');
-    },
-    [router],
-  );
+  const isEmpty = !isLoading && !isError && total === 0 && !urlSearch;
 
   useEffect(() => {
-    if (searchInput === urlSearch) return;
-    const t = setTimeout(() => {
-      updateParams({ q: searchInput || null, page: null });
-    }, SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(t);
-  }, [searchInput, urlSearch, updateParams]);
-
-  useEffect(() => {
-    setSearchInput(urlSearch);
-  }, [urlSearch]);
-
-  useEffect(() => {
-    if (total === 0) return;
+    if (!data) return;
     if (page > totalPages) {
-      updateParams({ page: null });
+      setUrlState({ page: 1 });
     }
-  }, [page, total, totalPages, updateParams]);
+  }, [data, page, totalPages, setUrlState]);
 
   const handlePageChange = (next: number) => {
-    updateParams({ page: next === 1 ? null : String(next) });
+    setUrlState({ page: next });
   };
 
   const handlePageSizeChange = (next: number) => {
-    updateParams({
-      pageSize: next === DEFAULT_PAGE_SIZE ? null : String(next),
-      page: null,
-    });
+    setUrlState({ pageSize: next });
   };
 
   const handleClearSearch = () => {
-    setSearchInput('');
-    updateParams({ q: null, page: null });
+    setUrlState({ q: '' }, { flush: true });
   };
 
   return (
-    <>
-      <PageHeader
-        breadcrumbs={BASE_BREADCRUMBS}
-        currentPage="Queries"
+    <div className="flex min-h-0 w-full content-shell flex-1 flex-col">
+      <ResourcePageHeader
+        icon={<DatabaseSearch />}
+        title={total > 0 ? `Query logs (${total})` : 'Query logs'}
+        description="Monitor query activity, execution time, status, and errors"
         actions={
-          <Button onClick={() => queriesSectionRef.current?.openAddEditor()}>
-            <Plus className="h-4 w-4" />
-            Create Query
-          </Button>
+          <>
+            <Button
+              variant="outline"
+              onClick={() => refetch()}
+              disabled={isFetching}>
+              <IconShell size="sm">
+                <Autorenew />
+              </IconShell>
+              Refresh
+            </Button>
+            <NamespacedLink href="/query/new">
+              <Button>Create query</Button>
+            </NamespacedLink>
+          </>
         }
       />
-      <div className="flex flex-1 flex-col">
-        <div className="flex items-center justify-between">
-          <h1 className="text-xl">{pageTitle}</h1>
-          <div className="relative w-[300px]">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              type="search"
+
+      {isEmpty ? (
+        <ResourceEmptyState
+          icon={<DatabaseSearch />}
+          title="No queries yet"
+          description={
+            <>
+              <p>You haven&apos;t created any query yet.</p>
+              <p>Get started by creating your query to see results.</p>
+            </>
+          }
+          actions={<LearnMoreButton href={DOCS_URLS.queries} />}
+        />
+      ) : (
+        <div className="mt-5 flex min-h-0 w-full flex-1 flex-col gap-2">
+          <div className="flex flex-none items-center">
+            <ResourceSearchInput
+              value={urlState.q}
+              onChange={q => setUrlState({ q })}
               placeholder="Search query text..."
-              aria-label="Search queries"
-              value={searchInput}
-              onChange={e => setSearchInput(e.target.value)}
-              className="pl-10"
+              className="w-[493px]"
             />
           </div>
-        </div>
 
-        <QueriesSection
-          ref={queriesSectionRef}
-          searchTerm={urlSearch}
-          onClearSearch={handleClearSearch}
-          queryResult={queriesQuery}
-        />
-
-        {total > pageSize && (
-          <Pagination
-            currentPage={page}
-            totalPages={totalPages}
-            itemsPerPage={pageSize}
-            onPageChange={handlePageChange}
-            onItemsPerPageChange={handlePageSizeChange}
-            itemsPerPageOptions={PAGE_SIZE_OPTIONS}
+          <QueriesSection
+            searchTerm={urlSearch}
+            onClearSearch={handleClearSearch}
+            queryResult={queriesQuery}
           />
-        )}
-      </div>
-    </>
+
+          {total > pageSize && (
+            <Pagination
+              currentPage={page}
+              totalPages={totalPages}
+              itemsPerPage={pageSize}
+              onPageChange={handlePageChange}
+              onItemsPerPageChange={handlePageSizeChange}
+              itemsPerPageOptions={PAGE_SIZE_OPTIONS}
+            />
+          )}
+        </div>
+      )}
+    </div>
   );
 }

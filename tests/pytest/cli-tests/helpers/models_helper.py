@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 
-from helpers import k8s
+from shared import k8s
 
 
 class ModelsHelper:
@@ -40,7 +40,14 @@ class ModelsHelper:
         resource: Dict[str, Any] = {
             "apiVersion": "v1",
             "kind": "Secret",
-            "metadata": {"name": name, "namespace": self.NAMESPACE},
+            "metadata": {
+                "name": name,
+                "namespace": self.NAMESPACE,
+                "labels": {
+                    "ark.mckinsey.com/resource-type": "secret",
+                    "ark.mckinsey.com/scope": "shared",
+                },
+            },
             "type": "Opaque",
             "data": {"token": encoded},
         }

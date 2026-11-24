@@ -3,20 +3,26 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAtomValue } from 'jotai';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { toast } from 'sonner';
 
 import { isExperimentalExecutionEngineEnabledAtom } from '@/atoms/experimental-features';
+import {
+  normalizeCustomHeaders,
+  useCustomHeaderRows,
+} from '@/components/forms/shared/custom-header-rows';
 import type { Parameter } from '@/components/ui/parameter-editor';
+import { toast } from '@/components/ui/sonner';
 import type {
   Agent,
   AgentCreateRequest,
+  AgentOverride,
   AgentTool,
   AgentUpdateRequest,
   ExecutionEngine,
-  Model,
+  ModelListItem,
   Tool,
+  ToolApprovalConfig,
 } from '@/lib/services';
 import {
   agentsService,
@@ -24,20 +30,45 @@ import {
   modelsService,
   toolsService,
 } from '@/lib/services';
-import { GET_ALL_AGENTS_QUERY_KEY } from '@/lib/services/agents-hooks';
+import {
+  GET_AGENT_BY_NAME_QUERY_KEY,
+  GET_ALL_AGENTS_QUERY_KEY,
+} from '@/lib/services/agents-hooks';
+import {
+  OUTPUT_SCHEMA_ANNOTATION,
+  buildOutputSchemaAnnotationUpdate,
+  supportsOutputSchema,
+} from '@/lib/utils/output-schema';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
-import { AgentFormMode, type AgentFormValues, agentFormSchema } from './types';
+import {
+  AgentFormMode,
+  type AgentFormValues,
+  createAgentFormSchema,
+} from './types';
 import {
   agentParametersChanged,
+  buildAgentOverrides,
+  getModelOverrideHeaders,
   transformAgentParametersToForm,
   transformFormParametersToApi,
 } from './utils';
+
+const EXISTING_AGENT_MODES: ReadonlySet<AgentFormMode> = new Set([
+  AgentFormMode.EDIT,
+  AgentFormMode.VIEW,
+]);
 
 interface UseAgentFormOptions {
   mode: AgentFormMode;
   agentName?: string;
   onSuccess?: () => void;
+}
+
+function toEngineName(executionEngineName: string | undefined): string {
+  return executionEngineName && executionEngineName !== '__none__'
+    ? executionEngineName
+    : '';
 }
 
 export function useAgentForm({
@@ -55,7 +86,7 @@ export function useAgentForm({
   );
   const [saving, setSaving] = useState(false);
   const [agent, setAgent] = useState<Agent | null>(null);
-  const [models, setModels] = useState<Model[]>([]);
+  const [models, setModels] = useState<ModelListItem[]>([]);
   const [availableTools, setAvailableTools] = useState<Tool[]>([]);
   const [toolsLoading, setToolsLoading] = useState(true);
   const [selectedTools, setSelectedTools] = useState<AgentTool[]>([]);
@@ -66,13 +97,43 @@ export function useAgentForm({
   );
   const [parameters, setParameters] = useState<Parameter[]>([]);
   const [initialParameters, setInitialParameters] = useState<Parameter[]>([]);
+  const headerRows = useCustomHeaderRows();
+  const {
+    load: loadHeaders,
+    validate: validateHeaderRows,
+    toPayload: getHeadersPayload,
+  } = headerRows;
+  const [initialOverrides, setInitialOverrides] = useState<AgentOverride[]>([]);
+  const [initialHeadersSnapshot, setInitialHeadersSnapshot] = useState('[]');
 
   const isExperimentalExecutionEngineEnabled = useAtomValue(
     isExperimentalExecutionEngineEnabledAtom,
   );
 
+  const isOutputSchemaSupported = useCallback(
+    (executionEngineName: string | undefined) =>
+      !agent?.isA2A &&
+      supportsOutputSchema(
+        executionEngineName,
+        executionEngines.find(engine => engine.name === executionEngineName)
+          ?.annotations,
+      ),
+    [agent, executionEngines],
+  );
+  const isOutputSchemaSupportedRef = useRef(isOutputSchemaSupported);
+  isOutputSchemaSupportedRef.current = isOutputSchemaSupported;
+  const resolver = useMemo(
+    () =>
+      zodResolver(
+        createAgentFormSchema(executionEngineName =>
+          isOutputSchemaSupportedRef.current(executionEngineName),
+        ),
+      ),
+    [],
+  );
+
   const form = useForm<AgentFormValues>({
-    resolver: zodResolver(agentFormSchema),
+    resolver,
     defaultValues: {
       name: '',
       description: '',
@@ -80,24 +141,32 @@ export function useAgentForm({
       selectedModelNamespace: '',
       executionEngineName: '',
       prompt: '',
+      outputSchema: '',
     },
   });
 
   useEffect(() => {
+    const isExistingAgent = EXISTING_AGENT_MODES.has(mode);
+
     const loadData = async () => {
       try {
-        if (
-          (mode === AgentFormMode.EDIT || mode === AgentFormMode.VIEW) &&
-          agentName
-        ) {
+        const enginesPromise = isExperimentalExecutionEngineEnabled
+          ? executionEnginesService.getAll(namespace)
+          : Promise.resolve([]);
+
+        if (isExistingAgent && agentName) {
           const [agentData, modelsData, toolsData, enginesData] =
             await Promise.all([
-              agentsService.getByName(agentName),
-              modelsService.getAll(),
-              toolsService.getAll(),
-              isExperimentalExecutionEngineEnabled
-                ? executionEnginesService.getAll()
-                : Promise.resolve([]),
+              // fetchQuery shares the React Query cache, so a warm entry
+              // (seeded by a prior visit) paints without a round-trip and
+              // still revalidates per staleTime.
+              queryClient.fetchQuery({
+                queryKey: [GET_AGENT_BY_NAME_QUERY_KEY, agentName, namespace],
+                queryFn: () => agentsService.getByName(namespace, agentName),
+              }),
+              modelsService.list(namespace),
+              toolsService.getAll(namespace),
+              enginesPromise,
             ]);
 
           if (!agentData) {
@@ -122,6 +191,12 @@ export function useAgentForm({
           );
           setParameters(transformedParams);
           setInitialParameters(transformedParams);
+          const loadedHeaders = getModelOverrideHeaders(agentData.overrides);
+          loadHeaders(loadedHeaders);
+          setInitialOverrides(agentData.overrides ?? []);
+          setInitialHeadersSnapshot(
+            JSON.stringify(normalizeCustomHeaders(loadedHeaders)),
+          );
 
           form.reset({
             name: agentData.name,
@@ -130,30 +205,27 @@ export function useAgentForm({
             selectedModelNamespace: agentData.modelRef?.namespace || '',
             executionEngineName: agentData.executionEngine?.name || '',
             prompt: agentData.prompt || '',
+            outputSchema:
+              agentData.annotations?.[OUTPUT_SCHEMA_ANNOTATION] || '',
           });
         } else {
           const [modelsData, toolsData, enginesData] = await Promise.all([
-            modelsService.getAll(),
-            toolsService.getAll(),
-            isExperimentalExecutionEngineEnabled
-              ? executionEnginesService.getAll()
-              : Promise.resolve([]),
+            modelsService.list(namespace),
+            toolsService.getAll(namespace),
+            enginesPromise,
           ]);
           setModels(modelsData);
           setAvailableTools(toolsData);
           setExecutionEngines(enginesData);
         }
       } catch (error) {
-        toast.error(
-          `Failed to load ${mode === AgentFormMode.EDIT || mode === AgentFormMode.VIEW ? 'agent' : 'data'}`,
-          {
-            description:
-              error instanceof Error
-                ? error.message
-                : 'An unexpected error occurred',
-          },
-        );
-        if (mode === AgentFormMode.EDIT || mode === AgentFormMode.VIEW) {
+        toast.error(`Failed to load ${isExistingAgent ? 'agent' : 'data'}`, {
+          description:
+            error instanceof Error
+              ? error.message
+              : 'An unexpected error occurred',
+        });
+        if (isExistingAgent) {
           onSuccessRef.current?.();
         }
       } finally {
@@ -171,6 +243,17 @@ export function useAgentForm({
 
   const onSubmit = useCallback(
     async (values: AgentFormValues) => {
+      const isA2A = agent?.isA2A ?? false;
+      const headers = isA2A ? [] : validateHeaderRows();
+      if (!headers) {
+        toast.error('Fix the header errors before saving');
+        return;
+      }
+      const overrides = buildAgentOverrides(
+        mode === AgentFormMode.CREATE ? [] : initialOverrides,
+        headers,
+      );
+
       setSaving(true);
       try {
         if (mode === AgentFormMode.CREATE) {
@@ -194,59 +277,115 @@ export function useAgentForm({
             prompt: values.prompt || undefined,
             tools: selectedTools,
             parameters: mapParametersToApi(),
+            overrides: overrides.length > 0 ? overrides : undefined,
           };
 
-          await agentsService.create(createData);
+          await agentsService.create(namespace, createData);
           queryClient.invalidateQueries({
             queryKey: [GET_ALL_AGENTS_QUERY_KEY],
           });
         } else if (agent) {
           const updateData: AgentUpdateRequest = {
-            description: values.description || undefined,
-            modelRef:
-              !agent.isA2A &&
-              values.selectedModelName &&
-              values.selectedModelName !== '' &&
-              values.selectedModelName !== '__none__'
+            description: values.description || null,
+            modelRef: agent.isA2A
+              ? undefined
+              : values.selectedModelName &&
+                  values.selectedModelName !== '' &&
+                  values.selectedModelName !== '__none__'
                 ? {
                     name: values.selectedModelName,
                     namespace: values.selectedModelNamespace || undefined,
                   }
-                : undefined,
+                : null,
             executionEngine:
-              !agent.isA2A &&
-              values.executionEngineName &&
-              values.executionEngineName !== '__none__'
-                ? { name: values.executionEngineName }
-                : undefined,
-            prompt: !agent.isA2A ? values.prompt || undefined : undefined,
+              agent.isA2A || !isExperimentalExecutionEngineEnabled
+                ? undefined
+                : values.executionEngineName &&
+                    values.executionEngineName !== '__none__'
+                  ? { name: values.executionEngineName }
+                  : null,
+            prompt: agent.isA2A ? undefined : values.prompt || null,
             tools: agent.isA2A ? undefined : selectedTools,
             parameters: agent.isA2A ? undefined : mapParametersToApi(),
+            annotations: buildOutputSchemaAnnotationUpdate({
+              supported: isOutputSchemaSupported(values.executionEngineName),
+              engineChanged:
+                toEngineName(values.executionEngineName) !==
+                toEngineName(agent.executionEngine?.name),
+              value: values.outputSchema,
+            }),
+            overrides: agent.isA2A
+              ? undefined
+              : overrides.length > 0
+                ? overrides
+                : null,
           };
 
-          await agentsService.update(agent.name, updateData);
+          const updated = await agentsService.update(
+            namespace,
+            agent.name,
+            updateData,
+          );
+          if (!updated) {
+            toast.error('Unable to update agent', {
+              description: 'Agent not found',
+            });
+            return;
+          }
           toast.success('Agent updated successfully');
+
+          queryClient.invalidateQueries({
+            queryKey: [GET_ALL_AGENTS_QUERY_KEY],
+          });
+          queryClient.invalidateQueries({
+            queryKey: [GET_AGENT_BY_NAME_QUERY_KEY, agent.name],
+          });
+
+          form.reset(values);
+          setInitialTools(selectedTools);
+          setInitialParameters(parameters);
+          if (!agent.isA2A) {
+            setInitialOverrides(overrides);
+            setInitialHeadersSnapshot(JSON.stringify(headers));
+          }
         }
 
         onSuccessRef.current?.();
       } catch (error) {
         const action = mode === AgentFormMode.CREATE ? 'create' : 'update';
-        toast.error(`Failed to ${action} agent`, {
-          description:
-            error instanceof Error
-              ? error.message
-              : 'An unexpected error occurred',
-        });
+        console.error(`Failed to ${action} agent`, error);
+        const reason = error instanceof Error ? error.message : undefined;
+        toast.error(
+          reason
+            ? `Unable to ${action} agent: ${reason}`
+            : `Unable to ${action} agent`,
+        );
       } finally {
         setSaving(false);
       }
     },
-    [mode, agent, selectedTools, mapParametersToApi, queryClient, namespace],
+    [
+      mode,
+      agent,
+      selectedTools,
+      parameters,
+      mapParametersToApi,
+      validateHeaderRows,
+      initialOverrides,
+      queryClient,
+      namespace,
+      form,
+      isExperimentalExecutionEngineEnabled,
+      isOutputSchemaSupported,
+    ],
   );
 
   const handleToolToggle = useCallback((tool: Tool, checked: boolean) => {
     if (checked) {
-      const newTool: AgentTool = { type: 'custom', name: tool.name };
+      const newTool: AgentTool = {
+        type: tool.type ?? 'custom',
+        name: tool.name,
+      };
       setSelectedTools(prev => [...prev, newTool]);
     } else {
       setSelectedTools(prev => prev.filter(t => t.name !== tool.name));
@@ -263,11 +402,30 @@ export function useAgentForm({
     [selectedTools],
   );
 
+  const getToolApproval = useCallback(
+    (toolName: string) =>
+      selectedTools.find(t => t.name === toolName)?.approval ?? undefined,
+    [selectedTools],
+  );
+
+  const setToolApproval = useCallback(
+    (toolName: string, approval: ToolApprovalConfig | undefined) => {
+      setSelectedTools(prev =>
+        prev.map(t => (t.name === toolName ? { ...t, approval } : t)),
+      );
+    },
+    [],
+  );
+
   const hasToolsChanged = useCallback(() => {
     if (selectedTools.length !== initialTools.length) return true;
-    const selectedNames = selectedTools.map(t => t.name).sort();
-    const initialNames = initialTools.map(t => t.name).sort();
-    return selectedNames.some((name, i) => name !== initialNames[i]);
+    const normalize = (tools: AgentTool[]) =>
+      [...tools]
+        .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+        .map(t => `${t.name}:${JSON.stringify(t.approval ?? null)}`);
+    const selected = normalize(selectedTools);
+    const initial = normalize(initialTools);
+    return selected.some((entry, i) => entry !== initial[i]);
   }, [selectedTools, initialTools]);
 
   const hasParametersChanged = useCallback(
@@ -275,8 +433,20 @@ export function useAgentForm({
     [parameters, initialParameters],
   );
 
+  const onInvalid = useCallback(() => {
+    if (!agent?.isA2A) {
+      validateHeaderRows();
+    }
+  }, [agent?.isA2A, validateHeaderRows]);
+
+  const hasHeadersChanged =
+    JSON.stringify(getHeadersPayload()) !== initialHeadersSnapshot;
+
   const hasChanges =
-    form.formState.isDirty || hasToolsChanged() || hasParametersChanged();
+    form.formState.isDirty ||
+    hasToolsChanged() ||
+    hasParametersChanged() ||
+    hasHeadersChanged;
 
   return {
     form,
@@ -292,6 +462,7 @@ export function useAgentForm({
       selectedTools,
       unavailableTools,
       parameters,
+      headerRows,
       isExperimentalExecutionEngineEnabled,
       hasChanges,
     },
@@ -300,7 +471,11 @@ export function useAgentForm({
       handleToolToggle,
       handleDeleteTool,
       isToolSelected,
+      getToolApproval,
+      setToolApproval,
+      isOutputSchemaSupported,
       onSubmit,
+      onInvalid,
     },
   };
 }

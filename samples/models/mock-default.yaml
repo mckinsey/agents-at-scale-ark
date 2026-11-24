@@ -1,0 +1,17 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Model
+metadata:
+  name: default
+spec:
+  provider: openai
+  model:
+    value: gpt-5-nano-2025-08-07
+  config:
+    openai:
+      baseUrl:
+        value: "https://openai.prod.ai-gateway.quantumblack.com/b894067e-6530-4890-aa17-e4d5a999acf4/v1"
+      apiKey:
+        valueFrom:
+          secretKeyRef:
+            name: openai-gateway-key
+            key: token

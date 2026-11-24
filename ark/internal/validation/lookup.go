@@ -64,7 +64,7 @@ func (l *WebhookLookup) GetArkConfig(ctx context.Context) (*arkv1alpha1.ArkConfi
 
 type StorageLookup struct {
 	Backend   storage.Backend
-	K8sClient client.Client
+	K8sClient client.Reader
 }
 
 func (l *StorageLookup) GetResource(ctx context.Context, kind, namespace, name string) (runtime.Object, error) {
@@ -87,8 +87,28 @@ func (l *StorageLookup) GetConfigMap(ctx context.Context, namespace, name string
 	return cm, nil
 }
 
+// GetArkConfig fetches the cluster-wide ArkConfig singleton from the storage
+// backend. Same contract as WebhookLookup.GetArkConfig: callers must treat any
+// error as "no global config" and fall back to hardcoded defaults — never
+// block admission due to a config read.
+func (l *StorageLookup) GetArkConfig(ctx context.Context) (*arkv1alpha1.ArkConfig, error) {
+	obj, err := l.Backend.Get(ctx, "ArkConfig", "", ArkConfigSingletonName)
+	if err != nil {
+		return nil, err
+	}
+	cfg, ok := obj.(*arkv1alpha1.ArkConfig)
+	if !ok {
+		return nil, fmt.Errorf("unexpected type %T for ArkConfig", obj)
+	}
+	return cfg, nil
+}
+
 // Compile-time interface satisfaction.
-var _ ArkConfigLookup = (*WebhookLookup)(nil)
+var (
+	_ ArkConfigLookup = (*WebhookLookup)(nil)
+	_ ArkConfigLookup = (*StorageLookup)(nil)
+	_ DefaultsLookup  = (*WebhookLookup)(nil)
+)
 
 func newArkObject(kind string) client.Object {
 	switch kind {

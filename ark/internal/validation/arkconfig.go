@@ -24,6 +24,14 @@ type ArkConfigLookup interface {
 	GetArkConfig(ctx context.Context) (*arkv1alpha1.ArkConfig, error)
 }
 
+// DefaultsLookup is what defaulting needs: the ArkConfig singleton plus
+// the ability to check whether a resource a default points at actually
+// exists. WebhookLookup satisfies both halves.
+type DefaultsLookup interface {
+	ArkConfigLookup
+	ResourceLookup
+}
+
 func resolveTTL(
 	ctx context.Context,
 	lookup ArkConfigLookup,
@@ -49,4 +57,23 @@ func ResolveQueryTTL(ctx context.Context, lookup ArkConfigLookup) metav1.Duratio
 	return resolveTTL(ctx, lookup, func(s *arkv1alpha1.ArkConfigSpec) *metav1.Duration {
 		return s.QueryTTL
 	})
+}
+
+// ResolveDefaultMemory returns the Memory to inject into a Query that has
+// no explicit spec.memory, or nil when no cluster-wide default is
+// configured. The returned ref is a fresh value carrying only the name:
+// the ArkConfig read may be served from a shared cache, and an explicit
+// namespace is never honoured (see ValidateArkConfig).
+func ResolveDefaultMemory(ctx context.Context, lookup ArkConfigLookup) *arkv1alpha1.MemoryRef {
+	if lookup == nil {
+		return nil
+	}
+	cfg, err := lookup.GetArkConfig(ctx)
+	if err != nil {
+		return nil
+	}
+	if cfg.Spec.DefaultMemory == nil || cfg.Spec.DefaultMemory.Name == "" {
+		return nil
+	}
+	return &arkv1alpha1.MemoryRef{Name: cfg.Spec.DefaultMemory.Name}
 }

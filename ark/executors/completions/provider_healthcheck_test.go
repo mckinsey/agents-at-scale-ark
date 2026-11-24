@@ -303,6 +303,7 @@ func TestBedrockModel_HealthCheck_InitializesClient(t *testing.T) {
 		"test-secret-key",
 		"",
 		"",
+		"",
 		nil,
 	)
 
@@ -320,6 +321,7 @@ func TestBedrockModel_HealthCheck_ReusesCachedClient(t *testing.T) {
 		"",
 		"test-access-key",
 		"test-secret-key",
+		"",
 		"",
 		"",
 		nil,
@@ -345,6 +347,7 @@ func TestModel_HealthCheck_BedrockProvider(t *testing.T) {
 		"",
 		"test-access-key",
 		"test-secret-key",
+		"",
 		"",
 		"",
 		nil,

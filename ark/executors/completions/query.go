@@ -36,11 +36,6 @@ func getMCPSettings(crd *arkv1alpha1.Query) (map[string]arkmcp.MCPSettings, erro
 	return mcpSettings, nil
 }
 
-// IsStreamingEnabled checks if streaming is requested for a query
-func IsStreamingEnabled(query arkv1alpha1.Query) bool {
-	return query.GetAnnotations() != nil && query.GetAnnotations()[annotations.StreamingEnabled] == TrueString
-}
-
 func MakeQuery(crd *arkv1alpha1.Query) (*Query, error) {
 	mcpSettings, err := getMCPSettings(crd)
 	if err != nil {

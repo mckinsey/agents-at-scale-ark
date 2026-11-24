@@ -9,6 +9,10 @@ cd chart && helm dependency update
 helm upgrade --install argo-workflows ./chart -n argo-workflows --create-namespace
 ```
 
+### Non-root Executor Image
+
+Workflow pods use Argo's non-root executor image (`argoexec:<version>-nonroot`, UID 8737). It is enabled in `chart/values.yaml` with `argo-workflows.executor.image.nonroot: true`, so the tag follows the Argo subchart version in `chart/Chart.yaml`.
+
 ### With Minio Artifact Storage
 
 To enable Minio for artifact storage, first install the Minio Operator:

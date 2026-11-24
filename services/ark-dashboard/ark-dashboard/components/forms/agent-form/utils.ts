@@ -1,6 +1,8 @@
 'use client';
 
 import type { Parameter } from '@/components/ui/parameter-editor';
+import type { AgentHeader, AgentOverride } from '@/lib/services';
+import { generateUUID } from '@/lib/utils/uuid';
 
 interface AgentParameterInput {
   name: string;
@@ -49,6 +51,7 @@ export function transformAgentParametersToForm(
       const queryParamName = p.valueFrom.queryParameterRef.name;
       const namesDiffer = queryParamName !== p.name;
       return {
+        id: generateUUID(),
         name: p.name,
         source: 'queryParameter' as const,
         value: '',
@@ -58,6 +61,7 @@ export function transformAgentParametersToForm(
     }
     if (p.valueFrom?.configMapKeyRef) {
       return {
+        id: generateUUID(),
         name: p.name,
         source: 'configMapKeyRef' as const,
         value: '',
@@ -71,6 +75,7 @@ export function transformAgentParametersToForm(
     }
     if (p.valueFrom?.secretKeyRef) {
       return {
+        id: generateUUID(),
         name: p.name,
         source: 'secretKeyRef' as const,
         value: '',
@@ -83,6 +88,7 @@ export function transformAgentParametersToForm(
       };
     }
     return {
+      id: generateUUID(),
       name: p.name,
       source: 'value' as const,
       value: p.value || '',
@@ -134,4 +140,40 @@ export function transformFormParametersToApi(
       }
       return { name: p.name, value: p.value || undefined };
     });
+}
+
+const MODEL_OVERRIDE_RESOURCE_TYPE = 'model';
+
+function isEditableModelOverride(override: AgentOverride): boolean {
+  const selector = override.labelSelector;
+  const hasLabelSelector =
+    Object.keys(selector?.matchLabels ?? {}).length > 0 ||
+    (selector?.matchExpressions?.length ?? 0) > 0;
+  return (
+    override.resourceType === MODEL_OVERRIDE_RESOURCE_TYPE && !hasLabelSelector
+  );
+}
+
+export function getModelOverrideHeaders(
+  overrides: AgentOverride[] | null | undefined,
+): AgentHeader[] {
+  return (overrides ?? [])
+    .filter(isEditableModelOverride)
+    .flatMap(override => override.headers);
+}
+
+export function buildAgentOverrides(
+  existing: AgentOverride[] | null | undefined,
+  modelHeaders: AgentHeader[],
+): AgentOverride[] {
+  const preserved = (existing ?? []).filter(
+    override => !isEditableModelOverride(override),
+  );
+  if (modelHeaders.length === 0) {
+    return preserved;
+  }
+  return [
+    { resourceType: MODEL_OVERRIDE_RESOURCE_TYPE, headers: modelHeaders },
+    ...preserved,
+  ];
 }

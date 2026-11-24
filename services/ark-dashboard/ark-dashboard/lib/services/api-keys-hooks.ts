@@ -2,11 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
 import { type APIKeyCreateRequest, apiKeysService } from './api-keys';
-
-const getErrorMessage = (error: unknown): string => {
-  if (error instanceof Error) return error.message;
-  return 'An unexpected error occurred';
-};
+import { getErrorMessage } from './resource-error-message';
 
 export const useListAPIKeys = () => {
   return useQuery({

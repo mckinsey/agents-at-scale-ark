@@ -11,6 +11,7 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
+INDENT_SED='s/^/    /'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ARK_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -36,7 +37,7 @@ expect_arg() {
     if ! output=$(render "$@" 2>&1); then
         echo -e "${RED}FAIL${NC} $name"
         echo -e "${YELLOW}  helm template failed:${NC}"
-        echo "$output" | sed 's/^/    /'
+        echo "$output" | sed "$INDENT_SED"
         FAILED=$((FAILED + 1))
         return 0
     fi
@@ -46,10 +47,90 @@ expect_arg() {
         echo -e "${RED}FAIL${NC} $name"
         echo -e "${YELLOW}  expected to find:${NC} $expected"
         echo -e "${YELLOW}  rendered args:${NC}"
-        echo "$output" | grep -E -- '--max-concurrent-(queries|reconciles)=' | sed 's/^/    /' || true
+        echo "$output" | grep -E -- '--max-concurrent-(queries|reconciles)=' | sed "$INDENT_SED" || true
         FAILED=$((FAILED + 1))
     fi
     return 0
+}
+
+# expect_no_arg <name> <unexpected-substr> <set-args...>
+expect_no_arg() {
+    local name="$1"
+    local unexpected="$2"
+    shift 2
+    local output
+    if ! output=$(render "$@" 2>&1); then
+        echo -e "${RED}FAIL${NC} $name"
+        echo -e "${YELLOW}  helm template failed:${NC}"
+        echo "$output" | sed "$INDENT_SED"
+        FAILED=$((FAILED + 1))
+        return 0
+    fi
+    if echo "$output" | grep -qF -- "$unexpected"; then
+        echo -e "${RED}FAIL${NC} $name"
+        echo -e "${YELLOW}  did not expect to find:${NC} $unexpected"
+        FAILED=$((FAILED + 1))
+    else
+        echo -e "${GREEN}OK${NC}   $name (absent: $unexpected)"
+    fi
+    return 0
+}
+
+# The Prometheus Operator CRDs gate the ServiceMonitor; render with them present
+# so the capability check passes, otherwise the ServiceMonitor never renders.
+PROM_CAP="monitoring.coreos.com/v1"
+
+# render_chart <set-args...> -> whole chart with the Prometheus capability present
+render_chart() {
+    helm template test-release "$CHART_DIR" --api-versions "$PROM_CAP" "$@"
+}
+
+# service_monitor <set-args...> -> just the ServiceMonitor document (empty if none)
+service_monitor() {
+    render_chart "$@" | awk '/kind: ServiceMonitor/,/matchLabels:/'
+}
+
+# check_contains <name> <substr> <output>
+# Uses a here-string, not a pipe: under `set -o pipefail`, `printf ... | grep -q`
+# reports failure on large inputs because grep short-circuits and SIGPIPEs printf.
+check_contains() {
+    if grep -qF -- "$2" <<<"$3"; then
+        echo -e "${GREEN}OK${NC}   $1 (found: $2)"
+    else
+        echo -e "${RED}FAIL${NC} $1"
+        echo -e "${YELLOW}  expected to find:${NC} $2"
+        FAILED=$((FAILED + 1))
+    fi
+}
+
+# check_absent <name> <substr> <output>
+check_absent() {
+    if grep -qF -- "$2" <<<"$3"; then
+        echo -e "${RED}FAIL${NC} $1"
+        echo -e "${YELLOW}  did not expect to find:${NC} $2"
+        FAILED=$((FAILED + 1))
+    else
+        echo -e "${GREEN}OK${NC}   $1 (absent: $2)"
+    fi
+}
+
+check_render_fails() {
+    local name="$1"
+    local expected="$2"
+    shift 2
+    local output
+    if output=$("$@" 2>&1); then
+        echo -e "${RED}FAIL${NC} $name" >&2
+        echo -e "${YELLOW}  expected helm template to fail, but it rendered${NC}" >&2
+        FAILED=$((FAILED + 1))
+    elif grep -qF -- "$expected" <<<"$output"; then
+        echo -e "${GREEN}OK${NC}   $name (rejected: $expected)"
+    else
+        echo -e "${RED}FAIL${NC} $name" >&2
+        echo -e "${YELLOW}  expected error containing:${NC} $expected" >&2
+        echo "$output" | sed "$INDENT_SED" >&2
+        FAILED=$((FAILED + 1))
+    fi
 }
 
 echo "Validating chart value rendering for $MANAGER_TEMPLATE..."
@@ -73,6 +154,100 @@ expect_arg "override maxConcurrentQueries=0" \
 expect_arg "override maxConcurrentReconciles=0" \
     '"--max-concurrent-reconciles=0"' \
     --set controllerManager.maxConcurrentReconciles=0
+
+# Metrics serving cert: wired only when metrics + cert-manager are both enabled,
+# so the ServiceMonitor can verify the endpoint's TLS instead of hitting a
+# self-signed localhost cert (see issue #2597). Must be absent without
+# cert-manager, or the manager crashes on a missing cert path.
+expect_arg "default metrics-cert-path" \
+    '"--metrics-cert-path=/tmp/k8s-metrics-server/metrics-certs"'
+expect_no_arg "no metrics-cert-path when certmanager disabled" \
+    '--metrics-cert-path' \
+    --set certmanager.enable=false
+
+# ServiceMonitor gating: the monitor is gated only on prometheus.enable + the
+# Prometheus CRDs, but its body assumes metrics.enable (for the Service it
+# scrapes) and certmanager.enable (for the TLS material it verifies against).
+# Guard both, so a default-on prometheus cannot emit a broken scrape target.
+
+# Default: verifies TLS against the cert-manager-issued metrics cert.
+sm_default="$(service_monitor)"
+check_contains "servicemonitor renders by default"       'kind: ServiceMonitor'       "$sm_default"
+check_contains "servicemonitor verifies TLS by default"  'insecureSkipVerify: false'  "$sm_default"
+check_contains "servicemonitor references metrics cert"  'metrics-server-cert'        "$sm_default"
+
+# cert-manager disabled: no metrics cert exists, so verification must be skipped
+# rather than left on with no CA (which fails every scrape with x509).
+sm_nocm="$(service_monitor --set certmanager.enable=false)"
+check_contains "servicemonitor skips verify without certmanager" 'insecureSkipVerify: true' "$sm_nocm"
+check_absent   "servicemonitor drops cert refs without certmanager" 'metrics-server-cert' "$sm_nocm"
+
+# metrics disabled: nothing serves /metrics, so no ServiceMonitor may render.
+all_nometrics="$(render_chart --set metrics.enable=false)"
+check_absent "no servicemonitor when metrics disabled" 'kind: ServiceMonitor' "$all_nometrics"
+
+# --- chart-apiserver: metrics endpoint gating ---
+
+APISERVER_CHART_DIR="$ARK_DIR/dist/chart-apiserver"
+
+render_apiserver() {
+    helm template test-release "$APISERVER_CHART_DIR" \
+        --api-versions "$PROM_CAP" \
+        --set postgresql.host=pg \
+        --set postgresql.user=ark \
+        --set postgresql.passwordSecretName=pg-secret \
+        "$@"
+}
+
+echo ""
+echo "Validating chart value rendering for chart-apiserver..."
+
+# Metrics are opt-in; the default render must not serve, expose or scrape anything.
+as_default="$(render_apiserver)"
+check_contains "apiserver metrics disabled by default" '--metrics-bind-address=0' "$as_default"
+check_absent   "no metrics-secure flag by default"     '--metrics-secure'         "$as_default"
+check_absent   "no metrics port by default"            'name: metrics'            "$as_default"
+check_absent   "no apiserver servicemonitor by default" 'kind: ServiceMonitor'    "$as_default"
+
+pool_value() {
+    local rendered="$1"
+    awk '/name: ARK_POSTGRES_MAX_OPEN_CONNS/ {getline; print}' <<<"$rendered"
+}
+check_contains "apiserver pool defaults to 40"          'value: "40"' "$(pool_value "$as_default")"
+as_pool="$(render_apiserver --set postgresql.maxOpenConns=80)"
+check_contains "apiserver pool override reaches the env" 'value: "80"' "$(pool_value "$as_pool")"
+for bad_pool in 0 -5 abc 7.5 true 99999999999; do
+    check_render_fails "apiserver rejects maxOpenConns=$bad_pool" "at '/postgresql/maxOpenConns'" \
+        render_apiserver --set "postgresql.maxOpenConns=$bad_pool"
+done
+
+as_metrics="$(render_apiserver --set metrics.enabled=true)"
+check_contains "apiserver metrics enabled binds :8443" '--metrics-bind-address=:8443' "$as_metrics"
+check_contains "apiserver metrics secure by default"   '--metrics-secure=true'        "$as_metrics"
+check_contains "apiserver metrics port exposed"        'name: metrics'                "$as_metrics"
+check_absent   "apiserver servicemonitor still gated"  'kind: ServiceMonitor'         "$as_metrics"
+
+as_sm="$(render_apiserver --set metrics.enabled=true --set metrics.serviceMonitor.enabled=true)"
+check_contains "apiserver servicemonitor renders when enabled" 'kind: ServiceMonitor'     "$as_sm"
+check_contains "apiserver servicemonitor scrapes https"        'scheme: https'            "$as_sm"
+check_contains "apiserver servicemonitor skips verify"         'insecureSkipVerify: true' "$as_sm"
+
+check_contains "apiserver defaults to 2 replicas"              'replicas: 2'                     "$as_default"
+check_contains "apiserver pdb renders by default"              'kind: PodDisruptionBudget'       "$as_default"
+check_contains "apiserver spread prefers other nodes"          'whenUnsatisfiable: ScheduleAnyway' "$as_default"
+check_contains "apiserver spread keys on hostname"             'topologyKey: kubernetes.io/hostname' "$as_default"
+check_contains "apiserver memory limit is 1Gi"                 'memory: 1Gi'                     "$as_default"
+
+as_optout="$(render_apiserver --set podDisruptionBudget.enabled=false --set topologySpread.enabled=false)"
+check_absent   "apiserver pdb can be disabled"                 'kind: PodDisruptionBudget'       "$as_optout"
+check_absent   "apiserver spread can be disabled"              'topologySpreadConstraints'       "$as_optout"
+check_contains "apiserver spread ignores tainted nodes"        'nodeTaintsPolicy: Honor'         "$as_default"
+
+as_single="$(render_apiserver --set replicas=1)"
+check_absent   "apiserver pdb skipped with one replica"        'kind: PodDisruptionBudget'       "$as_single"
+
+as_reused="$(render_apiserver --set topologySpread=null --set podDisruptionBudget=null)"
+check_absent   "apiserver renders without new default keys"    'topologySpreadConstraints'       "$as_reused"
 
 echo ""
 if [[ "$FAILED" -eq 0 ]]; then

@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    app: {{ .Release.Name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}
+      annotations:
+        # Roll the pod when the config changes: Dex reads the file once at startup.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      containers:
+        - name: dex
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          args:
+            - dex
+            - serve
+            - /etc/dex/config.yaml
+          env:
+            # The image entrypoint expands $VAR references in the config file.
+            # bcrypt hashes start with "$2y$10$", so leaving expansion on
+            # mangles every password hash into an empty string.
+            - name: DEX_EXPAND_ENV
+              value: "false"
+          ports:
+            - containerPort: {{ .Values.service.port }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/dex
+              readOnly: true
+          startupProbe:
+            httpGet:
+              path: {{ (urlParse .Values.issuer).path }}/healthz
+              port: {{ .Values.service.port }}
+            failureThreshold: 30
+            periodSeconds: 2
+          readinessProbe:
+            httpGet:
+              path: {{ (urlParse .Values.issuer).path }}/healthz
+              port: {{ .Values.service.port }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ .Release.Name }}-config
