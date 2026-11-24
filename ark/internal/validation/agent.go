@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"strings"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arka2a "mckinsey.com/ark/internal/a2a"
+	"mckinsey.com/ark/internal/labels"
 )
 
 func (v *Validator) ValidateAgent(ctx context.Context, agent *arkv1alpha1.Agent) ([]string, error) {
@@ -28,6 +31,10 @@ func (v *Validator) ValidateAgent(ctx context.Context, agent *arkv1alpha1.Agent)
 		return warnings, err
 	}
 
+	if err := validateUniqueMCPOverrideHeaderNames(agent.Spec.Overrides); err != nil {
+		return warnings, err
+	}
+
 	for i, tool := range agent.Spec.Tools {
 		if err := validateAgentTool(i, tool); err != nil {
 			return warnings, err
@@ -42,17 +49,74 @@ func (v *Validator) ValidateAgent(ctx context.Context, agent *arkv1alpha1.Agent)
 	return warnings, nil
 }
 
+func hasLabelSelector(selector *metav1.LabelSelector) bool {
+	return selector != nil && (len(selector.MatchLabels) > 0 || len(selector.MatchExpressions) > 0)
+}
+
 func unselectedModelOverrideHeaders(overrides []arkv1alpha1.Override) []arkv1alpha1.Header {
 	var headers []arkv1alpha1.Header
 	for _, override := range overrides {
-		selector := override.LabelSelector
-		hasSelector := selector != nil && (len(selector.MatchLabels) > 0 || len(selector.MatchExpressions) > 0)
-		if override.ResourceType != "model" || hasSelector {
+		if override.ResourceType != "model" || hasLabelSelector(override.LabelSelector) {
 			continue
 		}
 		headers = append(headers, override.Headers...)
 	}
 	return headers
+}
+
+func selectedMCPServerName(selector *metav1.LabelSelector) string {
+	if selector == nil || len(selector.MatchExpressions) > 0 || len(selector.MatchLabels) != 1 {
+		return ""
+	}
+	return selector.MatchLabels[labels.NameLabel]
+}
+
+type mcpHeaderGroup struct {
+	scope   string
+	headers []arkv1alpha1.Header
+}
+
+func appendMCPHeaderGroup(groups []mcpHeaderGroup, scope string, headers []arkv1alpha1.Header) []mcpHeaderGroup {
+	for i := range groups {
+		if groups[i].scope == scope {
+			groups[i].headers = append(groups[i].headers, headers...)
+			return groups
+		}
+	}
+	return append(groups, mcpHeaderGroup{scope: scope, headers: append([]arkv1alpha1.Header(nil), headers...)})
+}
+
+func validateUniqueMCPOverrideHeaderNames(overrides []arkv1alpha1.Override) error {
+	var unscoped []arkv1alpha1.Header
+	var servers, selectors []mcpHeaderGroup
+	for _, override := range overrides {
+		if override.ResourceType != "mcpserver" {
+			continue
+		}
+		switch server := selectedMCPServerName(override.LabelSelector); {
+		case !hasLabelSelector(override.LabelSelector):
+			unscoped = append(unscoped, override.Headers...)
+		case server != "":
+			servers = appendMCPHeaderGroup(servers, fmt.Sprintf("%s=%s", labels.NameLabel, server), override.Headers)
+		default:
+			selectors = appendMCPHeaderGroup(selectors, metav1.FormatLabelSelector(override.LabelSelector), override.Headers)
+		}
+	}
+	if err := ValidateUniqueHeaderNames(unscoped, "spec.overrides (mcpserver, all servers)"); err != nil {
+		return err
+	}
+	for _, group := range servers {
+		headers := append(append([]arkv1alpha1.Header(nil), unscoped...), group.headers...)
+		if err := ValidateUniqueHeaderNames(headers, fmt.Sprintf("spec.overrides (mcpserver, %s)", group.scope)); err != nil {
+			return err
+		}
+	}
+	for _, group := range selectors {
+		if err := ValidateUniqueHeaderNames(group.headers, fmt.Sprintf("spec.overrides (mcpserver, %s)", group.scope)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (v *Validator) engineToolWarning(ctx context.Context, agent *arkv1alpha1.Agent) string {

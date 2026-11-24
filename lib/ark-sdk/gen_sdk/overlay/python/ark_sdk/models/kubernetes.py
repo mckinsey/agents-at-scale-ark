@@ -41,6 +41,8 @@ class SecretResponse(BaseModel):
     id: str
     display_name: str
     scope: SecretScopeKind
+    type: Optional[str] = None
+    keys: List[str] = []  # Names of the keys in the secret data (never the values)
     description: Optional[str] = None
     alias: Optional[str] = None
     labels: List[str] = []
