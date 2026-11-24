@@ -7,8 +7,6 @@ import (
 	"time"
 )
 
-const changeRowColumns = `resource_version, generation, namespace, name, uid, spec, status, labels, annotations, finalizers, owner_references, created_at, deleted_at, deletion_timestamp`
-
 type changeRowData struct {
 	rv, generation                                           int64
 	ns, name, uid                                            string

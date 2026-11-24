@@ -137,7 +137,7 @@ const broadcasterRelistKeysQuery = `
 		ORDER BY resource_version ASC`
 
 const broadcasterRelistRowsQuery = `
-		SELECT ` + changeRowColumns + `
+		SELECT resource_version, generation, namespace, name, uid, spec, status, labels, annotations, finalizers, owner_references, created_at, deleted_at, deletion_timestamp
 		FROM resources
 		WHERE kind = $1 AND resource_version = ANY($2)
 		ORDER BY resource_version ASC`
