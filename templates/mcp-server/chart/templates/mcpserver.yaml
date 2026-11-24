@@ -14,7 +14,7 @@ spec:
         {{- if .Values.mcpServer.path }}
         path: {{ .Values.mcpServer.path }}
         {{- end }}
-  transport: sse
+  transport: http
   {{- if .Values.mcpServer.timeout }}
   timeout: {{ .Values.mcpServer.timeout | quote }}
   {{- end }}

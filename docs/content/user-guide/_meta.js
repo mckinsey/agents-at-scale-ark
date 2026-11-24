@@ -10,7 +10,9 @@ export default {
   teams: 'Creating and Managing Teams',
   queries: 'Run queries / chat with agents and teams',
   tools: 'Creating Tools and MCP Servers',
+  'tool-approvals': 'Human-in-the-loop tool approvals',
   configurations: 'Configurations',
+  secrets: 'Secrets',
   files: 'Managing Files',
   'ark-cli': 'The Ark CLI',
 

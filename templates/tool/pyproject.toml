@@ -5,5 +5,10 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "fastmcp>=2.9.0",
+    "fastmcp>=3.4.10",
 ]
+
+[tool.uv]
+# Security floor: authlib <=1.7.2 is affected by CVE-2026-104056 (XRAY-1104189).
+# authlib is pulled transitively via fastmcp; pin the minimum to the patched release.
+constraint-dependencies = ["authlib>=1.8.0"]

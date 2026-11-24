@@ -20,13 +20,18 @@ import (
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	arkv1prealpha1 "mckinsey.com/ark/api/v1prealpha1"
 	arka2a "mckinsey.com/ark/internal/a2a"
-	"mckinsey.com/ark/internal/annotations"
+	"mckinsey.com/ark/internal/crossns"
 	"mckinsey.com/ark/internal/eventing"
+	"mckinsey.com/ark/internal/validation"
 )
 
 const (
 	// Condition types
 	AgentAvailable = "Available"
+
+	reasonModelNotFound      = "ModelNotFound"
+	reasonModelNotReady      = "ModelNotReady"
+	reasonModelNotConfigured = "ModelNotConfigured"
 )
 
 type AgentReconciler struct {
@@ -104,14 +109,8 @@ func (r *AgentReconciler) checkDependencies(ctx context.Context, agent *arkv1alp
 	}
 
 	// Check the status of the agent's model. Some agents (such as A2A agents) have a 'nil' model, and their status is not associated with model availability.
-	switch {
-	case !agentRequiresModel(agent):
-	case agent.Spec.ModelRef != nil:
-		if ok, msg := r.checkModelDependency(ctx, agent); !ok {
-			return false, "ModelNotFound", msg
-		}
-	default:
-		return false, "ModelNotConfigured", "Agent has no model configured; the default executor requires a model"
+	if ok, reason, msg := r.checkModel(ctx, agent); !ok {
+		return false, reason, msg
 	}
 
 	// Check execution engine dependency
@@ -130,42 +129,85 @@ func (r *AgentReconciler) checkDependencies(ctx context.Context, agent *arkv1alp
 	return true, "Available", "All dependencies are available"
 }
 
-// agentRequiresModel reports whether the agent needs a model to run. A2A agents
-// (model is external) and agents delegating to an ExecutionEngine are exempt.
-func agentRequiresModel(agent *arkv1alpha1.Agent) bool {
-	if _, isA2A := agent.Annotations[annotations.A2AServerName]; isA2A {
-		return false
+// checkModel resolves the agent's model and reports the condition reason to use
+// when it cannot be used. An agent whose modelRef was injected by the mutating
+// webhook has no model of its own, so every failure says so: a missing default
+// is reported as ModelNotConfigured rather than sending operators looking for a
+// Model resource they never referenced, and the other failures name the
+// fallback instead of presenting 'default' as the user's choice.
+func (r *AgentReconciler) checkModel(ctx context.Context, agent *arkv1alpha1.Agent) (bool, string, string) {
+	if !validation.AgentRequiresModel(agent) {
+		return true, "", ""
 	}
-	return agent.Spec.ExecutionEngine == nil
+
+	if agent.Spec.ModelRef == nil {
+		return false, reasonModelNotConfigured, "Agent has no model configured; the default executor requires a model"
+	}
+
+	reason, msg, lookupErr := r.checkModelDependency(ctx, agent)
+	modelName, modelNamespace := modelRefKey(agent)
+	switch {
+	case reason == "":
+		return true, "", ""
+	case !validation.HasDefaultedModelRef(agent):
+		return false, reason, msg
+	case lookupErr != nil:
+		return false, reason, fmt.Sprintf(
+			"Agent has no model configured; error checking fallback '%s' model: %v",
+			modelName, lookupErr)
+	case reason == reasonModelNotReady:
+		return false, reason, fmt.Sprintf(
+			"Agent has no model configured; the '%s' model it falls back to is not available",
+			modelName)
+	case reason == reasonModelNotFound:
+		return false, reasonModelNotConfigured, fmt.Sprintf(
+			"Agent has no model configured and no '%s' model exists in namespace '%s'; the default executor requires a model",
+			modelName, modelNamespace)
+	default:
+		return false, reason, msg
+	}
 }
 
-// checkModelDependency validates model dependency
-func (r *AgentReconciler) checkModelDependency(ctx context.Context, agent *arkv1alpha1.Agent) (bool, string) {
-	modelName := agent.Spec.ModelRef.Name
-	modelNamespace := agent.Namespace
-
+func modelRefKey(agent *arkv1alpha1.Agent) (name, namespace string) {
+	namespace = agent.Namespace
 	if agent.Spec.ModelRef.Namespace != "" {
-		modelNamespace = agent.Spec.ModelRef.Namespace
+		namespace = agent.Spec.ModelRef.Namespace
 	}
+	return agent.Spec.ModelRef.Name, namespace
+}
+
+// checkModelDependency validates model dependency and returns the condition
+// reason for an unusable model, or an empty reason when the model is ready.
+// lookupErr is set when the model could not be read at all.
+func (r *AgentReconciler) checkModelDependency(ctx context.Context, agent *arkv1alpha1.Agent) (reason, message string, lookupErr error) {
+	modelName, modelNamespace := modelRefKey(agent)
 
 	var model arkv1alpha1.Model
 	modelKey := types.NamespacedName{Name: modelName, Namespace: modelNamespace}
-	if err := r.Get(ctx, modelKey, &model); err != nil {
+	err := r.Get(ctx, modelKey, &model)
+	if modelNamespace != agent.Namespace && (err != nil || !crossns.Allowed(&model, agent.Namespace)) {
+		var lookupErr error
+		if err != nil && !errors.IsNotFound(err) {
+			lookupErr = err
+		}
+		return reasonModelNotFound, crossns.DeniedError("Model", modelNamespace, modelName, agent.Namespace).Error(), lookupErr
+	}
+	if err != nil {
 		if errors.IsNotFound(err) {
 			msg := fmt.Sprintf("Model '%s' not found in namespace '%s'", modelName, modelNamespace)
-			return false, msg
+			return reasonModelNotFound, msg, nil
 		}
-		return false, fmt.Sprintf("Error checking model: %v", err)
+		return reasonModelNotFound, fmt.Sprintf("Error checking model: %v", err), err
 	}
 
 	// Check if model is available
 	modelCondition := meta.FindStatusCondition(model.Status.Conditions, "ModelAvailable")
 	if modelCondition == nil || modelCondition.Status != metav1.ConditionTrue {
 		msg := fmt.Sprintf("Model '%s' is not available", modelName)
-		return false, msg
+		return reasonModelNotReady, msg, nil
 	}
 
-	return true, ""
+	return "", "", nil
 }
 
 // checkToolDependencies validates tool dependencies
@@ -294,13 +336,16 @@ func (r *AgentReconciler) updateStatus(ctx context.Context, agent *arkv1alpha1.A
 	return updateStatusIgnoringDeleted(ctx, r.Client, agent, "agent")
 }
 
-// agentModelRefIndexer returns the model reference name for field-based Agent lookups.
+const agentModelRefIndex = ".spec.modelRef.namespacedName"
+
+// agentModelRefIndexer returns the namespace/name of the referenced Model for field-based Agent lookups.
 func agentModelRefIndexer(obj client.Object) []string {
 	agent := obj.(*arkv1alpha1.Agent)
 	if agent.Spec.ModelRef == nil {
 		return nil
 	}
-	return []string{agent.Spec.ModelRef.Name}
+	name, namespace := modelRefKey(agent)
+	return []string{types.NamespacedName{Name: name, Namespace: namespace}.String()}
 }
 
 // agentExecutionEngineIndexer returns the execution engine name for field-based Agent lookups.
@@ -332,7 +377,7 @@ func agentToolNamesIndexer(obj client.Object) []string {
 
 func (r *AgentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if err := mgr.GetFieldIndexer().IndexField(
-		context.Background(), &arkv1alpha1.Agent{}, ".spec.modelRef.name", agentModelRefIndexer,
+		context.Background(), &arkv1alpha1.Agent{}, agentModelRefIndex, agentModelRefIndexer,
 	); err != nil {
 		return err
 	}
@@ -385,11 +430,8 @@ func (r *AgentReconciler) findAgentsForTool(ctx context.Context, obj client.Obje
 
 func (r *AgentReconciler) findAgentsForModel(ctx context.Context, obj client.Object) []reconcile.Request {
 	var agentList arkv1alpha1.AgentList
-	if r.List(
-		ctx, &agentList,
-		client.InNamespace(obj.GetNamespace()),
-		client.MatchingFields{".spec.modelRef.name": obj.GetName()},
-	) != nil {
+	key := types.NamespacedName{Name: obj.GetName(), Namespace: obj.GetNamespace()}.String()
+	if r.List(ctx, &agentList, client.MatchingFields{agentModelRefIndex: key}) != nil {
 		return nil
 	}
 	return agentsToRequests(agentList.Items)

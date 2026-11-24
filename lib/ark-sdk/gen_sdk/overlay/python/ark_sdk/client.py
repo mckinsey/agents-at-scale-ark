@@ -39,12 +39,13 @@ def set_default_user_agent(user_agent: str):
 def _build_headers(impersonation: Optional[ImpersonationConfig] = None) -> Optional[dict]:
     if impersonation is None:
         return None
+    if not impersonation.username or not impersonation.username.strip():
+        raise ValueError("Impersonation requires a non-empty username")
     headers = {"Impersonate-User": impersonation.username}
     if impersonation.groups:
-        # default_headers is a plain dict (one value per name), so groups must be
-        # comma-joined here. impersonation_patch splits this back into one
-        # Impersonate-Group header per group at the transport layer.
-        headers["Impersonate-Group"] = ",".join(impersonation.groups)
+        # impersonation_patch turns this list into one Impersonate-Group header
+        # per group at the transport layer.
+        headers["Impersonate-Group"] = list(impersonation.groups)
     return headers
 
 def get_client(namespace: Optional[str], version: str, impersonation: Optional[ImpersonationConfig] = None, user_agent: Optional[str] = None):

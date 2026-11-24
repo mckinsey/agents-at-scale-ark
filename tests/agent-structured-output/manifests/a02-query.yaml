@@ -1,0 +1,9 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Query
+metadata:
+  name: schema-query
+spec:
+  input: Investors are optimistic about the quarterly results.
+  target:
+    type: agent
+    name: schema-agent

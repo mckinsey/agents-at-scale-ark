@@ -1,10 +1,11 @@
 {
   "release-type": "simple",
-  "bump-minor-pre-major": false,
-  "bump-patch-for-minor-pre-major": true,
+  "bump-minor-pre-major": true,
+  "bump-patch-for-minor-pre-major": false,
   "versioning": "prerelease",
   "prerelease": true,
   "prerelease-type": "rc",
+  "last-release-sha": "931b1f394d0ef299355c4ab0b63db82065c98d88",
   "packages": {
     ".": {
       "release-type": "simple",

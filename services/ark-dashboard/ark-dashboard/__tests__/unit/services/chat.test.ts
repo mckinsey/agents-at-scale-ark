@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { apiClient } from '@/lib/api/client';
+import { APIError } from '@/lib/api/errors';
 import type { QueryDetailResponse } from '@/lib/services/chat';
 import { chatService } from '@/lib/services/chat';
 
@@ -102,8 +103,7 @@ describe('chatService', () => {
     });
 
     it('should return null for 404 responses', async () => {
-      const error = new Error('Not found');
-      (error as any).response = { status: 404 };
+      const error = new APIError('Not found', 404);
       vi.mocked(apiClient.get).mockRejectedValue(error);
 
       const result = await chatService.getQuery('default', 'nonexistent');
@@ -162,8 +162,7 @@ describe('chatService', () => {
     });
 
     it('should return null for 404 responses', async () => {
-      const error = new Error('Not found');
-      (error as any).response = { status: 404 };
+      const error = new APIError('Not found', 404);
       vi.mocked(apiClient.put).mockRejectedValue(error);
 
       const result = await chatService.updateQuery('default', 'nonexistent', {
@@ -195,8 +194,7 @@ describe('chatService', () => {
     });
 
     it('should return false for 404 responses', async () => {
-      const error = new Error('Not found');
-      (error as any).response = { status: 404 };
+      const error = new APIError('Not found', 404);
       vi.mocked(apiClient.delete).mockRejectedValue(error);
 
       const result = await chatService.deleteQuery('default', 'nonexistent');
@@ -254,7 +252,9 @@ describe('chatService', () => {
         'Hello',
         'agent',
         'TestAgent',
-        'session-123',
+        {
+          sessionId: 'session-123',
+        },
       );
 
       expect(apiClient.post).toHaveBeenCalledWith(
@@ -270,8 +270,9 @@ describe('chatService', () => {
         'Hello',
         'agent',
         'TestAgent',
-        undefined,
-        'conv-456',
+        {
+          conversationId: 'conv-456',
+        },
       );
 
       expect(apiClient.post).toHaveBeenCalledWith(
@@ -287,9 +288,9 @@ describe('chatService', () => {
         'Hello',
         'agent',
         'TestAgent',
-        undefined,
-        undefined,
-        '5m',
+        {
+          timeout: '5m',
+        },
       );
 
       expect(apiClient.post).toHaveBeenCalledWith(
@@ -448,14 +449,15 @@ describe('chatService', () => {
       });
     });
 
-    it('should return unknown when query is null', async () => {
+    it('should report a missing query as not found', async () => {
       vi.mocked(apiClient.get).mockResolvedValue(null);
 
       const result = await chatService.getQueryResult('default', 'query-123');
 
       expect(result).toEqual({
         status: 'unknown',
-        terminal: false,
+        terminal: true,
+        notFound: true,
       });
     });
 
@@ -467,6 +469,7 @@ describe('chatService', () => {
       expect(result).toEqual({
         status: 'error',
         terminal: true,
+        transportError: true,
       });
     });
   });
@@ -654,7 +657,7 @@ describe('chatService', () => {
 
       const chunks: Record<string, unknown>[] = [];
       for await (const chunk of chatService.streamChatResponse(
-        'default',
+        'team-a',
         'test input',
         'agent',
         'TestAgent',
@@ -664,7 +667,7 @@ describe('chatService', () => {
 
       expect(chunks).toEqual([{ content: 'Hello' }, { content: 'World' }]);
       expect(mockFetch).toHaveBeenCalledWith(
-        '/tenant-a/api/v1/broker/chunks?watch=true&query-id=test-query-1',
+        '/tenant-a/api/v1/broker/chunks?watch=true&query-id=test-query-1&namespace=team-a',
         expect.objectContaining({ signal: undefined }),
       );
     });
@@ -847,15 +850,14 @@ describe('chatService', () => {
         'test input',
         'agent',
         'TestAgent',
-        undefined,
-        undefined,
-        undefined,
-        controller.signal,
+        {
+          abortSignal: controller.signal,
+        },
       )) {
       }
 
       expect(mockFetch).toHaveBeenCalledWith(
-        '/tenant-a/api/v1/broker/chunks?watch=true&query-id=test-query-abort',
+        '/tenant-a/api/v1/broker/chunks?watch=true&query-id=test-query-abort&namespace=default',
         expect.objectContaining({ signal: controller.signal }),
       );
     });

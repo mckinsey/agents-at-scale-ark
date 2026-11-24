@@ -1,11 +1,13 @@
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import userEvent from '@testing-library/user-event';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   DetailCard,
   DetailRow,
   DetailSectionCard,
 } from '@/components/common/detail-card';
+import { TooltipProvider } from '@/components/ui/tooltip';
 
 describe('DetailCard', () => {
   it('should render the title', () => {
@@ -34,13 +36,12 @@ describe('DetailRow', () => {
   });
 
   it('should render a plain label when no tooltip is given', () => {
-    const { container } = render(
-      <DetailRow label="Namespace" value="default" />,
-    );
+    render(<DetailRow label="Namespace" value="default" />);
 
-    expect(
-      container.querySelector('[data-slot="tooltip-trigger"]'),
-    ).not.toBeInTheDocument();
+    expect(screen.getByText('Namespace')).not.toHaveAttribute(
+      'data-slot',
+      'tooltip-trigger',
+    );
   });
 
   it('should render a tooltip trigger when a tooltip is given', () => {
@@ -57,10 +58,29 @@ describe('DetailRow', () => {
     expect(trigger).toHaveTextContent('Namespace');
   });
 
-  it('should set the title attribute for string values', () => {
-    render(<DetailRow label="Namespace" value="default" />);
+  it('should show the full string value in a tooltip when it is cut off', async () => {
+    const long = 'https://litellm.prod.ai-gateway.example.com/v1';
+    const scrollWidth = vi
+      .spyOn(HTMLElement.prototype, 'scrollWidth', 'get')
+      .mockReturnValue(400);
+    const clientWidth = vi
+      .spyOn(HTMLElement.prototype, 'clientWidth', 'get')
+      .mockReturnValue(100);
 
-    expect(screen.getByText('default')).toHaveAttribute('title', 'default');
+    render(
+      <TooltipProvider>
+        <DetailRow label="Address" value={long} />
+      </TooltipProvider>,
+    );
+    const value = screen.getByText(long);
+    expect(value).toHaveClass('truncate');
+    expect(value).not.toHaveAttribute('title');
+
+    await userEvent.hover(value);
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(long);
+    scrollWidth.mockRestore();
+    clientWidth.mockRestore();
   });
 
   it('should omit the title attribute for non-string values', () => {

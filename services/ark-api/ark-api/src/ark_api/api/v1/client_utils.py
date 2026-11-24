@@ -2,8 +2,11 @@
 from typing import Optional
 from contextlib import asynccontextmanager
 from kubernetes import client as sync_client
+from kubernetes_asyncio.client import ApiClient
 from ark_sdk.k8s import apply_impersonation_headers, create_api_client, create_sync_api_client
 from ark_sdk.impersonation import ImpersonationConfig
+
+from .dynamic_client import RaisingDynamicClient
 
 USER_AGENT = "ArkAPI"
 
@@ -33,12 +36,16 @@ async def get_impersonating_api_client(impersonation: Optional[ImpersonationConf
             custom_api = CustomObjectsApi(api)
             # ... use custom_api
 
-    Note: the comma-joined ``Impersonate-Group`` header produced by
-    ``apply_impersonation_headers`` is split back into one header per group by
-    the rest-client patch in ``impersonation_groups_patch`` so Kubernetes RBAC
-    sees each group.
+    Note: the ``Impersonate-Group`` list set by ``apply_impersonation_headers``
+    becomes one header per group through the rest-client patch in
+    ``ark_sdk.impersonation_patch`` so Kubernetes RBAC sees each group.
     """
     async with create_api_client() as api:
         api.user_agent = USER_AGENT
         apply_impersonation_headers(api, impersonation)
         yield api
+
+
+async def create_dynamic_client(api: ApiClient) -> RaisingDynamicClient:
+    """Create a discovery-ready dynamic client that raises ApiException on error responses."""
+    return await RaisingDynamicClient(api)

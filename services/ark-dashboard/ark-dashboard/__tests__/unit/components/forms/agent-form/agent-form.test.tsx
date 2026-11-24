@@ -51,6 +51,7 @@ vi.mock('@/components/forms/agent-form/use-agent-form', () => ({
       handleToolToggle: vi.fn(),
       handleDeleteTool: vi.fn(),
       isToolSelected: vi.fn(),
+      isOutputSchemaSupported: vi.fn(() => false),
       onSubmit: vi.fn(),
     },
   })),

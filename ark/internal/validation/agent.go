@@ -12,11 +12,19 @@ import (
 func (v *Validator) ValidateAgent(ctx context.Context, agent *arkv1alpha1.Agent) ([]string, error) {
 	var warnings []string
 
+	if err := v.validateCrossNamespaceRef(ctx, "Model", agentModelRefTarget(agent), agent.Namespace); err != nil {
+		return warnings, err
+	}
+
 	if err := v.ValidateParameters(ctx, agent.Namespace, agent.Spec.Parameters); err != nil {
 		return warnings, err
 	}
 
 	if err := ValidateOverrides(agent.Spec.Overrides); err != nil {
+		return warnings, err
+	}
+
+	if err := ValidateUniqueHeaderNames(unselectedModelOverrideHeaders(agent.Spec.Overrides), "spec.overrides"); err != nil {
 		return warnings, err
 	}
 
@@ -32,6 +40,19 @@ func (v *Validator) ValidateAgent(ctx context.Context, agent *arkv1alpha1.Agent)
 
 	warnings = append(warnings, CollectMigrationWarnings(agent.Annotations)...)
 	return warnings, nil
+}
+
+func unselectedModelOverrideHeaders(overrides []arkv1alpha1.Override) []arkv1alpha1.Header {
+	var headers []arkv1alpha1.Header
+	for _, override := range overrides {
+		selector := override.LabelSelector
+		hasSelector := selector != nil && (len(selector.MatchLabels) > 0 || len(selector.MatchExpressions) > 0)
+		if override.ResourceType != "model" || hasSelector {
+			continue
+		}
+		headers = append(headers, override.Headers...)
+	}
+	return headers
 }
 
 func (v *Validator) engineToolWarning(ctx context.Context, agent *arkv1alpha1.Agent) string {

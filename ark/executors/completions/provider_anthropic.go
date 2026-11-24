@@ -48,20 +48,19 @@ type AnthropicProvider struct {
 	Properties map[string]string
 
 	outputSchema *runtime.RawExtension
-	schemaName   string
 }
 
-func (ap *AnthropicProvider) SetOutputSchema(schema *runtime.RawExtension, schemaName string) {
+func (ap *AnthropicProvider) SetOutputSchema(schema *runtime.RawExtension, _ string) {
 	ap.outputSchema = schema
-	ap.schemaName = schemaName
 }
 
 func (ap *AnthropicProvider) ChatCompletion(ctx context.Context, messages []Message, n int64, tools []openai.ChatCompletionToolParam, toolChoice ToolChoice) (*openai.ChatCompletion, error) {
-	anthropicMessages, systemPrompt := convertMessagesToAnthropic(messages)
+	anthropicMessages, systemPrompt := convertMessagesToAnthropic(messages, tools)
 	anthropicTools := convertToolsToAnthropic(tools)
 
 	request := buildAnthropicRequest(anthropicMessages, systemPrompt, anthropicTools, toolChoice, ap.Properties)
 	request.Model = ap.Model
+	request.OutputConfig = anthropicOutputConfigFor(ap.outputSchema)
 
 	version := ap.Version
 	if version == "" {

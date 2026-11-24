@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 )
@@ -19,16 +20,25 @@ var (
 )
 
 type ListOptions struct {
-	LabelSelector string
-	FieldSelector string
-	Limit         int64
-	Continue      string
+	LabelSelector        string
+	FieldSelector        string
+	Limit                int64
+	Continue             string
+	ResourceVersion      string
+	ResourceVersionMatch metav1.ResourceVersionMatch
 }
 
 type WatchOptions struct {
 	LabelSelector   string
 	FieldSelector   string
 	ResourceVersion string
+	// SendInitialEvents marks a WatchList request (KEP-3157): the initial state
+	// is streamed first and the bookmark that closes it carries the
+	// initial-events-end annotation. Ordinary watches never get that annotation.
+	SendInitialEvents bool
+	// AllowWatchBookmarks is the client's opt-in to BOOKMARK events. Without it
+	// no bookmark is sent, matching the kube-apiserver watch cache.
+	AllowWatchBookmarks bool
 }
 
 type Backend interface {
@@ -43,6 +53,7 @@ type Backend interface {
 	Delete(ctx context.Context, kind, namespace, name string) error
 	Watch(ctx context.Context, kind, namespace string, opts WatchOptions) (watch.Interface, error)
 	GetResourceVersion(ctx context.Context, kind, namespace, name string) (int64, error)
+	RequireResourceVersion(ctx context.Context, minRV uint64) error
 	Close() error
 }
 

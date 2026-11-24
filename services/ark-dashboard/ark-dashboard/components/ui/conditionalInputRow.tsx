@@ -1,6 +1,6 @@
 'use client';
 
-import { CreateResourceButton } from '@/components/forms/shared/create-resource-dialog';
+import { SecretNameField } from '@/components/forms/fields/secret-name-field';
 import { Trash } from '@/components/icons';
 import { IconShell } from '@/components/ui/icon-shell';
 import { Input } from '@/components/ui/input';
@@ -30,6 +30,8 @@ interface ConditionalInputRowProps {
   data: RowData;
   onChange: (data: Partial<RowData>) => void;
   secrets: Secret[];
+  isSecretsPending?: boolean;
+  isSecretsError?: boolean;
   deleteRow: (key: string) => void;
   nameError?: string;
   valueError?: string;
@@ -41,6 +43,8 @@ export function ConditionalInputRow({
   data,
   onChange,
   secrets,
+  isSecretsPending,
+  isSecretsError,
   deleteRow,
   nameError,
   valueError,
@@ -51,7 +55,6 @@ export function ConditionalInputRow({
     <div className="flex items-start gap-3">
       <div className="flex-1">
         <Input
-          id="name"
           variant="inline"
           value={data.name}
           onChange={e => onChange({ name: e.target.value })}
@@ -74,7 +77,7 @@ export function ConditionalInputRow({
               secretKey: undefined,
             })
           }>
-          <SelectTrigger id="type" className={cn(GHOST_TRIGGER, 'w-full')}>
+          <SelectTrigger className={cn(GHOST_TRIGGER, 'w-full')}>
             <SelectValue placeholder="Select a type" />
           </SelectTrigger>
           <SelectContent className="bg-fill-onsurface-ui-2">
@@ -87,11 +90,10 @@ export function ConditionalInputRow({
           </SelectContent>
         </Select>
       </div>
-      <div className="flex-1">
+      <div className="min-w-0 flex-[2]">
         {data.type === 'direct' ? (
           <>
             <Input
-              id="value"
               variant="inline"
               value={data.value}
               onChange={e => onChange({ value: e.target.value })}
@@ -105,40 +107,16 @@ export function ConditionalInputRow({
             )}
           </>
         ) : (
-          <>
-            <div className="flex items-center gap-3">
-              <Select
-                value={data.value}
-                onValueChange={value =>
-                  onChange({ value: value as string, secretKey: undefined })
-                }>
-                <SelectTrigger
-                  id="thirdValue"
-                  className={cn(GHOST_TRIGGER, 'flex-1')}
-                  aria-invalid={!!valueError}>
-                  <SelectValue placeholder="Select a secret" />
-                </SelectTrigger>
-                <SelectContent className="bg-fill-onsurface-ui-2">
-                  {secrets.map(secret => (
-                    <SelectItem key={secret.name} value={secret.name}>
-                      <SelectItemText>{secret.name}</SelectItemText>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <CreateResourceButton
-                kind="secret"
-                onCreated={name =>
-                  onChange({ value: name, secretKey: undefined })
-                }
-              />
-            </div>
-            {valueError && (
-              <p className="text-status-error mt-1 text-sm font-normal">
-                {valueError}
-              </p>
-            )}
-          </>
+          <SecretNameField
+            aria-label={data.name ? `Secret for ${data.name}` : 'Secret name'}
+            value={data.value}
+            onChange={value => onChange({ value, secretKey: undefined })}
+            secrets={secrets}
+            isPending={isSecretsPending}
+            isError={isSecretsError}
+            invalid={!!valueError}
+            error={valueError}
+          />
         )}
       </div>
       <Button

@@ -96,9 +96,9 @@ metadata:
   name: sample-query
 spec:
   input: 'Hello! Can you help me understand what you can do?'
-  targets:
-    - type: agent
-      name: sample-agent
+  target:
+    type: agent
+    name: sample-agent
 ```
 
 ## Prerequisites
@@ -265,7 +265,7 @@ spec:
         name: {{ include "{{ .Values.projectName }}.fullname" . }}-my-tool
         port: 8000
         path: /mcp
-  transport: sse
+  transport: http
 ```
 
 See `tools/example-tool.yaml.disabled` for a complete example.

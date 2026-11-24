@@ -44,6 +44,8 @@ func newFanoutWatcher(ns string, lf map[string]string, inputBuf, outBuf int) *po
 		ctx:      context.Background(),
 		done:     make(chan struct{}),
 		seenRVs:  make(map[string]int64),
+
+		initialSynced: true,
 	}
 }
 
@@ -254,6 +256,8 @@ func TestForwardRow_ReturnsFalseWhenShuttingDown(t *testing.T) {
 		ctx:     context.Background(),
 		done:    make(chan struct{}),
 		seenRVs: make(map[string]int64),
+
+		initialSynced: true,
 	}
 	close(w.done)
 
@@ -273,6 +277,8 @@ func TestForwardRow_ReturnsFalseWhenContextCancelled(t *testing.T) {
 		ctx:     ctx,
 		done:    make(chan struct{}),
 		seenRVs: make(map[string]int64),
+
+		initialSynced: true,
 	}
 	if w.forwardRow(&changeRow{rv: 1, uid: "u1", obj: newObj("a", "u1", nil)}) {
 		t.Error("forwardRow should return false when the watcher context is cancelled")

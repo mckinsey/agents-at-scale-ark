@@ -307,21 +307,25 @@ class TestSessionsAndConversations:
         sessions = SessionsPage(page)
         sessions.navigate_to_session_history()
 
-        total = sessions.get_visible_session_count()
-        if total < 1:
-            pytest.skip("No sessions available for sort test")
+        # Other xdist workers run queries against the same namespace, and every
+        # query creates a session, so the number of rows can change at any moment.
+        # Assert the order the page renders instead: a row appearing mid-test slots
+        # into its sorted position rather than breaking the assertion.
+        sessions.click_sort_header("Name")
+        first = sessions.get_visible_session_names()
+        assert len(first) >= 2, \
+            f"sorting needs at least two sessions to be observable, saw {first}"
+        assert len(set(first)) == len(first), \
+            f"sorting is only observable when every name is distinct, but the rows read {first}"
+        assert first == sorted(first, reverse=True), \
+            f"the first click on Name should sort descending, but the rows read {first}"
 
         sessions.click_sort_header("Name")
-        assert sessions.get_visible_session_count() == total, \
-            "Sorting by Name should not change the number of visible sessions"
-
-        sessions.click_sort_header("Name")
-        assert sessions.get_visible_session_count() == total, \
-            "Reversing Name sort should not change the number of visible sessions"
-
-        sessions.click_sort_header("Convos")
-        assert sessions.get_visible_session_count() == total, \
-            "Sorting by Convos should not change the number of visible sessions"
+        second = sessions.get_visible_session_names()
+        assert len(set(second)) == len(second), \
+            f"sorting is only observable when every name is distinct, but the rows read {second}"
+        assert second == sorted(second), \
+            f"clicking Name again should sort ascending, but the rows read {second}"
 
     # -------------------------------------------------------------------------
     # Empty search results

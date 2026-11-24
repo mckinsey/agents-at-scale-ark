@@ -9,6 +9,7 @@ import (
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/annotations"
+	"mckinsey.com/ark/internal/secretscope"
 )
 
 const schemeHTTP = "http"
@@ -43,6 +44,9 @@ func (v *Validator) SecretKeyExists(ctx context.Context, namespace, name, key st
 	secret, err := v.Lookup.GetSecret(ctx, namespace, name)
 	if err != nil {
 		return fmt.Errorf("secret '%s' does not exist in namespace '%s': %v", name, namespace, err)
+	}
+	if err := secretscope.CheckResolvable(secret, secretscope.RejectPersonal); err != nil {
+		return err
 	}
 	if _, exists := secret.Data[key]; !exists {
 		return fmt.Errorf("key '%s' not found in secret '%s' in namespace '%s'", key, name, namespace)
@@ -87,6 +91,10 @@ func (v *Validator) resolveSecretRef(ctx context.Context, namespace, name, key s
 	secret, err := v.Lookup.GetSecret(ctx, namespace, name)
 	if err != nil {
 		return "", fmt.Errorf("failed to get secret %s/%s: %w", namespace, name, err)
+	}
+
+	if err := secretscope.CheckResolvable(secret, secretscope.RejectPersonal); err != nil {
+		return "", err
 	}
 	val, exists := secret.Data[key]
 	if !exists {
@@ -244,6 +252,18 @@ func ValidateHeaderValueFrom(valueFrom *arkv1alpha1.HeaderValueSource, contextPr
 	}
 	if hasSecret && hasConfigMap {
 		return fmt.Errorf("%s: valueFrom cannot specify both secretKeyRef and configMapKeyRef", contextPrefix)
+	}
+	return nil
+}
+
+func ValidateUniqueHeaderNames(headers []arkv1alpha1.Header, contextPrefix string) error {
+	seen := make(map[string]struct{}, len(headers))
+	for _, header := range headers {
+		name := strings.ToLower(strings.TrimSpace(header.Name))
+		if _, ok := seen[name]; ok {
+			return fmt.Errorf("%s: duplicate header name: %s", contextPrefix, header.Name)
+		}
+		seen[name] = struct{}{}
 	}
 	return nil
 }

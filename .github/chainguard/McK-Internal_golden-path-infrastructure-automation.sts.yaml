@@ -1,9 +1,0 @@
-# Passwordless access configuration for McK-Internal/agents-at-scale
-# Created by EP-API GitHub Service
-
-issuer: https://token.actions.githubusercontent.com
-subject_pattern: repo:McK-Internal/golden-path-infrastructure-automation:.*
-
-permissions:
-  administration: write
-  contents: write

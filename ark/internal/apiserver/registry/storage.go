@@ -104,18 +104,28 @@ func (s *GenericStorage) GetSingularName() string {
 }
 
 func (s *GenericStorage) Get(ctx context.Context, name string, options *metav1.GetOptions) (runtime.Object, error) {
+	return getResource(ctx, s.backend, s.config, name, options, "get")
+}
+
+func getResource(ctx context.Context, backend storage.Backend, config ResourceConfig, name string, options *metav1.GetOptions, operation string) (runtime.Object, error) {
 	start := time.Now()
-	namespace := s.config.namespace(ctx)
+	namespace := config.namespace(ctx)
 	sctx, cancel := storageContext(ctx)
 	defer cancel()
-	obj, err := s.backend.Get(sctx, s.config.Kind, namespace, name)
-	if err != nil {
-		metrics.RecordStorageOperation("get", s.config.Kind, "error")
-		metrics.RecordStorageLatency("get", s.config.Kind, start)
-		return nil, apierrors.NewNotFound(schema.GroupResource{Group: arkv1alpha1.GroupVersion.Group, Resource: s.config.Resource}, name)
+	if err := requireResourceVersion(sctx, backend, options); err != nil {
+		outcome, apiErr := classifyStorageError(err, err)
+		metrics.RecordStorageOperation(operation, config.Kind, outcome)
+		metrics.RecordStorageLatency(operation, config.Kind, start)
+		return nil, apiErr
 	}
-	metrics.RecordStorageOperation("get", s.config.Kind, "success")
-	metrics.RecordStorageLatency("get", s.config.Kind, start)
+	obj, err := backend.Get(sctx, config.Kind, namespace, name)
+	if err != nil {
+		metrics.RecordStorageOperation(operation, config.Kind, "error")
+		metrics.RecordStorageLatency(operation, config.Kind, start)
+		return nil, apierrors.NewNotFound(schema.GroupResource{Group: arkv1alpha1.GroupVersion.Group, Resource: config.Resource}, name)
+	}
+	metrics.RecordStorageOperation(operation, config.Kind, "success")
+	metrics.RecordStorageLatency(operation, config.Kind, start)
 	return obj, nil
 }
 
@@ -132,18 +142,18 @@ func (s *GenericStorage) List(ctx context.Context, options *metainternalversion.
 		}
 		opts.Limit = options.Limit
 		opts.Continue = options.Continue
+		opts.ResourceVersion = options.ResourceVersion
+		opts.ResourceVersionMatch = options.ResourceVersionMatch
 	}
 
 	sctx, cancel := storageContext(ctx)
 	defer cancel()
 	objects, continueToken, listRV, err := s.backend.List(sctx, s.config.Kind, namespace, opts)
 	if err != nil {
-		metrics.RecordStorageOperation("list", s.config.Kind, "error")
+		outcome, apiErr := classifyStorageError(err, fmt.Errorf("failed to list %s: %w", s.config.Resource, err))
+		metrics.RecordStorageOperation("list", s.config.Kind, outcome)
 		metrics.RecordStorageLatency("list", s.config.Kind, start)
-		if errors.Is(err, storage.ErrInvalidRequest) {
-			return nil, apierrors.NewBadRequest(err.Error())
-		}
-		return nil, apierrors.NewInternalError(fmt.Errorf("failed to list %s: %w", s.config.Resource, err))
+		return nil, apiErr
 	}
 
 	list := s.config.NewListFunc()
@@ -495,10 +505,16 @@ func (s *GenericStorage) Watch(ctx context.Context, options *metainternalversion
 			opts.FieldSelector = options.FieldSelector.String()
 		}
 		opts.ResourceVersion = options.ResourceVersion
+		opts.AllowWatchBookmarks = options.AllowWatchBookmarks
+		opts.SendInitialEvents = options.SendInitialEvents != nil && *options.SendInitialEvents
 	}
 
 	watcher, err := s.backend.Watch(ctx, s.config.Kind, namespace, opts)
 	if err != nil {
+		var tooLarge *storage.TooLargeResourceVersionError
+		if errors.As(err, &tooLarge) {
+			return errorWatcher(resourceVersionError(err)), nil
+		}
 		if errors.Is(err, storage.ErrInvalidRequest) {
 			return nil, apierrors.NewBadRequest(err.Error())
 		}
@@ -609,8 +625,8 @@ func setListItems(list runtime.Object, objects []runtime.Object, continueToken s
 	}
 	// listRV is the backend's store head revision: always at or above the purge
 	// floor, so the list→watch handoff never resumes below the floor, and set
-	// even for an empty kind so a watch can still resume. Zero means the store
-	// is empty (nothing ever written); leave the RV unset in that case.
+	// even for an empty kind so a watch can still resume. The PostgreSQL backend
+	// reports at least its head revision base; leave the RV unset on zero.
 	if listRV > 0 {
 		accessor.SetResourceVersion(strconv.FormatInt(listRV, 10))
 	}

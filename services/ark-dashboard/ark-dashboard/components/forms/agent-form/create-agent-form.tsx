@@ -1,6 +1,7 @@
 'use client';
 
 import { DetailBreadcrumb } from '@/components/common/detail-breadcrumb';
+import { CustomHeadersField } from '@/components/forms/shared/custom-headers-field';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { Button } from '@/components/ui/button';
 import {
@@ -24,6 +25,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { PromptField } from './prompt-field';
+import { ToolApprovalsSection } from './sections/tool-approvals-section';
 import { ToolsMultiSelect } from './sections/tools-multi-select';
 import { AgentFormMode, type AgentFormProps } from './types';
 import { useAgentForm } from './use-agent-form';
@@ -51,10 +53,20 @@ export function CreateAgentForm({
     availableTools,
     toolsLoading,
     unavailableTools,
+    selectedTools,
     parameters,
+    headerRows,
   } = state;
 
-  const { setParameters, handleToolToggle, isToolSelected, onSubmit } = actions;
+  const {
+    setParameters,
+    handleToolToggle,
+    isToolSelected,
+    getToolApproval,
+    setToolApproval,
+    onSubmit,
+    onInvalid,
+  } = actions;
 
   const promptValue = form.watch('prompt') || '';
   const isDisabled = form.formState.isSubmitting;
@@ -82,7 +94,7 @@ export function CreateAgentForm({
               </Button>
             )}
             <Button
-              onClick={form.handleSubmit(onSubmit)}
+              onClick={form.handleSubmit(onSubmit, onInvalid)}
               disabled={saving || hasUnavailableTools || readOnlyMode}>
               {saving && <Spinner className="mr-2 h-4 w-4" />}
               Create
@@ -96,7 +108,7 @@ export function CreateAgentForm({
 
       <Form {...form}>
         <form
-          onSubmit={form.handleSubmit(onSubmit)}
+          onSubmit={form.handleSubmit(onSubmit, onInvalid)}
           className="flex min-h-0 flex-1 items-start gap-20 overflow-hidden pb-2 pl-px">
           {/* Left column — form fields (576px) */}
           <div className="flex max-h-full min-h-0 w-[576px] flex-col gap-6 overflow-y-auto">
@@ -185,6 +197,13 @@ export function CreateAgentForm({
               />
             </FieldSet>
 
+            <ToolApprovalsSection
+              selectedTools={selectedTools}
+              getToolApproval={getToolApproval}
+              onApprovalChange={setToolApproval}
+              disabled={isDisabled}
+            />
+
             <FormField
               control={form.control}
               name="prompt"
@@ -199,6 +218,14 @@ export function CreateAgentForm({
                   required
                 />
               )}
+            />
+
+            <CustomHeadersField
+              headerRows={headerRows}
+              title="Model headers"
+              description="Sent with every request this agent makes to its model."
+              addLabel="Add model header"
+              disabled={isDisabled}
             />
           </div>
 

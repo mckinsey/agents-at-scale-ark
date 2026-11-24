@@ -24,6 +24,8 @@ The Query controller exposes two knobs via Helm values under `controllerManager`
 - **`maxConcurrentQueries`** (default `32`) — caps the number of Query executions running concurrently as in-process goroutines. When the cap is reached, the reconciler requeues so the backlog stays in the workqueue instead of the controller heap. This bounds memory under burst load. Set to `0` to disable the cap (not recommended — susceptible to OOM under burst load). The cap is shared max-min-fair across active namespaces: each namespace with in-flight or recently-waiting queries gets an adaptive share (`maxConcurrentQueries` divided by the number of active namespaces, floor 1), so one tenant flooding queries cannot monopolize the pool and starve others (#2698). A namespace with demand below its share leaves the remainder for others; idle namespaces do not reduce anyone's share.
 - **`maxConcurrentReconciles`** (default `4`) — caps the number of Query reconciles running in parallel. The workqueue dedupes per-key, so this only enables concurrency *across different* Query objects, not faster repeats of the same one. Set to `0` to use the controller-runtime default (1).
 
+A Query that cannot get a slot is set to phase `queued` and retried every 250ms. If its whole `spec.timeout` passes while it waits, it fails with "Query timed out waiting for controller capacity"; once it starts, the full timeout applies to the execution, and `status.duration` does not include the time spent queued.
+
 The two knobs are independent and both effective at the defaults. `maxConcurrentReconciles` controls how fast queued queries are picked up; `maxConcurrentQueries` bounds how many of them can be in-flight at once. Raise both together if the controller has spare CPU/memory headroom and queue depth is growing. Lower `maxConcurrentQueries` if the controller pod is near its memory limit during bursts.
 
 ### API and dashboard
@@ -38,23 +40,49 @@ The **messages**, **operation events**, and **sessions** stores can each opt in 
 
 ### Storage backend
 
-When using the default etcd-backed storage, scalability is bounded by the cluster's etcd capacity. For deployments with a high volume of resources, the [PostgreSQL storage backend](/operations-guide/postgres-storage-backend) provides more headroom. PostgreSQL connection pooling is configured with sensible defaults (max open connections, idle connection management, connection lifetime limits) and can be tuned for higher throughput.
+When using the default etcd-backed storage, scalability is bounded by the cluster's etcd capacity. For deployments with a high volume of resources, the [PostgreSQL storage backend](/operations-guide/postgres-storage-backend) provides more headroom. Each apiserver replica holds up to 40 query connections by default. Set `postgresql.maxOpenConns` in the chart to change it, and budget `maxOpenConns + 2` connections per replica against PostgreSQL `max_connections`. See [connection budget](/operations-guide/postgres-storage-backend) for sizing.
 
-The PostgreSQL backend's advantage grows with resource count — it is most pronounced on `LIST` operations. Benchmarks at 10,000 Ark resources:
+In load tests on a Kind cluster, a `LIST` of 2,000 objects of 10 KB took 1.68 s (P50) on PostgreSQL and 0.71 s on etcd. The aggregated apiserver has no watch cache, so every `LIST` reads all rows from PostgreSQL. That `LIST` had no `resourceVersion`; informers send `resourceVersion=0`, which is faster.
 
-| Operation | etcd | PostgreSQL |
-|-----------|------|------------|
-| LIST latency (P50) | 2,980ms | 1,504ms (~2x faster) |
-| LIST throughput | 6.1 ops/sec | 12.5 ops/sec (~2x higher) |
-| Create latency (P50) | 107ms | 106ms (comparable) |
-| Get latency (P50) | 103ms | 106ms (comparable) |
-| Watch latency (P50) | — | 73ms |
+Replicas share load only with aggregator routing (see [Replicas](#replicas)). With routing off, a second replica gets no watches, so it adds no re-reads and shares no load. With routing on, reads scale, but writes and watches get slower: on every change notification, each replica with watches re-reads the rows of that kind among the last 500 resource versions. `resource_version` is one sequence for all kinds, so the window is 500 versions overall, filtered by kind; with the single kind in this benchmark, the two are the same. The table was measured with routing on. Load: 20 updates per second, 10 watchers, 30 seconds.
 
-On PostgreSQL, production capacity is roughly ~230 ops/sec burst / ~180 ops/sec sustained, 200+ concurrent watchers at ~80ms P50, with optimal concurrency around 50–100 workers. See [Core Architecture → Storage backends](/reference/core-architecture#storage-backends) for the trade-off and [PostgreSQL Storage Backend](/operations-guide/postgres-storage-backend) for setup.
+| | 1 replica | 3 replicas |
+|---|---|---|
+| Rows re-read (10 KB objects) | 264,614 | 731,572 |
+| Update latency P50 (10 KB) | 10 ms | 39 ms |
+| Watch lag P50 (10 KB) | 27 ms | 80 ms |
+| Update latency P50 (100 KB) | 57 ms | 745 ms |
+| Watch lag P50 (100 KB) | 246 ms | 2.2 s |
+
+Change notifications run inside the write transaction and serialize commits on a PostgreSQL lock. With 32 concurrent clients, each inserting one row (pgbench), PostgreSQL did 4,948 commits per second without notifications and 298 with them. This limit applies to the PostgreSQL instance, whatever the replica count.
+
+These numbers come from a shared laptop. Compare the ratios, not the absolute values.
+
+#### Replicas
+
+Extra replicas share load only when requests reach them. kube-apiserver reaches the APIService through the Service ClusterIP over one HTTP/2 connection, and kube-proxy pins that connection to one pod. On Kind, with three replicas and a single kube-apiserver, one pod served 3,000 requests and the other two served none. With `--enable-aggregator-routing=true`, the split was 507, 515 and 478. With several kube-apiserver instances, each holds its own connection, so replicas can get load without the flag. Check requests per pod on your cluster instead of assuming. If one pod takes all the requests, extra replicas add availability, not capacity.
+
+#### Memory
+
+A `LIST` holds all rows in memory before encoding, so the peak is about four times the response size, for each concurrent unpaginated `LIST`. In a load test, a single unpaginated `LIST` of 2,000 Queries of 100 KB was OOM-killed at a 256Mi limit, and peaked at 790Mi with a 2Gi limit. The chart default limit is 1Gi. The same `LIST` paginated at 250 peaked at 207Mi at 256Mi with no OOM, because the limit reaches the SQL query. Two such unpaginated `LIST`s at once were OOM-killed at 1Gi. Paginate large `LIST`s, and size `resources.limits.memory` from about four times the response, times the number of concurrent unpaginated `LIST`s.
+
+See [Core Architecture → Storage backends](/reference/core-architecture#storage-backends) for the trade-off and [PostgreSQL Storage Backend](/operations-guide/postgres-storage-backend) for setup.
 
 ### Executors
 
-All executors — including the default completions executor — run as separate deployments and communicate with the controller via A2A. The default completions executor uses an in-memory A2A task manager that holds conversation history, active tasks, and streaming subscribers, so it runs as a single replica by default. Scaling it to multiple replicas would require sticky sessions or a shared task store. Marketplace and custom executors can define their own HPA, resource limits, and replica strategy depending on their state management approach.
+All executors — including the default completions executor — run as separate deployments and communicate with the controller via A2A. The controller sends each Query as a single blocking A2A request that one executor pod handles from start to finish, and conversation history lives in the Memory service, so any replica can serve any request.
+
+The default completions executor runs as a single replica by default and can be scaled out through its Helm chart. `replicaCount` sets a fixed number of replicas; `autoscaling.enabled` replaces it with a HorizontalPodAutoscaler that scales on an absolute per-pod CPU target (`autoscaling.targetCPUAverageValue`, default `200m`) because the chart reserves only `10m` of CPU per pod and a percentage-of-request target would scale on the first query. `podDisruptionBudget.enabled` adds a PodDisruptionBudget for voluntary disruptions.
+
+Before scaling it out:
+
+- The HPA reads pod metrics from the Metrics API, so the cluster needs [metrics-server](https://github.com/kubernetes-sigs/metrics-server) (managed Kubernetes offerings such as EKS do not install it by default). Without cluster autoscaling, new replicas also need free node capacity or they stay `Pending`.
+- When `autoscaling.enabled` is on, the Deployment omits `replicas` and the HPA owns the count. Set `autoscaling.minReplicas` to the fixed count you are moving from, otherwise the Deployment drops to one replica until load arrives.
+- Enable the PodDisruptionBudget only with two or more replicas. With one replica and `minAvailable: 1` it allows zero disruptions and blocks node drains.
+- The controller reuses idle connections to the executor Service, so new replicas receive traffic gradually as those connections rotate. An uneven spread right after a scale-out is expected.
+- On scale-down or pod termination, in-flight queries get the drain window set by `terminationGracePeriodSeconds` and `gracefulShutdown.shutdownTimeoutSeconds` (57s by default). A query still running when the window closes ends in `error` and the controller does not re-dispatch it, so size the window for your longest query.
+
+The in-memory A2A task manager keeps task state per pod. That matters only for external A2A clients that call the executor directly and later resume a task with `tasks/get`, `tasks/resubscribe` or a stream re-attach; for them, set `taskManager.backend: redis` so task state is shared across replicas. The controller path does not need it. Marketplace and custom executors define their own HPA, resource limits and replica strategy depending on how they manage state.
 
 ## Resource monitoring
 
@@ -95,13 +123,13 @@ For production planning, consider:
 
 ### Cluster-level capacity
 
-Ark does not ship PodDisruptionBudgets by default. Production deployments should add PDBs for the controller and API to ensure availability during node maintenance. See the [Kubernetes PDB documentation](https://kubernetes.io/docs/tasks/run-application/configure-pdb/) for guidance.
+The `ark-apiserver` chart ships a PodDisruptionBudget (`minAvailable: 1`) and two replicas by default. Other Ark components ship no PodDisruptionBudget by default. Production deployments should add PDBs for the controller and API to ensure availability during node maintenance. See the [Kubernetes PDB documentation](https://kubernetes.io/docs/tasks/run-application/configure-pdb/) for guidance.
 
 Node capacity should account for executor workloads, which are typically the most resource-intensive components. LLM-backed executors may require significant memory for request/response buffering, especially with long-context models.
 
 ### Scaling path
 
-1. **Start with defaults** — Deploy with the default Helm values and a single replica per service.
+1. **Start with defaults** — Deploy with the default Helm values: one replica per service, except the `ark-apiserver`, which runs two.
 2. **Monitor under load** — Use Prometheus metrics and pod resource usage to identify bottlenecks.
 3. **Scale horizontally** — Increase replica counts for the API, dashboard, and executors as needed.
 4. **Tune the controller** — Increase CPU and memory limits based on observed reconciliation load.

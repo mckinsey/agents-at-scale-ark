@@ -26,15 +26,14 @@ import {
 } from '@/lib/services/workflow-templates';
 import { buildWorkflowRunsUrl } from '@/lib/utils/workflow';
 import { useNamespace } from '@/providers/NamespaceProvider';
-
-const ARGO_BASE_URL =
-  process.env.NEXT_PUBLIC_ARGO_URL || 'http://localhost:2746';
+import { useArgoLinks } from '@/providers/argo-url-provider';
 
 const STATS_POLL_INTERVAL_MS = 30000;
 
 interface StudioHeaderActionsProps {
   workflowName: string;
   persisted: boolean;
+  canDelete?: boolean;
 }
 
 function errorMessage(error: unknown): string {
@@ -44,8 +43,10 @@ function errorMessage(error: unknown): string {
 export function StudioHeaderActions({
   workflowName,
   persisted,
+  canDelete = true,
 }: Readonly<StudioHeaderActionsProps>) {
   const { namespace, readOnlyMode } = useNamespace();
+  const argoLinks = useArgoLinks();
   const { push } = useNamespacedNavigation();
 
   const [activityOpen, setActivityOpen] = useState(false);
@@ -87,9 +88,15 @@ export function StudioHeaderActions({
   }, [namespace, persisted, workflowName]);
 
   const handleOpenInArgo = useCallback(() => {
-    const url = `${ARGO_BASE_URL}/workflow-templates/${namespace}/${workflowName}`;
-    window.open(url, '_blank', 'noopener');
-  }, [namespace, workflowName]);
+    if (!argoLinks) {
+      return;
+    }
+    window.open(
+      argoLinks.workflowTemplate(namespace, workflowName),
+      '_blank',
+      'noopener',
+    );
+  }, [argoLinks, namespace, workflowName]);
 
   const handleConfirmDelete = useCallback(async () => {
     try {
@@ -140,26 +147,50 @@ export function StudioHeaderActions({
       <div
         className="flex items-center gap-2"
         data-testid="studio-header-actions-content">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-8 w-8 p-0"
-              aria-label="Open in Argo"
-              disabled={!persisted}
-              onClick={handleOpenInArgo}
-              data-testid="studio-open-argo">
-              <OpenInNew className="h-4 w-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>
-            {persisted ? 'Open in Argo' : notPersistedTip}
-          </TooltipContent>
-        </Tooltip>
+        {argoLinks && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0"
+                aria-label="Open in Argo"
+                disabled={!persisted}
+                onClick={handleOpenInArgo}
+                data-testid="studio-open-argo">
+                <OpenInNew className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {persisted ? 'Open in Argo' : notPersistedTip}
+            </TooltipContent>
+          </Tooltip>
+        )}
 
-        {!readOnlyMode && (
+        {!readOnlyMode && !canDelete && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="inline-flex" tabIndex={0}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0"
+                  aria-label="Delete workflow"
+                  disabled
+                  data-testid="studio-delete">
+                  <Trash className="h-4 w-4" />
+                </Button>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>
+              You do not have permission to delete workflow templates
+            </TooltipContent>
+          </Tooltip>
+        )}
+
+        {!readOnlyMode && canDelete && (
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -192,7 +223,7 @@ export function StudioHeaderActions({
                   data-testid="studio-activity-trigger">
                   <Badge
                     variant="alternative"
-                    className="border-stroke-divider bg-mist-50 text-slate-900 mr-2 size-5 min-w-5 items-center justify-center rounded-full border p-0"
+                    className="border-stroke-divider bg-fill-primary text-fg-primary-inverse mr-2 size-5 min-w-5 items-center justify-center rounded-full border p-0"
                     data-testid="studio-activity-badge">
                     {totalRuns}
                   </Badge>

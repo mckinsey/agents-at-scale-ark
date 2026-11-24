@@ -5,7 +5,10 @@ import { APIError } from '@/lib/api/client';
 import { useNamespace } from '@/providers/NamespaceProvider';
 
 import { configurationsService } from './configurations';
-import { createResourceErrorMessage } from './resource-error-message';
+import {
+  createResourceErrorMessage,
+  getErrorMessage,
+} from './resource-error-message';
 import type {
   Configuration,
   ConfigurationCreateRequest,
@@ -19,13 +22,6 @@ export const GET_CONFIGURATION_REFERENCES_QUERY_KEY =
 export const CREATE_CONFIGURATION_MUTATION_KEY = 'create-configuration';
 export const UPDATE_CONFIGURATION_MUTATION_KEY = 'update-configuration';
 export const DELETE_CONFIGURATION_MUTATION_KEY = 'delete-configuration';
-
-const getErrorMessage = (error: unknown): string => {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return 'An unexpected error occurred';
-};
 
 export const useGetAllConfigurations = () => {
   const { namespace } = useNamespace();
