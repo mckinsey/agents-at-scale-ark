@@ -1563,7 +1563,7 @@ func (w *postgresWatcher) buildRelistQuery() (string, []interface{}) {
 	}
 
 	query := `
-		SELECT resource_version, generation, namespace, name, uid, spec, status, labels, annotations, finalizers, owner_references, created_at, deleted_at, deletion_timestamp
+		SELECT ` + changeRowColumns + `
 		FROM resources
 		WHERE kind = $1 AND resource_version > $2`
 	args := []interface{}{w.kind, queryFromRV}
@@ -1648,19 +1648,14 @@ func (w *postgresWatcher) relist() error {
 	defer func() { _ = rows.Close() }()
 
 	for rows.Next() {
-		var rv, generation int64
-		var ns, name, uid string
-		var spec, status, labels, annotations, finalizers, ownerRefs []byte
-		var createdAt time.Time
-		var deletedAt, deletionTimestamp sql.NullTime
-
-		if err := rows.Scan(&rv, &generation, &ns, &name, &uid, &spec, &status, &labels, &annotations, &finalizers, &ownerRefs, &createdAt, &deletedAt, &deletionTimestamp); err != nil {
+		r, err := scanChangeRow(rows)
+		if err != nil {
 			// Partial read: do NOT advance/prune, so the next relist re-reads
 			// the same window and nothing is permanently skipped.
 			watcherRelistFailures.WithLabelValues(w.kind).Inc()
 			return err
 		}
-		if !w.emitRow(rv, generation, ns, name, uid, spec, status, labels, annotations, finalizers, ownerRefs, createdAt, deletedAt, deletionTimestamp) {
+		if !w.emitRow(r.rv, r.generation, r.ns, r.name, r.uid, r.spec, r.status, r.labels, r.annotations, r.finalizers, r.ownerRefs, r.createdAt, r.deletedAt, r.deletionTimestamp) {
 			return nil // watcher shutting down, not a relist failure
 		}
 	}

@@ -4,7 +4,6 @@ package postgresql
 
 import (
 	"context"
-	"database/sql"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -138,7 +137,7 @@ const broadcasterRelistKeysQuery = `
 		ORDER BY resource_version ASC`
 
 const broadcasterRelistRowsQuery = `
-		SELECT resource_version, generation, namespace, name, uid, spec, status, labels, annotations, finalizers, owner_references, created_at, deleted_at, deletion_timestamp
+		SELECT ` + changeRowColumns + `
 		FROM resources
 		WHERE kind = $1 AND resource_version = ANY($2)
 		ORDER BY resource_version ASC`
@@ -213,23 +212,18 @@ func (b *kindBroadcaster) fanoutRows(ctx context.Context, rvs []int64) error {
 	defer func() { _ = rows.Close() }()
 
 	for rows.Next() {
-		var rv, generation int64
-		var ns, name, uid string
-		var spec, status, labels, annotations, finalizers, ownerRefs []byte
-		var createdAt time.Time
-		var deletedAt, deletionTimestamp sql.NullTime
-
-		if err := rows.Scan(&rv, &generation, &ns, &name, &uid, &spec, &status, &labels, &annotations, &finalizers, &ownerRefs, &createdAt, &deletedAt, &deletionTimestamp); err != nil {
+		r, err := scanChangeRow(rows)
+		if err != nil {
 			return err
 		}
-		if b.markSeen(uid, rv) {
+		if b.markSeen(r.uid, r.rv) {
 			continue
 		}
-		obj, rErr := b.backend.reconstructObject(b.kind, ns, name, rv, generation, uid, string(spec), string(status), string(labels), string(annotations), string(finalizers), string(ownerRefs), createdAt, nullTimePtr(deletionTimestamp))
+		obj, rErr := b.backend.reconstructObject(b.kind, r.ns, r.name, r.rv, r.generation, r.uid, string(r.spec), string(r.status), string(r.labels), string(r.annotations), string(r.finalizers), string(r.ownerRefs), r.createdAt, nullTimePtr(r.deletionTimestamp))
 		if rErr != nil {
 			continue
 		}
-		b.fanout(&changeRow{rv: rv, uid: uid, ns: ns, obj: obj, deleted: deletedAt.Valid})
+		b.fanout(&changeRow{rv: r.rv, uid: r.uid, ns: r.ns, obj: obj, deleted: r.deletedAt.Valid})
 	}
 	return rows.Err()
 }
