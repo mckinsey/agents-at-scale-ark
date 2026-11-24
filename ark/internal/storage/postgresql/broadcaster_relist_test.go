@@ -24,12 +24,14 @@ func relistKeys(pairs ...interface{}) *sqlmock.Rows {
 	return rows
 }
 
+const relistTestCursor int64 = 1000
+
 func relistFullRow(rows *sqlmock.Rows, rv int64, uid string) *sqlmock.Rows {
 	return rows.AddRow(rv, int64(1), "default", "obj-"+uid, uid, []byte(`{"p":"x"}`), []byte(`{}`),
 		[]byte(`{}`), []byte(`{}`), []byte(`[]`), []byte(`[]`), time.Unix(0, 0), nil, nil)
 }
 
-func newRelistBroadcaster(t *testing.T, cursor int64) (*kindBroadcaster, sqlmock.Sqlmock, *postgresWatcher) {
+func newRelistBroadcaster(t *testing.T) (*kindBroadcaster, sqlmock.Sqlmock, *postgresWatcher) {
 	t.Helper()
 	db, mock, err := sqlmock.New()
 	if err != nil {
@@ -44,7 +46,7 @@ func newRelistBroadcaster(t *testing.T, cursor int64) (*kindBroadcaster, sqlmock
 		broadcasters: map[string]*kindBroadcaster{},
 	}
 	b := newKindBroadcaster(backend, "Agent")
-	b.lastSeenRV.Store(cursor)
+	b.lastSeenRV.Store(relistTestCursor)
 	w := newFanoutWatcher("", nil, 16, 16)
 	b.subscribers[w] = struct{}{}
 	return b, mock, w
@@ -76,7 +78,7 @@ func equalRVs(a, b []int64) bool {
 
 func TestRelist_LoadsFullRowsOnlyForUnseen(t *testing.T) {
 	t.Parallel()
-	b, mock, w := newRelistBroadcaster(t, 1000)
+	b, mock, w := newRelistBroadcaster(t)
 	b.markSeen("u1", 1001)
 
 	mock.ExpectQuery("SELECT resource_version, uid").
@@ -103,7 +105,7 @@ func TestRelist_LoadsFullRowsOnlyForUnseen(t *testing.T) {
 
 func TestRelist_SkipsRowsQueryWhenEverythingWasSeen(t *testing.T) {
 	t.Parallel()
-	b, mock, w := newRelistBroadcaster(t, 1000)
+	b, mock, w := newRelistBroadcaster(t)
 	b.markSeen("u1", 1001)
 	b.markSeen("u2", 1002)
 
@@ -128,14 +130,14 @@ func TestRelist_SkipsRowsQueryWhenEverythingWasSeen(t *testing.T) {
 
 func TestRelist_KeysQueryFailureKeepsCursor(t *testing.T) {
 	t.Parallel()
-	b, mock, w := newRelistBroadcaster(t, 1000)
+	b, mock, w := newRelistBroadcaster(t)
 
 	mock.ExpectQuery("SELECT resource_version, uid").WillReturnError(errors.New("boom"))
 
 	b.relist()
 
-	if got := b.lastSeenRV.Load(); got != 1000 {
-		t.Errorf("cursor = %d, want 1000", got)
+	if got := b.lastSeenRV.Load(); got != relistTestCursor {
+		t.Errorf("cursor = %d, want %d", got, relistTestCursor)
 	}
 	if b.consecutiveFailures != 1 {
 		t.Errorf("failures = %d, want 1", b.consecutiveFailures)
@@ -147,7 +149,7 @@ func TestRelist_KeysQueryFailureKeepsCursor(t *testing.T) {
 
 func TestRelist_RowsQueryFailureKeepsCursorAndRetriesTheSameRows(t *testing.T) {
 	t.Parallel()
-	b, mock, w := newRelistBroadcaster(t, 1000)
+	b, mock, w := newRelistBroadcaster(t)
 
 	mock.ExpectQuery("SELECT resource_version, uid").
 		WillReturnRows(relistKeys(int64(1001), "u1"))
@@ -155,8 +157,8 @@ func TestRelist_RowsQueryFailureKeepsCursorAndRetriesTheSameRows(t *testing.T) {
 
 	b.relist()
 
-	if got := b.lastSeenRV.Load(); got != 1000 {
-		t.Errorf("cursor = %d, want 1000", got)
+	if got := b.lastSeenRV.Load(); got != relistTestCursor {
+		t.Errorf("cursor = %d, want %d", got, relistTestCursor)
 	}
 	if b.consecutiveFailures != 1 {
 		t.Errorf("failures = %d, want 1", b.consecutiveFailures)
@@ -183,7 +185,7 @@ func TestRelist_RowsQueryFailureKeepsCursorAndRetriesTheSameRows(t *testing.T) {
 
 func TestRelist_RowGoneBetweenQueriesIsDeliveredWhenItReappears(t *testing.T) {
 	t.Parallel()
-	b, mock, w := newRelistBroadcaster(t, 1000)
+	b, mock, w := newRelistBroadcaster(t)
 
 	mock.ExpectQuery("SELECT resource_version, uid").
 		WillReturnRows(relistKeys(int64(1001), "u1", int64(1002), "u2"))
