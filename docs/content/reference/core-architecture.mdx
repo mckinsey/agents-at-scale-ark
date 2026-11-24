@@ -66,7 +66,7 @@ Ark extends an agent's reach through two external integration points, both model
 Ark supports two storage backends for its resources; the choice is a deployment decision and is transparent to clients using `kubectl` or the Ark API.
 
 - **etcd (default)** — Ark resources are installed as CRDs and stored in etcd alongside standard Kubernetes objects. Simplest to run; best for small-to-medium installs.
-- **PostgreSQL (aggregated)** — a [Kubernetes aggregated API server](https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/apiserver-aggregation/) serves the `ark.mckinsey.com` group from a PostgreSQL database instead of etcd. Better for large resource counts, heavy `LIST` operations, and multi-replica deployments, with `pg_notify`-driven cross-replica watch delivery.
+- **PostgreSQL (aggregated)** — a [Kubernetes aggregated API server](https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/apiserver-aggregation/) serves the `ark.mckinsey.com` group from a PostgreSQL database instead of etcd. Better for large resource counts, with `pg_notify`-driven cross-replica watch delivery. It has no watch cache, so every `LIST` reads all rows from PostgreSQL, and with aggregator routing, extra replicas share reads but make writes and watches slower. See [Scalability](/reference/scalability#storage-backend) for the measurements.
 
 <img src="/ark-core-aggregated.jpg" alt="Aggregated Core Architecture" style={{maxWidth: '800px', width: '100%'}} />
 
