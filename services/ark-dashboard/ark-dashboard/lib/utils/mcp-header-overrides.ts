@@ -430,3 +430,52 @@ export function headerNameOptions(
   }
   return Array.from(options.values()).sort((a, b) => a.localeCompare(b));
 }
+
+export interface AgentMcpHeader {
+  id: string;
+  name: string;
+  scope: McpScope;
+}
+
+export function agentMcpHeaders(
+  overrides: AgentOverride[] | null | undefined,
+): AgentMcpHeader[] {
+  return (overrides ?? [])
+    .filter(isMcpOverride)
+    .flatMap((override, overrideIndex) => {
+      const scope = getMcpScope(override);
+      return override.headers.map((header, headerIndex) => ({
+        id: `agent-${overrideIndex}-${headerIndex}`,
+        name: header.name,
+        scope,
+      }));
+    });
+}
+
+function rowReaches(row: McpHeaderRow, scope: McpScope): boolean {
+  if (!row.serverName) return true;
+  return (
+    scope.kind === 'all' ||
+    (scope.kind === 'server' && scope.serverName === row.serverName)
+  );
+}
+
+export function buildQueryMcpOverrides(
+  rows: McpHeaderRow[],
+  agentHeaders: AgentMcpHeader[],
+): AgentOverride[] {
+  const entries = rows
+    .filter(row => !isBlankMcpHeaderRow(row))
+    .map(row => {
+      const agentHeader = agentHeaders.find(
+        header =>
+          normalizeName(header.name) === normalizeName(row.name) &&
+          rowReaches(row, header.scope),
+      );
+      return {
+        serverName: row.serverName,
+        header: rowToHeader(row, agentHeader?.name ?? row.name.trim()),
+      };
+    });
+  return groupedOverrides(entries);
+}

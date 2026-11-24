@@ -7,7 +7,9 @@ import {
   MCP_SERVER_SELECTOR_LABEL,
   MCP_TOOL_SERVER_LABEL,
   type McpHeaderRow,
+  agentMcpHeaders,
   buildMcpOverrides,
+  buildQueryMcpOverrides,
   createMcpHeaderRow,
   getMcpScope,
   getMcpServerName,
@@ -224,5 +226,35 @@ describe('headerNameOptions', () => {
     expect(
       headerNameOptions(current, rows, ['Authorization', 'X-Region']),
     ).toEqual(['X-Region']);
+  });
+});
+
+describe('buildQueryMcpOverrides', () => {
+  it("reuses the agent's header casing and groups rows per server", () => {
+    const agentHeaders = agentMcpHeaders([
+      serverOverride('github', [
+        { name: 'authorization', value: { value: 'a' } },
+      ]),
+    ]);
+    const rows = [
+      row({
+        serverName: 'github',
+        name: 'Authorization',
+        source: 'value',
+        value: 'query',
+      }),
+      row({ name: 'X-Request-Source', source: 'value', value: 'chat' }),
+      row({}),
+    ];
+
+    expect(buildQueryMcpOverrides(rows, agentHeaders)).toEqual([
+      {
+        resourceType: MCP_RESOURCE_TYPE,
+        headers: [{ name: 'X-Request-Source', value: { value: 'chat' } }],
+      },
+      serverOverride('github', [
+        { name: 'authorization', value: { value: 'query' } },
+      ]),
+    ]);
   });
 });

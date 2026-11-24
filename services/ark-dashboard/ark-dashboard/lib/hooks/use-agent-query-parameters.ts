@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { components } from '@/lib/api/generated/types';
 import {
+  type Agent,
   agentsService,
   executionEnginesService,
   teamsService,
@@ -51,6 +52,7 @@ interface UseAgentQueryParametersResult {
   executionEngineName: string | null;
   executionEngineAnnotations: Record<string, string> | null;
   agentAnnotations: Record<string, string> | null;
+  agent: Agent | null;
 }
 
 function stripPrefix(name: string): string {
@@ -318,5 +320,6 @@ export function useAgentQueryParameters(
     executionEngineName,
     executionEngineAnnotations,
     agentAnnotations,
+    agent: (!isAgentError && agentDetail) || null,
   };
 }
