@@ -34,6 +34,13 @@ import {
   GET_AGENT_BY_NAME_QUERY_KEY,
   GET_ALL_AGENTS_QUERY_KEY,
 } from '@/lib/services/agents-hooks';
+import { useGetAllMcpServers } from '@/lib/services/mcp-servers-hooks';
+import {
+  MCP_SERVER_TARGET_ISSUE_MESSAGES,
+  getServerTargetIssue,
+  mcpServerNamesFromTools,
+  serverHeaderNames,
+} from '@/lib/utils/mcp-header-overrides';
 import {
   OUTPUT_SCHEMA_ANNOTATION,
   buildOutputSchemaAnnotationUpdate,
@@ -46,6 +53,7 @@ import {
   type AgentFormValues,
   createAgentFormSchema,
 } from './types';
+import { useMcpHeaderOverrides } from './use-mcp-header-overrides';
 import {
   agentParametersChanged,
   buildAgentOverrides,
@@ -105,6 +113,34 @@ export function useAgentForm({
   } = headerRows;
   const [initialOverrides, setInitialOverrides] = useState<AgentOverride[]>([]);
   const [initialHeadersSnapshot, setInitialHeadersSnapshot] = useState('[]');
+  const mcpHeaders = useMcpHeaderOverrides();
+  const {
+    load: loadMcpHeaders,
+    reconcile: reconcileMcpServers,
+    validate: validateMcpHeaders,
+    toPayload: getMcpHeadersPayload,
+    loadVersion: mcpLoadVersion,
+  } = mcpHeaders;
+  const [initialMcpSnapshot, setInitialMcpSnapshot] = useState('[]');
+  const { data: mcpServers } = useGetAllMcpServers();
+  const mcpHeaderNames = useMemo(
+    () =>
+      mcpServers
+        ? Object.fromEntries(
+            mcpServers.map(server => [server.name, server.header_names ?? []]),
+          )
+        : null,
+    [mcpServers],
+  );
+  const mcpServerIssueFor = useCallback(
+    (serverName: string) => {
+      const server = mcpServers?.find(entry => entry.name === serverName);
+      if (!server) return undefined;
+      const issue = getServerTargetIssue(server, mcpServers);
+      return issue ? MCP_SERVER_TARGET_ISSUE_MESSAGES[issue] : undefined;
+    },
+    [mcpServers],
+  );
 
   const isExperimentalExecutionEngineEnabled = useAtomValue(
     isExperimentalExecutionEngineEnabledAtom,
@@ -197,6 +233,7 @@ export function useAgentForm({
           setInitialHeadersSnapshot(
             JSON.stringify(normalizeCustomHeaders(loadedHeaders)),
           );
+          setInitialMcpSnapshot(loadMcpHeaders(agentData.overrides));
 
           form.reset({
             name: agentData.name,
@@ -241,17 +278,41 @@ export function useAgentForm({
     return transformFormParametersToApi(parameters);
   }, [parameters]);
 
+  const mcpServerNames = useMemo(() => {
+    const selectedNames = new Set(selectedTools.map(tool => tool.name));
+    return mcpServerNamesFromTools(
+      availableTools.filter(tool => selectedNames.has(tool.name)),
+    );
+  }, [selectedTools, availableTools]);
+
+  useEffect(() => {
+    reconcileMcpServers(mcpServerNames);
+  }, [mcpServerNames, mcpLoadVersion, reconcileMcpServers]);
+
+  const mcpNamesForServer = useMemo(
+    () =>
+      mcpHeaderNames
+        ? (serverName?: string) =>
+            serverHeaderNames(serverName, mcpServerNames, mcpHeaderNames)
+        : undefined,
+    [mcpServerNames, mcpHeaderNames],
+  );
+
   const onSubmit = useCallback(
     async (values: AgentFormValues) => {
       const isA2A = agent?.isA2A ?? false;
       const headers = isA2A ? [] : validateHeaderRows();
-      if (!headers) {
+      const mcpOverrides = isA2A
+        ? []
+        : validateMcpHeaders(mcpNamesForServer, mcpServerIssueFor);
+      if (!headers || !mcpOverrides) {
         toast.error('Fix the header errors before saving');
         return;
       }
       const overrides = buildAgentOverrides(
         mode === AgentFormMode.CREATE ? [] : initialOverrides,
         headers,
+        isA2A ? undefined : mcpOverrides,
       );
 
       setSaving(true);
@@ -347,6 +408,7 @@ export function useAgentForm({
           if (!agent.isA2A) {
             setInitialOverrides(overrides);
             setInitialHeadersSnapshot(JSON.stringify(headers));
+            setInitialMcpSnapshot(JSON.stringify(mcpOverrides));
           }
         }
 
@@ -371,6 +433,9 @@ export function useAgentForm({
       parameters,
       mapParametersToApi,
       validateHeaderRows,
+      validateMcpHeaders,
+      mcpNamesForServer,
+      mcpServerIssueFor,
       initialOverrides,
       queryClient,
       namespace,
@@ -436,17 +501,28 @@ export function useAgentForm({
   const onInvalid = useCallback(() => {
     if (!agent?.isA2A) {
       validateHeaderRows();
+      validateMcpHeaders(mcpNamesForServer, mcpServerIssueFor);
     }
-  }, [agent?.isA2A, validateHeaderRows]);
+  }, [
+    agent?.isA2A,
+    validateHeaderRows,
+    validateMcpHeaders,
+    mcpNamesForServer,
+    mcpServerIssueFor,
+  ]);
 
   const hasHeadersChanged =
     JSON.stringify(getHeadersPayload()) !== initialHeadersSnapshot;
+
+  const hasMcpHeadersChanged =
+    JSON.stringify(getMcpHeadersPayload()) !== initialMcpSnapshot;
 
   const hasChanges =
     form.formState.isDirty ||
     hasToolsChanged() ||
     hasParametersChanged() ||
-    hasHeadersChanged;
+    hasHeadersChanged ||
+    hasMcpHeadersChanged;
 
   return {
     form,
@@ -463,6 +539,10 @@ export function useAgentForm({
       unavailableTools,
       parameters,
       headerRows,
+      mcpHeaders,
+      mcpServerNames,
+      mcpHeaderNames: mcpHeaderNames ?? {},
+      mcpServerIssueFor,
       isExperimentalExecutionEngineEnabled,
       hasChanges,
     },

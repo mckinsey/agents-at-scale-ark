@@ -38,6 +38,10 @@ vi.mock('@/lib/services', () => ({
   toolsService: { getAll: vi.fn().mockResolvedValue([]) },
 }));
 
+vi.mock('@/lib/services/mcp-servers-hooks', () => ({
+  useGetAllMcpServers: () => ({ data: [] }),
+}));
+
 let store = createStore();
 
 function wrapper({ children }: { children: ReactNode }) {

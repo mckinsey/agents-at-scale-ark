@@ -125,6 +125,12 @@ Header names are case-insensitive, so `X-Token` and `x-token` are the same heade
 
 The same name on two different servers is allowed. Query overrides are not checked.
 
+### Override Order
+
+When two `mcpserver` overrides send the same header to one server, the later override in `spec.overrides` wins. The checks above allow this only when one of the overrides uses a `labelSelector` other than `ark.mckinsey.com/name`.
+
+Saving an agent from the dashboard rewrites its `mcpserver` overrides in this order: the override without a `labelSelector`, then one override per server sorted by server name, then the overrides with any other `labelSelector`. If a selector override and a per-server override set the same header, a save from the dashboard can change which value the server gets. To keep the order, edit the Agent YAML instead.
+
 ## Label Selectors
 
 Use label selectors to target specific models or MCP servers:

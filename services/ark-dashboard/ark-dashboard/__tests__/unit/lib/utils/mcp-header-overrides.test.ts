@@ -103,60 +103,88 @@ describe('splitMcpOverrides and buildMcpOverrides', () => {
 
 describe('validateMcpHeaderRows', () => {
   it('reports required, unknown, hidden and server errors', () => {
-    const errors = validateMcpHeaderRows(
-      [
-        row({ id: 'blank' }),
-        row({ id: 'no-name', source: 'value', value: 'v' }),
-        row({
-          id: 'locked',
-          serverName: 'jira',
-          name: 'x-tenant',
-          source: 'value',
-          value: 'v',
-        }),
-        row({
-          id: 'unknown',
-          serverName: 'jira',
-          name: 'X-Nope',
-          source: 'value',
-          value: 'v',
-        }),
-        row({ id: 'no-secret', name: 'X-Token', secretName: 's' }),
-        row({
-          id: 'old-server',
-          serverName: 'legacy',
-          name: 'X-Tenant',
-          source: 'value',
-          value: 'v',
-        }),
-      ],
-      [{ id: 'l', serverName: 'jira', header: configMapHeader }],
-      () => ['X-Token', 'X-Tenant'],
-      serverName =>
-        serverName === 'legacy' ? 'Needs the name label' : undefined,
-    );
+    const rows = [
+      row({ id: 'blank' }),
+      row({ id: 'no-name', source: 'value', value: 'v' }),
+      row({
+        id: 'locked',
+        serverName: 'jira',
+        name: 'x-tenant',
+        source: 'value',
+        value: 'v',
+      }),
+      row({
+        id: 'unknown',
+        serverName: 'jira',
+        name: 'X-Nope',
+        source: 'value',
+        value: 'v',
+      }),
+      row({ id: 'no-secret', name: 'X-Token', secretName: 's' }),
+      row({
+        id: 'old-server',
+        serverName: 'legacy',
+        name: 'X-Tenant',
+        source: 'value',
+        value: 'v',
+      }),
+    ];
+    const lockedHeaders = [
+      { id: 'l', serverName: 'jira', header: configMapHeader },
+    ];
+    const namesForServer = () => ['X-Token', 'X-Tenant'];
+    const serverIssueFor = (serverName: string) =>
+      serverName === 'legacy' ? 'Needs the name label' : undefined;
 
-    expect(errors).toEqual({
+    expect(
+      validateMcpHeaderRows(
+        rows,
+        lockedHeaders,
+        namesForServer,
+        serverIssueFor,
+      ),
+    ).toEqual({
       'no-name': { nameError: 'Header name is required' },
       locked: { nameError: 'Already set outside the dashboard' },
       unknown: { nameError: 'Not a header of jira' },
       'no-secret': { valueError: 'Select a secret' },
       'old-server': { serverError: 'Needs the name label' },
     });
+    expect(
+      validateMcpHeaderRows(
+        rows,
+        lockedHeaders,
+        namesForServer,
+        serverIssueFor,
+        candidate => candidate.id !== 'no-name',
+      ),
+    ).toEqual({ 'no-name': { nameError: 'Header name is required' } });
   });
 
   it('treats All MCP servers as part of every server', () => {
     const value = { source: 'value' as const, value: 'v' };
-    const errors = validateMcpHeaderRows([
+    const rows = [
       row({ id: 'all', name: 'Authorization', ...value }),
       row({ id: 'jira', serverName: 'jira', name: 'authorization', ...value }),
       row({ id: 'gh', serverName: 'github', name: 'X-Id', ...value }),
       row({ id: 'gh-dup', serverName: 'github', name: 'x-id', ...value }),
       row({ id: 'other', serverName: 'jira', name: 'X-Id', ...value }),
-    ]);
+    ];
 
-    expect(errors).toEqual({
+    expect(validateMcpHeaderRows(rows)).toEqual({
       jira: { nameError: 'Already set for All MCP servers' },
+      'gh-dup': { nameError: 'Header name must be unique per MCP server' },
+    });
+    expect(
+      validateMcpHeaderRows(
+        rows,
+        [],
+        undefined,
+        undefined,
+        candidate => candidate.id === 'jira',
+      ),
+    ).toEqual({
+      all: { nameError: 'Already set for jira' },
       'gh-dup': { nameError: 'Header name must be unique per MCP server' },
     });
   });

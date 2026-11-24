@@ -306,17 +306,23 @@ function duplicateNameError(conflictServer?: string): string {
   return `Already set for ${conflictServer ?? ALL_MCP_SERVERS_LABEL}`;
 }
 
+export type IsUnchangedRow = (row: McpHeaderRow) => boolean;
+
 export function validateMcpHeaderRows(
   rows: McpHeaderRow[],
   lockedHeaders: LockedMcpHeader[] = [],
   namesForServer?: HeaderNamesForServer,
   serverIssueFor?: ServerIssueForServer,
+  isUnchanged: IsUnchangedRow = () => false,
 ): Record<string, McpHeaderRowError> {
   const errors: Record<string, McpHeaderRowError> = {};
-  const seen: ScopedHeaderName[] = [];
+  const seen: ScopedHeaderName[] = rows
+    .filter(row => !isBlankMcpHeaderRow(row) && isUnchanged(row))
+    .map(row => ({ serverName: row.serverName, name: normalizeName(row.name) }))
+    .filter(entry => entry.name);
 
   for (const row of rows) {
-    if (isBlankMcpHeaderRow(row)) continue;
+    if (isBlankMcpHeaderRow(row) || isUnchanged(row)) continue;
 
     const error: McpHeaderRowError = {};
     const serverError = row.serverName
