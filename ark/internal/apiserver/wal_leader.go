@@ -146,7 +146,11 @@ func newLeaseCampaign(clientset kubernetes.Interface, namespace, identity string
 					defer close(done)
 					onLeading(leaderCtx)
 				},
-				OnStoppedLeading: func() {},
+				OnStoppedLeading: func() {
+					if started.Load() {
+						klog.Info("WAL lease released or lost; stopping WAL consumer")
+					}
+				},
 			},
 		})
 		if err != nil {
