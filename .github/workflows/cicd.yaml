@@ -175,7 +175,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.26.6"
+          go-version: "1.26.9"
           cache: true
           cache-dependency-path: |
             ark/go.sum
@@ -225,7 +225,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.26.6"
+          go-version: "1.26.9"
           cache: true
           cache-dependency-path: ark/go.sum
 
@@ -345,7 +345,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.26.6"
+          go-version: "1.26.9"
           cache: true
           cache-dependency-path: |
             ark/go.sum
@@ -1411,7 +1411,7 @@ jobs:
       - name: Setup Go for coverage tools
         uses: actions/setup-go@v5
         with:
-          go-version: "1.26.6"
+          go-version: "1.26.9"
           # Coverage tooling only; no project build, so module caching has no value here.
           cache: false
 
@@ -1542,9 +1542,21 @@ jobs:
             echo "release_as=${BASE_VERSION}" >> $GITHUB_OUTPUT
             echo "Promotion detected: RC tags exist for v${BASE_VERSION}, releasing stable"
           else
-            echo "config=.github/release-please-config-rc.json" >> $GITHUB_OUTPUT
+            CONFIG=.github/release-please-config-rc.json
+            echo "config=$CONFIG" >> $GITHUB_OUTPUT
             echo "type=rc" >> $GITHUB_OUTPUT
-            echo "Normal development flow, using RC config"
+            if [[ "$VERSION" != *-rc* ]]; then
+              # New cycle starting from a stable manifest: force the next MINOR as
+              # the RC base so every scheduled release bumps the minor, even a
+              # fix-only cycle. Patches are reserved for hotfix-release.yaml.
+              IFS='.' read -r MA MI _ <<< "$VERSION"
+              NEXT="${MA}.$((MI + 1)).0-rc"
+              tmp=$(mktemp); jq --arg v "$NEXT" '. + {"release-as": $v}' "$CONFIG" > "$tmp" && mv "$tmp" "$CONFIG"
+              echo "release_as=${NEXT}" >> $GITHUB_OUTPUT
+              echo "New cycle: forcing RC base ${NEXT} (minor bump)"
+            else
+              echo "Mid-cycle: prerelease strategy cycles the rc number"
+            fi
           fi
 
       - name: Create Release
@@ -1670,7 +1682,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.26.6"
+          go-version: "1.26.9"
           # goreleaser builds tools/fark; cache against its go.sum.
           cache-dependency-path: tools/fark/go.sum
 

@@ -1,6 +1,8 @@
 import random
 from datetime import datetime
 
+from playwright.sync_api import expect
+
 from .base_page import BasePage
 from .dashboard_page import DashboardPage
 
@@ -47,6 +49,9 @@ class ResourceListPage(BasePage):
 
     def wait_for_row(self, name: str, timeout: int = 20000) -> None:
         self.wait_for_element(f"{self.ROW}:has-text('{name}')", timeout=timeout)
+
+    def wait_for_row_value(self, name: str, value: str, timeout: int = 20000) -> None:
+        expect(self._row(name)).to_contain_text(value, timeout=timeout)
 
     def wait_for_row_gone(self, name: str, timeout: int = 20000) -> None:
         self._row(name).wait_for(state="detached", timeout=timeout)

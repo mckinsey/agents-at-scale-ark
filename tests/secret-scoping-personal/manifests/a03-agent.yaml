@@ -1,0 +1,11 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: personal-agent
+spec:
+  prompt: You are a test assistant. Respond concisely to all queries.
+  modelRef:
+    name: personal-mock-model
+  tools:
+  - name: mock-llm-mcp-echo-headers
+    type: mcp

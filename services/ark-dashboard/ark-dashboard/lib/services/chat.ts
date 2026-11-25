@@ -2,15 +2,10 @@ import { trackEvent } from '@/lib/analytics/singleton';
 import { hashPromptSync } from '@/lib/analytics/utils';
 import { apiClient } from '@/lib/api/client';
 import { apiUrl } from '@/lib/api/config';
+import { isNotFoundError } from '@/lib/api/errors';
 import type { components } from '@/lib/api/generated/types';
-import { generateUUID } from '@/lib/utils/uuid';
 import { a2aTasksService } from '@/lib/services/a2a-tasks';
-
-interface AxiosError extends Error {
-  response?: {
-    status: number;
-  };
-}
+import { generateUUID } from '@/lib/utils/uuid';
 
 export type QueryParameter = components['schemas']['QueryParameter'];
 export type QueryResponse = components['schemas']['QueryResponse'];
@@ -18,6 +13,22 @@ export type QueryDetailResponse = components['schemas']['QueryDetailResponse'];
 export type QueryListResponse = components['schemas']['QueryListResponse'];
 export type QueryCreateRequest = components['schemas']['QueryCreateRequest'];
 export type QueryUpdateRequest = components['schemas']['QueryUpdateRequest'];
+export type QueryOverride = NonNullable<
+  QueryCreateRequest['overrides']
+>[number];
+
+export type ChatQueryOptions = {
+  sessionId?: string;
+  conversationId?: string;
+  timeout?: string;
+  parameters?: QueryParameter[];
+  overrides?: QueryOverride[];
+  annotations?: Record<string, string>;
+};
+
+export type ChatStreamOptions = ChatQueryOptions & {
+  abortSignal?: AbortSignal;
+};
 
 // Define terminal status phases
 type TerminalQueryStatusPhase = 'done' | 'error' | 'canceled' | 'unknown';
@@ -184,6 +195,8 @@ function detectTerminalPhase(
 export type ChatResponse = {
   status: QueryStatusPhase;
   terminal: boolean;
+  transportError?: boolean;
+  notFound?: boolean;
   response?: string;
   memoryLookup?: MemoryNoticeLookup;
   messages?: Array<{
@@ -206,6 +219,29 @@ export type ChatMessage = {
   timestamp: Date;
   queryId?: string;
 };
+
+export class BrokerUnavailableError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+    public code?: string,
+    public fallback?: string,
+    public queryName?: string,
+  ) {
+    super(message);
+    this.name = 'BrokerUnavailableError';
+  }
+}
+
+export function isBrokerUnavailableError(
+  err: unknown,
+): err is BrokerUnavailableError {
+  return (
+    err instanceof BrokerUnavailableError &&
+    err.status === 503 &&
+    (err.code === undefined || err.code === 'broker_unavailable')
+  );
+}
 
 export type ChatSession = {
   id: string;
@@ -266,7 +302,7 @@ export const chatService = {
         { params: { namespace } },
       );
     } catch (error) {
-      if ((error as AxiosError).response?.status === 404) {
+      if (isNotFoundError(error)) {
         return null;
       }
       throw error;
@@ -298,7 +334,7 @@ export const chatService = {
       );
       return response;
     } catch (error) {
-      if ((error as AxiosError).response?.status === 404) {
+      if (isNotFoundError(error)) {
         return null;
       }
       throw error;
@@ -312,7 +348,7 @@ export const chatService = {
       });
       return true;
     } catch (error) {
-      if ((error as AxiosError).response?.status === 404) {
+      if (isNotFoundError(error)) {
         return false;
       }
       throw error;
@@ -324,11 +360,16 @@ export const chatService = {
     input: string,
     targetType: string,
     targetName: string,
-    sessionId?: string,
-    conversationId?: string,
-    timeout?: string,
-    parameters?: QueryParameter[],
+    options: ChatQueryOptions = {},
   ): Promise<QueryDetailResponse> {
+    const {
+      sessionId,
+      conversationId,
+      timeout,
+      parameters,
+      overrides,
+      annotations,
+    } = options;
     const queryRequest: QueryCreateRequest = {
       name: `chat-query-${generateUUID()}`,
       type: 'user',
@@ -341,6 +382,10 @@ export const chatService = {
       conversationId,
       timeout,
       ...(parameters && parameters.length > 0 ? { parameters } : {}),
+      ...(overrides && overrides.length > 0 ? { overrides } : {}),
+      ...(annotations && Object.keys(annotations).length > 0
+        ? { metadata: { annotations } }
+        : {}),
     };
 
     return await this.createQuery(namespace, queryRequest);
@@ -382,7 +427,10 @@ export const chatService = {
     try {
       const query = await this.getQuery(namespace, queryName);
 
-      if (!query || !query.status) {
+      if (!query) {
+        return { status: 'unknown', terminal: true, notFound: true };
+      }
+      if (!query.status) {
         return { status: 'unknown', terminal: false };
       }
 
@@ -439,7 +487,7 @@ export const chatService = {
 
       return { status: 'unknown', terminal: true };
     } catch {
-      return { status: 'error', terminal: true };
+      return { status: 'error', terminal: true, transportError: true };
     }
   },
 
@@ -473,7 +521,7 @@ export const chatService = {
         continue;
       }
       if (hasMemoryCondition(status)) {
-        return {settled: true, notice: extractMemoryNotice(status)};
+        return { settled: true, notice: extractMemoryNotice(status) };
       }
     }
     return MEMORY_LOOKUP_UNSETTLED;
@@ -554,24 +602,18 @@ export const chatService = {
     input: string,
     targetType: string,
     targetName: string,
-    sessionId?: string,
-    conversationId?: string,
-    timeout?: string,
-    abortSignal?: AbortSignal,
-    parameters?: QueryParameter[],
+    options: ChatStreamOptions = {},
   ): Promise<{
     queryName: string;
     chunks: AsyncGenerator<Record<string, unknown>, void, unknown>;
   }> {
+    const { abortSignal, ...queryOptions } = options;
     const query = await this.submitChatQuery(
       namespace,
       input,
       targetType,
       targetName,
-      sessionId,
-      conversationId,
-      timeout,
-      parameters,
+      queryOptions,
     );
 
     const queryName = query.name;
@@ -583,14 +625,38 @@ export const chatService = {
       unknown
     > {
       const response = await fetch(
-        apiUrl(`/api/v1/broker/chunks?watch=true&query-id=${queryName}`),
+        apiUrl(
+          `/api/v1/broker/chunks?watch=true&query-id=${queryName}&namespace=${encodeURIComponent(namespace)}`,
+        ),
         {
           signal: abortSignal,
         },
       );
 
       if (!response.ok) {
-        throw new Error(`Failed to connect to stream: ${response.statusText}`);
+        let code: string | undefined;
+        let fallback: string | undefined;
+        try {
+          const body = await response.json();
+          if (body && typeof body === 'object') {
+            if (typeof body.code === 'string') code = body.code;
+            if (typeof body.fallback === 'string') fallback = body.fallback;
+          }
+        } catch {}
+        const message = `Failed to connect to stream: ${response.statusText}`;
+        if (
+          response.status === 503 &&
+          (code === undefined || code === 'broker_unavailable')
+        ) {
+          throw new BrokerUnavailableError(
+            message,
+            response.status,
+            code,
+            fallback,
+            queryName,
+          );
+        }
+        throw new Error(message);
       }
 
       const reader = response.body?.getReader();
@@ -634,20 +700,14 @@ export const chatService = {
     input: string,
     targetType: string,
     targetName: string,
-    sessionId?: string,
-    conversationId?: string,
-    timeout?: string,
-    abortSignal?: AbortSignal,
+    options: ChatStreamOptions = {},
   ): AsyncGenerator<Record<string, unknown>, void, unknown> {
     const { chunks } = await this.startStreamChatResponse(
       namespace,
       input,
       targetType,
       targetName,
-      sessionId,
-      conversationId,
-      timeout,
-      abortSignal,
+      options,
     );
     yield* chunks;
   },

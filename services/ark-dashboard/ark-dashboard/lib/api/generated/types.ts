@@ -392,7 +392,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/ark-services/marketplace-items": {
+    "/v1/ark-services/helm-releases": {
         parameters: {
             query?: never;
             header?: never;
@@ -400,11 +400,11 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List Marketplace Items
-         * @description List Helm releases for marketplace item detection.
+         * List Helm Releases
+         * @description List deployed, failed and pending Helm releases in a namespace.
          *
-         *     Returns full Helm release data including chart metadata and annotations
-         *     for marketplace item detection via ark.mckinsey.com/marketplace-item-name.
+         *     Returns full Helm release data including chart metadata and annotations,
+         *     without filtering by Ark service annotation or looking up HTTPRoutes.
          *
          *     Args:
          *         namespace: The namespace to list Helm releases from (defaults to current context)
@@ -413,8 +413,9 @@ export interface paths {
          *         HelmReleaseListResponse containing:
          *         - items: List of Helm releases with chart metadata
          *         - count: Number of releases found
+         *         - errors: Releases whose details could not be read
          */
-        get: operations["list_marketplace_items_v1_ark_services_marketplace_items_get"];
+        get: operations["list_helm_releases_v1_ark_services_helm_releases_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1615,6 +1616,10 @@ export interface paths {
          *     Runs under the impersonated identity, so the result reflects the user's RBAC.
          *     When impersonation is disabled it runs as the service account.
          *
+         *     A write the generic resource routes would refuse for this caller, because it
+         *     has to run as the signed-in user and cannot, returns allowed false with the
+         *     reason, without asking Kubernetes.
+         *
          *     Args:
          *         body: group, resource, and verb to review
          *         namespace: The namespace (defaults to current context)
@@ -1641,7 +1646,9 @@ export interface paths {
         };
         /**
          * Get Pod Logs
-         * @description Get logs from a pod.
+         * @description Get logs from a pod that belongs to an Argo workflow.
+         *
+         *     Pods without the workflows.argoproj.io/workflow label return 404.
          *
          *     Args:
          *         pod_name: Name of the pod
@@ -1677,6 +1684,9 @@ export interface paths {
          * Get Pod Log Window
          * @description Get a bounded window of a pod's logs.
          *
+         *     Only pods that belong to an Argo workflow are served; any other pod
+         *     returns 404.
+         *
          *     Pages are anchored at the end of the log. Omit skip_tail_lines for the
          *     tail, raise it by the returned line_count to walk backwards, or pass
          *     since_timestamp to fetch only lines newer than an earlier page.
@@ -1707,112 +1717,179 @@ export interface paths {
          *
          *     Args:
          *         version: API version (e.g., 'v1')
-         *         kind: Kubernetes Kind (e.g., 'Pod', 'Service', 'ConfigMap')
+         *         kind: Kubernetes Kind (e.g., 'Service')
          *         namespace: The namespace (defaults to current context)
          *         label_selector: Label selector for filtering resources (e.g., 'app.kubernetes.io/instance=phoenix')
+         *
+         *     Only (group, version, Kind, verb) tuples on the generic resources allowlist
+         *     are served; everything else returns 403.
          *
          *     Returns:
          *         Response: List of raw Kubernetes resources as JSON
          *
          *     Examples:
-         *         - GET /v1/resources/api/v1/Pod
          *         - GET /v1/resources/api/v1/Service
          *         - GET /v1/resources/api/v1/Service?labelSelector=app.kubernetes.io/instance=phoenix
          */
         get: operations["list_core_resources_v1_resources_api__version___kind__get"];
         put?: never;
-        /**
-         * Create Core Resource
-         * @description Create a core Kubernetes resource.
-         *
-         *     Args:
-         *         version: API version (e.g., 'v1')
-         *         kind: Kubernetes Kind (e.g., 'Pod', 'Service', 'ConfigMap')
-         *         body: The resource definition as JSON
-         *         namespace: The namespace (defaults to current context)
-         *
-         *     Returns:
-         *         Response: The created Kubernetes resource as JSON
-         *
-         *     Examples:
-         *         - POST /v1/resources/api/v1/Pod
-         *         - POST /v1/resources/api/v1/Service
-         */
-        post: operations["create_core_resource_v1_resources_api__version___kind__post"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/v1/resources/api/{version}/{kind}/{resource_name}": {
+    "/v1/resources/apis/argoproj.io/v1alpha1/namespaces/{namespace}/workflows/{workflow_name}/resubmit": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
+        get?: never;
         /**
-         * Get Core Resource
-         * @description Get a core Kubernetes resource by name.
+         * Resubmit Workflow
+         * @description Resubmit a workflow: create a fresh workflow from the existing spec.
          *
-         *     Args:
-         *         version: API version (e.g., 'v1')
-         *         kind: Kubernetes Kind (e.g., 'Pod', 'Service', 'ConfigMap')
-         *         resource_name: The name of the resource
-         *         namespace: The namespace (defaults to current context)
-         *
-         *     Returns:
-         *         Response: The raw Kubernetes resource as JSON
+         *     The new workflow gets a fresh name, an empty status, and a
+         *     workflows.argoproj.io/resubmitted-from-workflow label pointing at the source.
          *
          *     Examples:
-         *         - GET /v1/resources/api/v1/Pod/my-pod
-         *         - GET /v1/resources/api/v1/Service/my-service
+         *         - PUT /v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/my-workflow/resubmit
          */
-        get: operations["get_core_resource_v1_resources_api__version___kind___resource_name__get"];
-        /**
-         * Update Core Resource
-         * @description Update (replace) a core Kubernetes resource by name.
-         *
-         *     Honours a caller-supplied resourceVersion for optimistic concurrency; only
-         *     when the caller omits it do we inject the live object's resourceVersion so
-         *     the replace succeeds (last-write-wins convenience). The URL path name is
-         *     authoritative for the target resource.
-         *
-         *     Args:
-         *         version: API version (e.g., 'v1')
-         *         kind: Kubernetes Kind (e.g., 'Pod', 'Service', 'ConfigMap')
-         *         resource_name: The name of the resource
-         *         body: The resource definition as JSON
-         *         namespace: The namespace (defaults to current context)
-         *
-         *     Returns:
-         *         Response: The updated Kubernetes resource as JSON
-         *
-         *     Examples:
-         *         - PUT /v1/resources/api/v1/ConfigMap/my-config
-         *         - PUT /v1/resources/api/v1/Service/my-service
-         */
-        put: operations["update_core_resource_v1_resources_api__version___kind___resource_name__put"];
+        put: operations["resubmit_workflow_v1_resources_apis_argoproj_io_v1alpha1_namespaces__namespace__workflows__workflow_name__resubmit_put"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/resources/apis/argoproj.io/v1alpha1/namespaces/{namespace}/workflows/{workflow_name}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
         /**
-         * Delete Core Resource
-         * @description Delete a core Kubernetes resource by name.
+         * Resume Workflow
+         * @description Resume a suspended workflow.
          *
-         *     Args:
-         *         version: API version (e.g., 'v1')
-         *         kind: Kubernetes Kind (e.g., 'Pod', 'Service', 'ConfigMap')
-         *         resource_name: The name of the resource
-         *         namespace: The namespace (defaults to current context)
-         *
-         *     Returns:
-         *         Response: HTTP 204 No Content on success
+         *     Clears spec.suspend and marks active suspend-node gates Succeeded.
          *
          *     Examples:
-         *         - DELETE /v1/resources/api/v1/Pod/my-pod
-         *         - DELETE /v1/resources/api/v1/Service/my-service
+         *         - PUT /v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/my-workflow/resume
          */
-        delete: operations["delete_core_resource_v1_resources_api__version___kind___resource_name__delete"];
+        put: operations["resume_workflow_v1_resources_apis_argoproj_io_v1alpha1_namespaces__namespace__workflows__workflow_name__resume_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/resources/apis/argoproj.io/v1alpha1/namespaces/{namespace}/workflows/{workflow_name}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Retry Workflow
+         * @description Retry a Failed or Error workflow from the point of failure.
+         *
+         *     Successful nodes keep their outputs; failed leaf nodes and their pods are
+         *     dropped, failed group nodes are reset, and the workflow flips back to
+         *     Running with the same name.
+         *
+         *     Examples:
+         *         - PUT /v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/my-workflow/retry
+         */
+        put: operations["retry_workflow_v1_resources_apis_argoproj_io_v1alpha1_namespaces__namespace__workflows__workflow_name__retry_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/resources/apis/argoproj.io/v1alpha1/namespaces/{namespace}/workflows/{workflow_name}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Stop Workflow
+         * @description Stop a workflow: kill running pods, mark it Failed, but still run onExit handlers.
+         *
+         *     Sets spec.shutdown=Stop and clears spec.suspend, since the controller does
+         *     not process a shutdown while the workflow is suspended.
+         *
+         *     Examples:
+         *         - PUT /v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/my-workflow/stop
+         */
+        put: operations["stop_workflow_v1_resources_apis_argoproj_io_v1alpha1_namespaces__namespace__workflows__workflow_name__stop_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/resources/apis/argoproj.io/v1alpha1/namespaces/{namespace}/workflows/{workflow_name}/suspend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Suspend Workflow
+         * @description Suspend a running workflow. No new nodes are scheduled; running pods finish.
+         *
+         *     Sets spec.suspend=true. The workflow stays Running.
+         *
+         *     Examples:
+         *         - PUT /v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/my-workflow/suspend
+         */
+        put: operations["suspend_workflow_v1_resources_apis_argoproj_io_v1alpha1_namespaces__namespace__workflows__workflow_name__suspend_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/resources/apis/argoproj.io/v1alpha1/namespaces/{namespace}/workflows/{workflow_name}/terminate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Terminate Workflow
+         * @description Terminate a workflow: kill running pods and mark it Failed, skipping onExit handlers.
+         *
+         *     Sets spec.shutdown=Terminate and clears spec.suspend, since the controller
+         *     does not process a shutdown while the workflow is suspended.
+         *
+         *     Examples:
+         *         - PUT /v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/my-workflow/terminate
+         */
+        put: operations["terminate_workflow_v1_resources_apis_argoproj_io_v1alpha1_namespaces__namespace__workflows__workflow_name__terminate_put"];
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1827,12 +1904,12 @@ export interface paths {
         };
         /**
          * Get Workflow Logs
-         * @description Get logs for a workflow node by fetching directly from the pod.
-         *     The node_id corresponds to the pod name in most cases.
+         * @description Get logs for a workflow node from the pod that runs it.
+         *     The node is resolved only among the pods labelled with this workflow's name.
          *
          *     Args:
          *         workflow_name: Name of the workflow
-         *         node_id: Node ID within the workflow (typically the pod name)
+         *         node_id: Node ID within the workflow
          *         namespace: Namespace of the workflow
          *         container: Container name (defaults to 'main')
          *         tail_lines: Number of lines to tail from the end
@@ -1863,8 +1940,9 @@ export interface paths {
          * Get Workflow Log Window
          * @description Get a bounded window of an Argo workflow node's logs.
          *
-         *     Resolves the node to its pod, then pages exactly like the pod log window
-         *     endpoint. Returns 404 with guidance when the pod is already gone.
+         *     Resolves the node to a pod labelled with this workflow's name, then pages
+         *     exactly like the pod log window endpoint. Returns 404 with guidance when
+         *     the pod is already gone.
          *
          *     Examples:
          *         - GET /v1/resources/apis/argoproj.io/v1alpha1/namespaces/default/workflows/my-workflow/my-node-id/log/window
@@ -1890,14 +1968,15 @@ export interface paths {
          * @description List grouped Kubernetes resources with optional filtering and cursor pagination.
          *
          *     Args:
-         *         group: API group (e.g., 'apps', 'batch', 'ark.mckinsey.com')
-         *         version: API version (e.g., 'v1', 'v1alpha1')
-         *         kind: Kubernetes Kind (e.g., 'Deployment', 'Job', 'WorkflowTemplate')
+         *         group: API group (e.g., 'argoproj.io', 'ark.mckinsey.com')
+         *         version: API version (e.g., 'v1alpha1', 'v1prealpha1')
+         *         kind: Kubernetes Kind (e.g., 'WorkflowTemplate', 'ExecutionEngine')
          *         namespace: The namespace (defaults to current context)
          *         label_selector: Label selector for filtering resources (e.g., 'app.kubernetes.io/instance=phoenix')
-         *         workflowName: Filter by workflow name (partial match, case insensitive). Applied only
-         *             to the page returned by this call, not the whole collection — a page can come back
-         *             with few or no matches even though more exist further in the cursor sequence.
+         *         workflowName: Filter by workflow name (partial match, case insensitive). Applied by
+         *             Argo Server across the whole collection when it serves the list; otherwise applied
+         *             only to the page returned by this call, so a page can come back with few or no
+         *             matches even though more exist further in the cursor sequence.
          *         workflowTemplateName: Filter by workflow template name (exact match). Applied
          *             server-side via a label selector, so pagination stays correct across pages.
          *         status: Filter by workflow status. Same server-side label selector as
@@ -1906,10 +1985,18 @@ export interface paths {
          *             Omit for the full, unpaginated list (used by non-paginated callers).
          *         continue_token: Opaque cursor from a previous page's response metadata
          *
+         *     Only (group, version, Kind, verb) tuples on the generic resources allowlist
+         *     are served; everything else returns 403.
+         *
          *     Returns:
          *         Response: List of raw Kubernetes resources as JSON. When the Kubernetes API has more
          *             items beyond this page, the response's metadata carries a "continue" token
          *             (pass it back as ?continue=... for the next page) and "remainingItemCount".
+         *
+         *     Workflows are listed through Argo Server when ARGO_SERVER_URL is set, sorted by start
+         *     time newest first, after a Kubernetes RBAC check for listing workflows in the namespace.
+         *     The continue token is then an item offset. The Kubernetes API is used when the variable
+         *     is unset, when the continue token is a Kubernetes one, or when Argo Server fails.
          *
          *     Note:
          *         This is Kubernetes' cursor-based pagination, not traditional offset pagination:
@@ -1923,12 +2010,10 @@ export interface paths {
          *                -> next 25 items, with a new (or absent) "continue" token
          *
          *     Examples:
-         *         - GET /v1/resources/apis/apps/v1/Deployment
-         *         - GET /v1/resources/apis/batch/v1/Job
          *         - GET /v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate
          *         - GET /v1/resources/apis/argoproj.io/v1alpha1/Workflow?workflowName=my-workflow&status=running
          *         - GET /v1/resources/apis/argoproj.io/v1alpha1/Workflow?limit=25
-         *         - GET /v1/resources/v1/Service?labelSelector=app.kubernetes.io/instance=phoenix
+         *         - GET /v1/resources/apis/ark.mckinsey.com/v1prealpha1/ExecutionEngine
          */
         get: operations["list_grouped_resources_v1_resources_apis__group___version___kind__get"];
         put?: never;
@@ -1937,19 +2022,25 @@ export interface paths {
          * @description Create a grouped Kubernetes resource.
          *
          *     Args:
-         *         group: API group (e.g., 'apps', 'batch', 'argoproj.io')
-         *         version: API version (e.g., 'v1', 'v1alpha1')
-         *         kind: Kubernetes Kind (e.g., 'Deployment', 'Job', 'Workflow')
+         *         group: API group (e.g., 'argoproj.io')
+         *         version: API version (e.g., 'v1alpha1')
+         *         kind: Kubernetes Kind (e.g., 'Workflow', 'WorkflowTemplate')
          *         body: The resource definition as JSON
          *         namespace: The namespace (defaults to current context)
+         *
+         *     Only (group, version, Kind, verb) tuples on the generic resources allowlist
+         *     are served; everything else returns 403.
+         *
+         *     With authentication enabled, a signed-in user's write runs as that user and
+         *     needs impersonation; it is never retried as the service account. API key
+         *     and open-mode requests run as the service account.
          *
          *     Returns:
          *         Response: The created Kubernetes resource as JSON
          *
          *     Examples:
-         *         - POST /v1/resources/apis/apps/v1/Deployment
-         *         - POST /v1/resources/apis/batch/v1/Job
          *         - POST /v1/resources/apis/argoproj.io/v1alpha1/Workflow
+         *         - POST /v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate
          */
         post: operations["create_grouped_resource_v1_resources_apis__group___version___kind__post"];
         delete?: never;
@@ -1970,19 +2061,21 @@ export interface paths {
          * @description Get a grouped Kubernetes resource by name.
          *
          *     Args:
-         *         group: API group (e.g., 'apps', 'batch', 'ark.mckinsey.com')
-         *         version: API version (e.g., 'v1', 'v1alpha1')
-         *         kind: Kubernetes Kind (e.g., 'Deployment', 'Job', 'WorkflowTemplate')
+         *         group: API group (e.g., 'argoproj.io', 'ark.mckinsey.com')
+         *         version: API version (e.g., 'v1alpha1')
+         *         kind: Kubernetes Kind (e.g., 'WorkflowTemplate', 'Agent')
          *         resource_name: The name of the resource
          *         namespace: The namespace (defaults to current context)
+         *
+         *     Only (group, version, Kind, verb) tuples on the generic resources allowlist
+         *     are served; everything else returns 403.
          *
          *     Returns:
          *         Response: The raw Kubernetes resource as JSON
          *
          *     Examples:
-         *         - GET /v1/resources/apis/apps/v1/Deployment/my-deployment
-         *         - GET /v1/resources/apis/batch/v1/Job/my-job
          *         - GET /v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/sparkly-bear
+         *         - GET /v1/resources/apis/ark.mckinsey.com/v1alpha1/Agent/my-agent
          */
         get: operations["get_grouped_resource_v1_resources_apis__group___version___kind___resource_name__get"];
         /**
@@ -1995,18 +2088,24 @@ export interface paths {
          *     authoritative for the target resource.
          *
          *     Args:
-         *         group: API group (e.g., 'apps', 'batch', 'argoproj.io')
-         *         version: API version (e.g., 'v1', 'v1alpha1')
-         *         kind: Kubernetes Kind (e.g., 'Deployment', 'Job', 'WorkflowTemplate')
+         *         group: API group (e.g., 'argoproj.io')
+         *         version: API version (e.g., 'v1alpha1')
+         *         kind: Kubernetes Kind (e.g., 'WorkflowTemplate')
          *         resource_name: The name of the resource
          *         body: The resource definition as JSON
          *         namespace: The namespace (defaults to current context)
+         *
+         *     Only (group, version, Kind, verb) tuples on the generic resources allowlist
+         *     are served; everything else returns 403.
+         *
+         *     With authentication enabled, a signed-in user's write runs as that user and
+         *     needs impersonation; it is never retried as the service account. API key
+         *     and open-mode requests run as the service account.
          *
          *     Returns:
          *         Response: The updated Kubernetes resource as JSON
          *
          *     Examples:
-         *         - PUT /v1/resources/apis/apps/v1/Deployment/my-deployment
          *         - PUT /v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/sparkly-bear
          */
         put: operations["update_grouped_resource_v1_resources_apis__group___version___kind___resource_name__put"];
@@ -2016,19 +2115,25 @@ export interface paths {
          * @description Delete a grouped Kubernetes resource by name.
          *
          *     Args:
-         *         group: API group (e.g., 'apps', 'batch', 'ark.mckinsey.com')
-         *         version: API version (e.g., 'v1', 'v1alpha1')
-         *         kind: Kubernetes Kind (e.g., 'Deployment', 'Job', 'WorkflowTemplate')
+         *         group: API group (e.g., 'argoproj.io', 'ark.mckinsey.com')
+         *         version: API version (e.g., 'v1alpha1', 'v1prealpha1')
+         *         kind: Kubernetes Kind (e.g., 'WorkflowTemplate', 'ExecutionEngine')
          *         resource_name: The name of the resource
          *         namespace: The namespace (defaults to current context)
+         *
+         *     Only (group, version, Kind, verb) tuples on the generic resources allowlist
+         *     are served; everything else returns 403.
+         *
+         *     With authentication enabled, a signed-in user's write runs as that user and
+         *     needs impersonation; it is never retried as the service account. API key
+         *     and open-mode requests run as the service account.
          *
          *     Returns:
          *         Response: HTTP 204 No Content on success
          *
          *     Examples:
-         *         - DELETE /v1/resources/apis/apps/v1/Deployment/my-deployment
-         *         - DELETE /v1/resources/apis/batch/v1/Job/my-job
          *         - DELETE /v1/resources/apis/argoproj.io/v1alpha1/WorkflowTemplate/sparkly-bear
+         *         - DELETE /v1/resources/apis/ark.mckinsey.com/v1prealpha1/ExecutionEngine/my-engine
          */
         delete: operations["delete_grouped_resource_v1_resources_apis__group___version___kind___resource_name__delete"];
         options?: never;
@@ -2045,13 +2150,13 @@ export interface paths {
         };
         /**
          * List Secrets
-         * @description List all secrets in namespace using ark-sdk.
+         * @description List the shared and/or personal secrets in namespace using ark-sdk.
          */
         get: operations["list_secrets_v1_secrets_get"];
         put?: never;
         /**
          * Create Secret
-         * @description Create a new secret using ark-sdk.
+         * @description Create a new shared or personal secret using ark-sdk.
          */
         post: operations["create_secret_v1_secrets_post"];
         delete?: never;
@@ -2074,7 +2179,7 @@ export interface paths {
         get: operations["get_secret_v1_secrets__secret_name__get"];
         /**
          * Update Secret
-         * @description Update a secret using ark-sdk.
+         * @description Update a secret using ark-sdk; scope "shared" promotes a personal secret.
          */
         put: operations["update_secret_v1_secrets__secret_name__put"];
         post?: never;
@@ -2315,6 +2420,8 @@ export interface components {
             annotations?: {
                 [key: string]: string;
             } | null;
+            /** Card Version */
+            card_version?: string | null;
             /** Description */
             description?: string | null;
             /** Discovering */
@@ -2327,10 +2434,16 @@ export interface components {
             name: string;
             /** Namespace */
             namespace: string;
+            /** Negotiated Protocol */
+            negotiated_protocol?: string | null;
             /** Ready */
             ready?: boolean | null;
+            /** Skill Count */
+            skill_count?: number | null;
             /** Status Message */
             status_message?: string | null;
+            /** Streaming Supported */
+            streaming_supported?: boolean | null;
         };
         /**
          * A2ATaskArtifact
@@ -2642,6 +2755,11 @@ export interface components {
         AccessReviewResponse: {
             /** Allowed */
             allowed: boolean;
+            /**
+             * Reason
+             * @description Set when ark-api refuses the operation for this caller before asking Kubernetes
+             */
+            reason?: string | null;
         };
         /**
          * AgentConfigMapKeyRef
@@ -2863,6 +2981,7 @@ export interface components {
          * @description Tool configuration for an agent.
          */
         AgentTool: {
+            approval?: components["schemas"]["ToolApprovalConfig"] | null;
             labelSelector?: components["schemas"]["AgentLabelSelector"] | null;
             /** Name */
             name?: string | null;
@@ -2874,6 +2993,13 @@ export interface components {
          * @description Request model for updating an agent.
          */
         AgentUpdateRequest: {
+            /**
+             * Annotations
+             * @description Merged into the existing annotations; a null value removes the key. Only the openai-responses output-schema annotation is accepted.
+             */
+            annotations?: {
+                [key: string]: string | null;
+            } | null;
             /** Description */
             description?: string | null;
             executionEngine?: components["schemas"]["ExecutionEngineRef"] | null;
@@ -2942,6 +3068,16 @@ export interface components {
             namespace: string;
             /** Taskid */
             taskId: string;
+        };
+        /**
+         * ArgumentMatch
+         * @description Narrows approval to tool calls whose arguments match a pattern.
+         */
+        ArgumentMatch: {
+            /** Argument */
+            argument: string;
+            /** Pattern */
+            pattern: string;
         };
         /**
          * ArkConfigMemoryRef
@@ -3750,10 +3886,10 @@ export interface components {
         };
         /**
          * HelmRelease
-         * @description Helm release information for marketplace item detection.
+         * @description Helm release information.
          *
-         *     Represents a Helm release with chart metadata including annotations
-         *     used for marketplace item identification.
+         *     Represents a Helm release with chart metadata including annotations,
+         *     which the marketplace uses for installed item detection.
          */
         HelmRelease: {
             /** App Version */
@@ -3775,12 +3911,27 @@ export interface components {
             updated: string;
         };
         /**
+         * HelmReleaseError
+         * @description A Helm release whose details could not be read.
+         */
+        HelmReleaseError: {
+            /** Message */
+            message: string;
+            /** Name */
+            name: string;
+        };
+        /**
          * HelmReleaseListResponse
          * @description Response model for listing Helm releases.
          */
         HelmReleaseListResponse: {
             /** Count */
             count: number;
+            /**
+             * Errors
+             * @default []
+             */
+            errors: components["schemas"]["HelmReleaseError"][];
             /** Items */
             items: components["schemas"]["HelmRelease"][];
         };
@@ -3966,6 +4117,10 @@ export interface components {
             } | null;
             authorization?: components["schemas"]["MCPServerAuthorization"] | null;
             available?: components["schemas"]["AvailabilityStatus"] | null;
+            /** Labels */
+            labels?: {
+                [key: string]: string;
+            } | null;
             /** Name */
             name: string;
             /** Namespace */
@@ -4052,6 +4207,8 @@ export interface components {
             }[] | null;
             /** Source */
             source: string;
+            /** Url */
+            url?: string | null;
         };
         /**
          * MarketplacePermissionsResponse
@@ -4141,39 +4298,90 @@ export interface components {
             /** Namespace */
             namespace?: string | null;
         };
+        /** MemoryAddressValueFrom */
+        MemoryAddressValueFrom: {
+            configMapKeyRef?: components["schemas"]["MemoryConfigMapKeyRef"] | null;
+            secretKeyRef?: components["schemas"]["MemorySecretKeyRef"] | null;
+            serviceRef?: components["schemas"]["MemoryServiceRef"] | null;
+        };
+        /** MemoryAddressValueSource */
+        MemoryAddressValueSource: {
+            /** Value */
+            value?: string | null;
+            valueFrom?: components["schemas"]["MemoryAddressValueFrom"] | null;
+        };
+        /** MemoryConfigMapKeyRef */
+        MemoryConfigMapKeyRef: {
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /** Optional */
+            optional?: boolean | null;
+        };
         /**
          * MemoryCreateRequest
          * @description Request model for creating a memory.
          */
         MemoryCreateRequest: {
-            /** Config */
-            config?: {
-                [key: string]: unknown;
+            /** Annotations */
+            annotations?: {
+                [key: string]: string;
             } | null;
-            /** Description */
-            description?: string | null;
+            /** Labels */
+            labels?: {
+                [key: string]: string;
+            } | null;
             /** Name */
             name: string;
+            spec: components["schemas"]["MemorySpec"];
         };
         /**
          * MemoryDetailResponse
          * @description Response model for detailed memory information.
          */
         MemoryDetailResponse: {
-            /** Config */
-            config?: {
-                [key: string]: unknown;
+            /** Annotations */
+            annotations?: {
+                [key: string]: string;
             } | null;
-            /** Description */
-            description?: string | null;
+            /** Labels */
+            labels?: {
+                [key: string]: string;
+            } | null;
             /** Name */
             name: string;
             /** Namespace */
             namespace: string;
+            spec?: components["schemas"]["MemorySpecResponse"] | null;
             /** Status */
             status?: {
                 [key: string]: unknown;
             } | null;
+        };
+        /** MemoryHeader */
+        MemoryHeader: {
+            /** Name */
+            name: string;
+            value: components["schemas"]["MemoryHeaderValueSource"];
+        };
+        /** MemoryHeaderResponse */
+        MemoryHeaderResponse: {
+            /** Name */
+            name: string;
+            value: components["schemas"]["MemoryValueSourceResponse"];
+        };
+        /** MemoryHeaderValueFrom */
+        MemoryHeaderValueFrom: {
+            configMapKeyRef?: components["schemas"]["MemoryConfigMapKeyRef"] | null;
+            queryParameterRef?: components["schemas"]["MemoryQueryParameterRef"] | null;
+            secretKeyRef?: components["schemas"]["MemorySecretKeyRef"] | null;
+        };
+        /** MemoryHeaderValueSource */
+        MemoryHeaderValueSource: {
+            /** Value */
+            value?: string | null;
+            valueFrom?: components["schemas"]["MemoryHeaderValueFrom"] | null;
         };
         /**
          * MemoryListResponse
@@ -4219,13 +4427,20 @@ export interface components {
             /** Timestamp */
             timestamp?: string | null;
         };
+        /** MemoryQueryParameterRef */
+        MemoryQueryParameterRef: {
+            /** Name */
+            name: string;
+        };
         /**
          * MemoryResponse
          * @description Response model for memory list items.
          */
         MemoryResponse: {
-            /** Description */
-            description?: string | null;
+            /** Labels */
+            labels?: {
+                [key: string]: string;
+            } | null;
             /** Name */
             name: string;
             /** Namespace */
@@ -4233,17 +4448,65 @@ export interface components {
             /** Status */
             status?: string | null;
         };
+        /** MemorySecretKeyRef */
+        MemorySecretKeyRef: {
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /** Optional */
+            optional?: boolean | null;
+        };
+        /** MemoryServiceRef */
+        MemoryServiceRef: {
+            /** Name */
+            name: string;
+            /** Namespace */
+            namespace?: string | null;
+            /** Path */
+            path?: string | null;
+            /** Port */
+            port?: string | null;
+        };
+        /** MemorySpec */
+        MemorySpec: {
+            address: components["schemas"]["MemoryAddressValueSource"];
+            /** Headers */
+            headers?: components["schemas"]["MemoryHeader"][] | null;
+        };
+        /** MemorySpecResponse */
+        MemorySpecResponse: {
+            address?: components["schemas"]["MemoryValueSourceResponse"] | null;
+            /** Headers */
+            headers?: components["schemas"]["MemoryHeaderResponse"][] | null;
+        };
         /**
          * MemoryUpdateRequest
          * @description Request model for updating a memory.
          */
         MemoryUpdateRequest: {
-            /** Config */
-            config?: {
-                [key: string]: unknown;
+            /** Annotations */
+            annotations?: {
+                [key: string]: string;
             } | null;
-            /** Description */
-            description?: string | null;
+            /** Labels */
+            labels?: {
+                [key: string]: string;
+            } | null;
+            spec?: components["schemas"]["MemorySpec"] | null;
+        };
+        /** MemoryValueFrom */
+        MemoryValueFrom: {
+            configMapKeyRef?: components["schemas"]["MemoryConfigMapKeyRef"] | null;
+            queryParameterRef?: components["schemas"]["MemoryQueryParameterRef"] | null;
+            secretKeyRef?: components["schemas"]["MemorySecretKeyRef"] | null;
+            serviceRef?: components["schemas"]["MemoryServiceRef"] | null;
+        };
+        /** MemoryValueSourceResponse */
+        MemoryValueSourceResponse: {
+            /** Value */
+            value?: string | null;
+            valueFrom?: components["schemas"]["MemoryValueFrom"] | null;
         };
         /**
          * ModelConfig
@@ -4744,6 +5007,12 @@ export interface components {
             labels: string[];
             /** Name */
             name: string;
+            /**
+             * Scope
+             * @default shared
+             * @enum {string}
+             */
+            scope: "shared" | "personal";
             /** String Data */
             string_data: {
                 [key: string]: string;
@@ -4767,6 +5036,8 @@ export interface components {
             } | null;
             /** Description */
             description?: string | null;
+            /** Display Name */
+            display_name: string;
             /** Id */
             id: string;
             /**
@@ -4781,6 +5052,11 @@ export interface components {
             labels: string[];
             /** Name */
             name: string;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "shared" | "personal";
             /** Secret Length */
             secret_length: number;
             /** Type */
@@ -4809,6 +5085,8 @@ export interface components {
             } | null;
             /** Description */
             description?: string | null;
+            /** Display Name */
+            display_name: string;
             /** Id */
             id: string;
             /**
@@ -4818,6 +5096,11 @@ export interface components {
             labels: string[];
             /** Name */
             name: string;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "shared" | "personal";
         };
         /**
          * SecretUpdateRequest
@@ -4833,6 +5116,8 @@ export interface components {
              * @default []
              */
             labels: string[];
+            /** Scope */
+            scope?: ("shared" | "personal") | null;
             /** String Data */
             string_data?: {
                 [key: string]: string;
@@ -4887,6 +5172,10 @@ export interface components {
         };
         /** SystemInfo */
         SystemInfo: {
+            /** Argo Server Configured */
+            argo_server_configured: boolean;
+            /** Argo Server Version Supported */
+            argo_server_version_supported?: boolean | null;
             /** Kubernetes Version */
             kubernetes_version: string;
             /** System Version */
@@ -5017,6 +5306,20 @@ export interface components {
             selector?: components["schemas"]["Selector"] | null;
             /** Strategy */
             strategy?: string | null;
+        };
+        /**
+         * ToolApprovalConfig
+         * @description Approval configuration for human-in-the-loop tool execution.
+         */
+        ToolApprovalConfig: {
+            /** Argumentmatches */
+            argumentMatches?: components["schemas"]["ArgumentMatch"][] | null;
+            /** Ontimeout */
+            onTimeout?: string | null;
+            /** Required */
+            required?: boolean | null;
+            /** Timeout */
+            timeout?: string | null;
         };
         /** ToolDetailResponse */
         ToolDetailResponse: {
@@ -5702,7 +6005,7 @@ export interface operations {
             };
         };
     };
-    list_marketplace_items_v1_ark_services_marketplace_items_get: {
+    list_helm_releases_v1_ark_services_helm_releases_get: {
         parameters: {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
@@ -5852,6 +6155,8 @@ export interface operations {
                 limit?: number;
                 /** @description Cursor for pagination */
                 cursor?: number | null;
+                /** @description Namespace for this request (defaults to current context) */
+                namespace?: string | null;
             };
             header?: never;
             path?: never;
@@ -8445,58 +8750,13 @@ export interface operations {
             };
         };
     };
-    create_core_resource_v1_resources_api__version___kind__post: {
+    resubmit_workflow_v1_resources_apis_argoproj_io_v1alpha1_namespaces__namespace__workflows__workflow_name__resubmit_put: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
             path: {
-                version: string;
-                kind: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_core_resource_v1_resources_api__version___kind___resource_name__get: {
-        parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
-            header?: never;
-            path: {
-                version: string;
-                kind: string;
-                resource_name: string;
+                workflow_name: string;
+                namespace: string;
             };
             cookie?: never;
         };
@@ -8522,27 +8782,17 @@ export interface operations {
             };
         };
     };
-    update_core_resource_v1_resources_api__version___kind___resource_name__put: {
+    resume_workflow_v1_resources_apis_argoproj_io_v1alpha1_namespaces__namespace__workflows__workflow_name__resume_put: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
             path: {
-                version: string;
-                kind: string;
-                resource_name: string;
+                workflow_name: string;
+                namespace: string;
             };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -8564,17 +8814,109 @@ export interface operations {
             };
         };
     };
-    delete_core_resource_v1_resources_api__version___kind___resource_name__delete: {
+    retry_workflow_v1_resources_apis_argoproj_io_v1alpha1_namespaces__namespace__workflows__workflow_name__retry_put: {
         parameters: {
-            query?: {
-                /** @description Namespace for this request (defaults to current context) */
-                namespace?: string | null;
-            };
+            query?: never;
             header?: never;
             path: {
-                version: string;
-                kind: string;
-                resource_name: string;
+                workflow_name: string;
+                namespace: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stop_workflow_v1_resources_apis_argoproj_io_v1alpha1_namespaces__namespace__workflows__workflow_name__stop_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workflow_name: string;
+                namespace: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    suspend_workflow_v1_resources_apis_argoproj_io_v1alpha1_namespaces__namespace__workflows__workflow_name__suspend_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workflow_name: string;
+                namespace: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    terminate_workflow_v1_resources_apis_argoproj_io_v1alpha1_namespaces__namespace__workflows__workflow_name__terminate_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workflow_name: string;
+                namespace: string;
             };
             cookie?: never;
         };
@@ -8896,6 +9238,8 @@ export interface operations {
             query?: {
                 /** @description Namespace for this request (defaults to current context) */
                 namespace?: string | null;
+                /** @description Which secrets to list: shared (default), the caller's personal ones, or all of both */
+                scope?: "shared" | "personal" | "all";
             };
             header?: never;
             path?: never;

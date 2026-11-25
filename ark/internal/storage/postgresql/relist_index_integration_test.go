@@ -73,7 +73,7 @@ func TestRelistReadsRowsInOrderFromAnIndex_Integration(t *testing.T) {
 	}{
 		{
 			name:  "broadcaster relist",
-			query: broadcasterRelistQuery,
+			query: broadcasterRelistKeysQuery,
 			args:  []interface{}{relistIndexProbeKind, maxRV - relistIndexLookback},
 		},
 		{

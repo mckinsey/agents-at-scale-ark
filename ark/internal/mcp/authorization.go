@@ -16,6 +16,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
+	"mckinsey.com/ark/internal/secretscope"
 )
 
 type AuthorizationMaterial struct {
@@ -46,6 +47,9 @@ func ResolveAuthorizationMaterial(ctx context.Context, reader client.Reader, mcp
 			return material, []string{msg}, nil
 		}
 		return nil, nil, fmt.Errorf("failed to read authorization secret %s: %w", ref.Name, err)
+	}
+	if err := secretscope.CheckResolvable(secret, secretscope.RejectPersonal); err != nil {
+		return nil, nil, err
 	}
 
 	warnings := missingOverriddenKeyWarnings(secret, ref)

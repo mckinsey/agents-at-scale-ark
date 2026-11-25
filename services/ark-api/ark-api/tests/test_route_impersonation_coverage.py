@@ -10,6 +10,7 @@ from fastapi.routing import APIRoute
 
 from ark_api.main import app
 from ark_api.auth.dependencies import get_impersonation_config
+from tests.utils.route_introspection import iter_api_routes
 
 # Routes that intentionally run as the service account. Each entry needs a reason.
 INTENTIONAL_SERVICE_ACCOUNT_ROUTES = {
@@ -32,12 +33,12 @@ INTENTIONAL_SERVICE_ACCOUNT_ROUTES = {
     # Service-owned state: export history metadata ConfigMap in the pod namespace.
     ("GET", "/v1/export/last-export-time"),
     # Helm release data read via pyhelm3 with ambient credentials; no per-user path.
-    ("GET", "/v1/ark-services/marketplace-items"),
+    ("GET", "/v1/ark-services/helm-releases"),
 }
 
 
-def _route_ids(route: APIRoute):
-    return {(method, route.path) for method in route.methods if method != "HEAD" or len(route.methods) == 1}
+def _route_ids(path: str, route: APIRoute):
+    return {(method, path) for method in route.methods if method != "HEAD" or len(route.methods) == 1}
 
 
 def _has_impersonation_dependency(dependant) -> bool:
@@ -48,16 +49,16 @@ def _has_impersonation_dependency(dependant) -> bool:
 
 
 def _api_routes():
-    return [route for route in app.routes if isinstance(route, APIRoute)]
+    return list(iter_api_routes(app))
 
 
 class TestRouteImpersonationCoverage(unittest.TestCase):
     def test_all_routes_declare_impersonation_or_are_allowlisted(self):
         missing = []
-        for route in _api_routes():
+        for path, route in _api_routes():
             if _has_impersonation_dependency(route.dependant):
                 continue
-            for route_id in _route_ids(route):
+            for route_id in _route_ids(path, route):
                 if route_id not in INTENTIONAL_SERVICE_ACCOUNT_ROUTES:
                     missing.append(route_id)
 
@@ -72,8 +73,8 @@ class TestRouteImpersonationCoverage(unittest.TestCase):
     def test_allowlist_has_no_stale_entries(self):
         all_route_ids = set()
         impersonated_route_ids = set()
-        for route in _api_routes():
-            ids = _route_ids(route)
+        for path, route in _api_routes():
+            ids = _route_ids(path, route)
             all_route_ids |= ids
             if _has_impersonation_dependency(route.dependant):
                 impersonated_route_ids |= ids

@@ -1,6 +1,11 @@
 import unittest
 
-from ark_api.auth.middleware import _extract_claim, _extract_user_identity
+from ark_api.auth.middleware import (
+    EmptyIdentityError,
+    ReservedIdentityError,
+    _extract_claim,
+    _extract_user_identity,
+)
 from ark_api.auth.impersonation_config import ImpersonationSettings
 from ark_api.models.auth import UserIdentity
 
@@ -59,6 +64,11 @@ class TestExtractUserIdentity(unittest.TestCase):
         identity = _extract_user_identity({}, self._settings())
         self.assertIsNone(identity)
 
+    def test_non_string_username_returns_none(self):
+        for username in [123, ["jane"], {"name": "jane"}, True]:
+            with self.subTest(username=username):
+                self.assertIsNone(_extract_user_identity({"email": username}, self._settings(prefix="oidc:")))
+
     def test_missing_groups_returns_empty_list(self):
         payload = {"email": "jane@acme.com"}
         identity = _extract_user_identity(payload, self._settings())
@@ -74,6 +84,74 @@ class TestExtractUserIdentity(unittest.TestCase):
         payload = {"email": "jane@acme.com", "groups": "single-group"}
         identity = _extract_user_identity(payload, self._settings())
         self.assertEqual(identity.groups, ["single-group"])
+
+    def test_empty_username_rejected(self):
+        for username in ["", "   ", "\t", "\n", " \t "]:
+            with self.subTest(username=username), self.assertRaises(EmptyIdentityError):
+                _extract_user_identity({"email": username}, self._settings())
+
+    def test_empty_username_rejected_before_prefix(self):
+        with self.assertRaises(EmptyIdentityError):
+            _extract_user_identity({"email": ""}, self._settings(prefix="oidc:"))
+
+    def test_empty_username_rejected_even_with_groups(self):
+        payload = {"email": "", "groups": ["team-a"]}
+        with self.assertRaises(EmptyIdentityError):
+            _extract_user_identity(payload, self._settings())
+
+    def test_empty_username_allowed_when_disabled(self):
+        identity = _extract_user_identity({"email": ""}, self._settings(enabled=False))
+        self.assertEqual(identity.username, "")
+
+    def test_reserved_username_rejected(self):
+        payload = {"email": "system:serviceaccount:ns:sa", "groups": ["team-a"]}
+        with self.assertRaises(ReservedIdentityError):
+            _extract_user_identity(payload, self._settings())
+
+    def test_reserved_group_rejected(self):
+        for group in ["system:masters", "System:Masters", "SYSTEM:authenticated", " system:masters", "\tsystem:masters"]:
+            payload = {"email": "jane@acme.com", "groups": ["team-a", group]}
+            with self.subTest(group=group), self.assertRaises(ReservedIdentityError):
+                _extract_user_identity(payload, self._settings())
+
+    def test_reserved_username_with_leading_whitespace_rejected(self):
+        payload = {"email": " system:serviceaccount:ns:sa"}
+        with self.assertRaises(ReservedIdentityError):
+            _extract_user_identity(payload, self._settings())
+
+    def test_reserved_string_group_rejected(self):
+        payload = {"email": "jane@acme.com", "groups": "system:masters"}
+        with self.assertRaises(ReservedIdentityError):
+            _extract_user_identity(payload, self._settings())
+
+    def test_reserved_values_rejected_before_prefix(self):
+        for payload in [
+            {"email": "jane@acme.com", "groups": ["system:masters"]},
+            {"email": "system:serviceaccount:ns:sa", "groups": []},
+        ]:
+            with self.subTest(payload=payload), self.assertRaises(ReservedIdentityError):
+                _extract_user_identity(payload, self._settings(prefix="oidc:"))
+
+    def test_colon_values_accepted_unchanged(self):
+        groups = ["oidc:team", "azure:group:x", "org:team:role", "team-system:ops"]
+        payload = {"email": "idp:jane@acme.com", "groups": groups}
+        identity = _extract_user_identity(payload, self._settings())
+        self.assertEqual(identity, UserIdentity(username="idp:jane@acme.com", groups=groups))
+
+    def test_colon_values_prefixed_unchanged(self):
+        payload = {"email": "jane@acme.com", "groups": ["oidc:team", "org:team:role"]}
+        identity = _extract_user_identity(payload, self._settings(prefix="oidc:"))
+        self.assertEqual(identity.groups, ["oidc:oidc:team", "oidc:org:team:role"])
+
+    def test_comma_group_kept_as_one_value(self):
+        payload = {"email": "jane@acme.com", "groups": ["cn=devs,ou=groups,dc=corp", "a,b"]}
+        identity = _extract_user_identity(payload, self._settings())
+        self.assertEqual(identity.groups, ["cn=devs,ou=groups,dc=corp", "a,b"])
+
+    def test_reserved_values_not_checked_when_impersonation_disabled(self):
+        payload = {"email": "jane@acme.com", "groups": ["system:masters"]}
+        identity = _extract_user_identity(payload, self._settings(enabled=False))
+        self.assertEqual(identity.groups, ["system:masters"])
 
 
 class TestImpersonationSettings(unittest.TestCase):

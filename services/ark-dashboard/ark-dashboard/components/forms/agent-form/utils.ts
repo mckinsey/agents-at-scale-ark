@@ -1,6 +1,7 @@
 'use client';
 
 import type { Parameter } from '@/components/ui/parameter-editor';
+import type { AgentHeader, AgentOverride } from '@/lib/services';
 import { generateUUID } from '@/lib/utils/uuid';
 
 interface AgentParameterInput {
@@ -139,4 +140,40 @@ export function transformFormParametersToApi(
       }
       return { name: p.name, value: p.value || undefined };
     });
+}
+
+const MODEL_OVERRIDE_RESOURCE_TYPE = 'model';
+
+function isEditableModelOverride(override: AgentOverride): boolean {
+  const selector = override.labelSelector;
+  const hasLabelSelector =
+    Object.keys(selector?.matchLabels ?? {}).length > 0 ||
+    (selector?.matchExpressions?.length ?? 0) > 0;
+  return (
+    override.resourceType === MODEL_OVERRIDE_RESOURCE_TYPE && !hasLabelSelector
+  );
+}
+
+export function getModelOverrideHeaders(
+  overrides: AgentOverride[] | null | undefined,
+): AgentHeader[] {
+  return (overrides ?? [])
+    .filter(isEditableModelOverride)
+    .flatMap(override => override.headers);
+}
+
+export function buildAgentOverrides(
+  existing: AgentOverride[] | null | undefined,
+  modelHeaders: AgentHeader[],
+): AgentOverride[] {
+  const preserved = (existing ?? []).filter(
+    override => !isEditableModelOverride(override),
+  );
+  if (modelHeaders.length === 0) {
+    return preserved;
+  }
+  return [
+    { resourceType: MODEL_OVERRIDE_RESOURCE_TYPE, headers: modelHeaders },
+    ...preserved,
+  ];
 }

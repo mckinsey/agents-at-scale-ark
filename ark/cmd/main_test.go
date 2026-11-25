@@ -169,6 +169,7 @@ func TestApiserverConfigFromEnv(t *testing.T) {
 		"ARK_APISERVER_PORT",
 		"ARK_POSTGRES_HOST",
 		"ARK_POSTGRES_PORT",
+		"ARK_POSTGRES_MAX_OPEN_CONNS",
 		"ARK_POSTGRES_DATABASE",
 		"ARK_POSTGRES_USER",
 		"ARK_POSTGRES_PASSWORD",
@@ -266,6 +267,7 @@ func TestApiserverConfigFromEnv(t *testing.T) {
 				"ARK_APISERVER_PORT":              "8443",
 				"ARK_POSTGRES_HOST":               "db.example.com",
 				"ARK_POSTGRES_PORT":               "5433",
+				"ARK_POSTGRES_MAX_OPEN_CONNS":     "25",
 				"ARK_POSTGRES_DATABASE":           "ark",
 				"ARK_POSTGRES_USER":               "ark",
 				"ARK_POSTGRES_PASSWORD":           "secret",
@@ -297,6 +299,8 @@ func TestApiserverConfigFromEnv(t *testing.T) {
 				AuditEnabled:    true,
 				AuditPolicyFile: "/etc/ark/audit/policy.yaml",
 				AuditLogPath:    "/var/log/ark/audit.log",
+
+				PostgresMaxOpenConns: 25,
 			},
 		},
 		{
@@ -318,6 +322,26 @@ func TestApiserverConfigFromEnv(t *testing.T) {
 			name:    "invalid postgres port",
 			env:     map[string]string{"ARK_POSTGRES_PORT": "5432a"},
 			wantErr: "ARK_POSTGRES_PORT",
+		},
+		{
+			name: "max open conns is read from env",
+			env:  map[string]string{"ARK_POSTGRES_MAX_OPEN_CONNS": "120"},
+			want: apiserver.Config{PostgresSSL: "require", AuditLogPath: "-", PostgresMaxOpenConns: 120},
+		},
+		{
+			name:    "non-numeric max open conns",
+			env:     map[string]string{"ARK_POSTGRES_MAX_OPEN_CONNS": "forty"},
+			wantErr: "ARK_POSTGRES_MAX_OPEN_CONNS",
+		},
+		{
+			name:    "zero max open conns",
+			env:     map[string]string{"ARK_POSTGRES_MAX_OPEN_CONNS": "0"},
+			wantErr: "ARK_POSTGRES_MAX_OPEN_CONNS",
+		},
+		{
+			name:    "negative max open conns",
+			env:     map[string]string{"ARK_POSTGRES_MAX_OPEN_CONNS": "-3"},
+			wantErr: "ARK_POSTGRES_MAX_OPEN_CONNS",
 		},
 	}
 

@@ -1,18 +1,21 @@
 """Kubernetes agents API endpoints."""
 import logging
 import json
-import re
 
 from enum import Enum
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import ValidationError
 from typing import Optional
 from ark_sdk.models.agent_v1alpha1 import AgentV1alpha1
 from ark_sdk.impersonation import ImpersonationConfig
+from ark_sdk.secret_scope import SecretScope
 
 from ark_sdk.client import with_ark_client
 
 from ...auth.dependencies import get_impersonation_config
+from ...auth.secret_scope import get_secret_scope
+from ...services.personal_secret_refs import enforce_personal_secret_refs
 
 from ...models.agents import (
     AgentResponse,
@@ -20,9 +23,17 @@ from ...models.agents import (
     AgentCreateRequest,
     AgentUpdateRequest,
     AgentDetailResponse,
+    Skill,
 )
 from ...models.common import extract_availability_from_conditions
-from ...constants.annotations import A2A_SERVER_ADDRESS_ANNOTATION, ORIGIN_ANNOTATION
+from ...constants.annotations import (
+    A2A_SERVER_ADDRESS_ANNOTATION,
+    A2A_SERVER_NAME_ANNOTATION,
+    A2A_SERVER_SKILLS_ANNOTATION,
+    ORIGIN_ANNOTATION,
+    OUTPUT_SCHEMA_ANNOTATION,
+)
+from ...utils.output_schema import validate_output_schema
 from .exceptions import handle_k8s_errors
 from .pagination import PaginationParams
 from ...constants.query_param_descriptions import NAMESPACE_DESCRIPTION, VIEW_DESCRIPTION
@@ -30,6 +41,9 @@ from ...constants.query_param_descriptions import NAMESPACE_DESCRIPTION, VIEW_DE
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/agents", tags=["agents"])
+
+
+UPDATABLE_ANNOTATIONS = frozenset({OUTPUT_SCHEMA_ANNOTATION})
 
 
 class AgentView(str, Enum):
@@ -45,7 +59,7 @@ def agent_to_response(agent: dict, view: AgentView = AgentView.FULL) -> AgentRes
     """Convert a Kubernetes Agent CR to a response model.
 
     Trimmed views omit the heavy fields the list UI never renders: prompt is
-    dropped and annotations are reduced to the origin key. The with-tools view
+    dropped and annotations are reduced to the origin and A2A server name keys. The with-tools view
     is a trimmed view that additionally carries the referenced tool names so a
     list caller can compute tool usage without a per-agent detail fetch.
     """
@@ -70,7 +84,7 @@ def agent_to_response(agent: dict, view: AgentView = AgentView.FULL) -> AgentRes
         annotations = {
             key: value
             for key, value in annotations.items()
-            if key == ORIGIN_ANNOTATION
+            if key in (ORIGIN_ANNOTATION, A2A_SERVER_NAME_ANNOTATION)
         }
 
     tool_names = None
@@ -92,8 +106,6 @@ def agent_to_response(agent: dict, view: AgentView = AgentView.FULL) -> AgentRes
         tool_names=tool_names
     )
 
-SKILLS_ANNOTATION_REGEX = re.compile(r'a2a\..*\/skills$')
-
 def agent_to_detail_response(agent: dict) -> AgentDetailResponse:
     """Convert a Kubernetes Agent CR to a detailed response model."""
     metadata = agent.get("metadata", {})
@@ -104,19 +116,17 @@ def agent_to_detail_response(agent: dict) -> AgentDetailResponse:
     is_a2a = A2A_SERVER_ADDRESS_ANNOTATION in annotations
     
     skills = []
-    skills_annotation_key = None
-    for annotation_key in annotations:
-        if SKILLS_ANNOTATION_REGEX.search(annotation_key):
-            skills_annotation_key = annotation_key
-            break
-    
-    if skills_annotation_key:
+    if A2A_SERVER_SKILLS_ANNOTATION in annotations:
         try:
-            skills_data = json.loads(annotations[skills_annotation_key])
-            skills = skills_data if isinstance(skills_data, list) else []
+            skills_data = json.loads(annotations[A2A_SERVER_SKILLS_ANNOTATION])
         except (json.JSONDecodeError, TypeError):
             logger.warning(f"Failed to parse skills annotation for agent {metadata.get('name', '')}")
-            skills = []
+            skills_data = []
+        for item in skills_data if isinstance(skills_data, list) else []:
+            try:
+                skills.append(Skill.model_validate(item))
+            except ValidationError:
+                logger.warning(f"Skipping invalid skill entry for agent {metadata.get('name', '')}")
     
     # Extract availability from conditions
     conditions = status.get("conditions", [])
@@ -171,7 +181,7 @@ async def list_agents(request: Request, namespace: Optional[str] = Query(None, d
 
 @router.post("", response_model=AgentDetailResponse)
 @handle_k8s_errors(operation="create", resource_type="agent")
-async def create_agent(request: Request, body: AgentCreateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> AgentDetailResponse:
+async def create_agent(request: Request, body: AgentCreateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config), secret_scope: SecretScope = Depends(get_secret_scope)) -> AgentDetailResponse:
     """
     Create a new Agent CR.
     
@@ -214,6 +224,9 @@ async def create_agent(request: Request, body: AgentCreateRequest, namespace: Op
             spec=agent_spec
         )
         
+        await enforce_personal_secret_refs(
+            agent.to_dict()["spec"], namespace=namespace, caller_scope=secret_scope
+        )
         created_agent = await ark_client.agents.a_create(agent)
         
         return agent_to_detail_response(created_agent.to_dict())
@@ -240,7 +253,7 @@ async def get_agent(request: Request, agent_name: str, namespace: Optional[str] 
 
 @router.put("/{agent_name}", response_model=AgentDetailResponse)
 @handle_k8s_errors(operation="update", resource_type="agent")
-async def update_agent(request: Request, agent_name: str, body: AgentUpdateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config)) -> AgentDetailResponse:
+async def update_agent(request: Request, agent_name: str, body: AgentUpdateRequest, namespace: Optional[str] = Query(None, description=NAMESPACE_DESCRIPTION), impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config), secret_scope: SecretScope = Depends(get_secret_scope)) -> AgentDetailResponse:
     """
     Update an Agent CR by name.
     
@@ -252,31 +265,80 @@ async def update_agent(request: Request, agent_name: str, body: AgentUpdateReque
     Returns:
         AgentDetailResponse: The updated agent details
     """
+    updates = body.model_dump(exclude_unset=True)
+    annotation_updates = updates.pop("annotations", None) or {}
+    _validate_annotation_updates(annotation_updates)
+
     async with with_ark_client(namespace, VERSION, impersonation=impersonation) as ark_client:
-        # Get the existing agent first
         existing_agent = await ark_client.agents.a_get(agent_name)
-        existing_spec = existing_agent.to_dict()["spec"]
-
-        # exclude_unset keeps only the fields the client actually sent, so an
-        # omitted field is left as-is while one explicitly set to null is
-        # cleared. Conflating those two was the original bug.
-        for field, value in body.model_dump(exclude_unset=True).items():
-            if value is None:
-                existing_spec.pop(field, None)
-            else:
-                existing_spec[field] = value
-
-        # Update the agent
-        # Get the full existing agent object and update its spec
         existing_agent_dict = existing_agent.to_dict()
-        existing_agent_dict["spec"] = existing_spec
-        
-        # Create updated agent object
+        _ensure_agent_editable(agent_name, existing_agent_dict)
+
+        _apply_spec_updates(existing_agent_dict["spec"], updates)
+        _apply_annotation_updates(existing_agent_dict, annotation_updates)
+
         updated_agent_obj = AgentV1alpha1(**existing_agent_dict)
-        
+        await enforce_personal_secret_refs(
+            updated_agent_obj.to_dict()["spec"], namespace=namespace, caller_scope=secret_scope
+        )
         updated_agent = await ark_client.agents.a_update(updated_agent_obj)
-        
+
         return agent_to_detail_response(updated_agent.to_dict())
+
+
+def _validate_annotation_updates(annotation_updates: dict) -> None:
+    disallowed_annotations = sorted(set(annotation_updates) - UPDATABLE_ANNOTATIONS)
+    if disallowed_annotations:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Annotations not allowed: {', '.join(disallowed_annotations)}",
+        )
+    output_schema = annotation_updates.get(OUTPUT_SCHEMA_ANNOTATION)
+    if output_schema is None:
+        return
+    schema_error = validate_output_schema(output_schema)
+    if schema_error:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid output schema: {schema_error}",
+        )
+
+
+def _ensure_agent_editable(agent_name: str, agent_dict: dict) -> None:
+    existing_annotations = agent_dict.get("metadata", {}).get("annotations") or {}
+    if A2A_SERVER_NAME_ANNOTATION in existing_annotations:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Agent {agent_name} is managed by A2A server "
+                f"{existing_annotations[A2A_SERVER_NAME_ANNOTATION]} and can't be edited. "
+                "To change it, update the A2A server."
+            ),
+        )
+
+
+def _apply_spec_updates(spec: dict, updates: dict) -> None:
+    # exclude_unset keeps only the fields the client actually sent, so an
+    # omitted field is left as-is while one explicitly set to null is
+    # cleared. Conflating those two was the original bug.
+    for field, value in updates.items():
+        if value is None:
+            spec.pop(field, None)
+        else:
+            spec[field] = value
+
+
+def _apply_annotation_updates(agent_dict: dict, annotation_updates: dict) -> None:
+    if not annotation_updates:
+        return
+    metadata = agent_dict.setdefault("metadata", {})
+    annotations = dict(metadata.get("annotations") or {})
+    for key, value in annotation_updates.items():
+        if value is None:
+            annotations.pop(key, None)
+        else:
+            annotations[key] = value
+    metadata["annotations"] = annotations
 
 
 @router.delete("/{agent_name}", status_code=204)

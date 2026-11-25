@@ -535,6 +535,19 @@ func envBool(name string, dst *bool) error {
 	return nil
 }
 
+func envPositiveInt(name string, dst *int) error {
+	v := os.Getenv(name)
+	if v == "" {
+		return nil
+	}
+	parsed, err := strconv.Atoi(v)
+	if err != nil || parsed < 1 {
+		return fmt.Errorf("invalid %s %q: must be a positive integer", name, v)
+	}
+	*dst = parsed
+	return nil
+}
+
 func apiserverConfigFromEnv() (apiserver.Config, error) {
 	cfg := apiserver.Config{}
 
@@ -553,6 +566,9 @@ func apiserverConfigFromEnv() (apiserver.Config, error) {
 			return cfg, fmt.Errorf("invalid ARK_POSTGRES_PORT %q: %w", portStr, err)
 		}
 		cfg.PostgresPort = port
+	}
+	if err := envPositiveInt("ARK_POSTGRES_MAX_OPEN_CONNS", &cfg.PostgresMaxOpenConns); err != nil {
+		return cfg, err
 	}
 	cfg.PostgresDB = os.Getenv("ARK_POSTGRES_DATABASE")
 	cfg.PostgresUser = os.Getenv("ARK_POSTGRES_USER")

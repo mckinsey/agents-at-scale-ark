@@ -77,6 +77,9 @@ kind: Secret
 metadata:
   name: {name}
   namespace: {NAMESPACE}
+  labels:
+    ark.mckinsey.com/resource-type: secret
+    ark.mckinsey.com/scope: shared
 type: Opaque
 stringData:
   token: placeholder

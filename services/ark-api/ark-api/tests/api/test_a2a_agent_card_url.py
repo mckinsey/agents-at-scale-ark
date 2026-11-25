@@ -1,11 +1,13 @@
 """Tests for A2A agent-card URL derivation from forwarding headers."""
+import asyncio
 import os
 import unittest
 from unittest.mock import patch
 
 os.environ["AUTH_MODE"] = "open"
 
-from a2a.types import AgentCapabilities, AgentCard, AgentSkill
+from a2a.types import AgentCapabilities, AgentCard, AgentInterface, AgentSkill
+from a2a.utils.constants import TransportProtocol
 from starlette.applications import Starlette
 from starlette.routing import Mount
 from starlette.testclient import TestClient
@@ -23,9 +25,7 @@ def _make_test_card(name="weather", url="http://localhost:8000/a2a/agent/weather
     return AgentCard(
         name=name,
         description="A test agent",
-        capabilities=AgentCapabilities(
-            streaming=True, push_notifications=False, state_transition_history=False
-        ),
+        capabilities=AgentCapabilities(streaming=True, push_notifications=False),
         skills=[
             AgentSkill(
                 id=f"{name}-default-skill",
@@ -34,7 +34,9 @@ def _make_test_card(name="weather", url="http://localhost:8000/a2a/agent/weather
                 tags=["general"],
             )
         ],
-        url=url,
+        supported_interfaces=[
+            AgentInterface(url=url, protocol_binding=TransportProtocol.JSONRPC),
+        ],
         version="1.0.0",
         default_input_modes=["text"],
         default_output_modes=["text"],
@@ -68,25 +70,29 @@ class TestApplyForwardedUrl(unittest.TestCase):
 
     def test_no_context_returns_card_unchanged(self):
         card = _make_test_card()
-        self.assertIs(apply_forwarded_url(card), card)
+        self.assertIs(asyncio.run(apply_forwarded_url(card)), card)
 
     def test_rewrites_url_from_context_without_mutating_original(self):
         card = _make_test_card()
         token = forwarded_base_ctx.set("https://example.com/tenant-a")
         try:
-            result = apply_forwarded_url(card)
+            result = asyncio.run(apply_forwarded_url(card))
         finally:
             forwarded_base_ctx.reset(token)
 
         self.assertEqual(
-            result.url, "https://example.com/tenant-a/a2a/agent/weather/"
+            result.supported_interfaces[0].url,
+            "https://example.com/tenant-a/a2a/agent/weather/",
         )
         # The shared card cached by the manager must not be mutated.
-        self.assertEqual(card.url, "http://localhost:8000/a2a/agent/weather/")
+        self.assertEqual(
+            card.supported_interfaces[0].url,
+            "http://localhost:8000/a2a/agent/weather/",
+        )
 
 
 def _mount_gateway_with_agent(card):
-    """Build the real A2A ASGI stack (ProxyApp + mounted A2AStarletteApplication
+    """Build the real A2A ASGI stack (ProxyApp + mounted per-agent A2A routes
     with the card_modifier) serving a single agent, mounted where main.py mounts
     it. Exercises the whole request -> contextvar -> card_modifier path."""
     manager = DynamicManager()
@@ -96,8 +102,9 @@ def _mount_gateway_with_agent(card):
 
 
 class TestAgentCardServing(unittest.TestCase):
-    """End-to-end (in-process) serving of .well-known/agent.json through the
-    ProxyApp, asserting the advertised URL honours X-Forwarded-Prefix."""
+    """End-to-end (in-process) serving of the agent-card through the ProxyApp,
+    asserting the advertised URL honours X-Forwarded-Prefix, at both the
+    current and the deprecated well-known path."""
 
     def setUp(self):
         # ARKAgentExecutor reads the pod namespace at construction; pin it so the
@@ -109,7 +116,7 @@ class TestAgentCardServing(unittest.TestCase):
     def test_well_known_card_uses_forwarded_prefix(self):
         client = TestClient(_mount_gateway_with_agent(_make_test_card()))
         response = client.get(
-            "/a2a/agent/weather/.well-known/agent.json",
+            "/a2a/agent/weather/.well-known/agent-card.json",
             headers={
                 "X-Forwarded-Prefix": "/tenant-a",
                 "X-Forwarded-Host": "example.com",
@@ -124,9 +131,19 @@ class TestAgentCardServing(unittest.TestCase):
 
     def test_well_known_card_without_prefix_keeps_static_base(self):
         client = TestClient(_mount_gateway_with_agent(_make_test_card()))
-        response = client.get("/a2a/agent/weather/.well-known/agent.json")
+        response = client.get("/a2a/agent/weather/.well-known/agent-card.json")
         self.assertEqual(response.status_code, 200)
         self.assertNotIn("/tenant-a/", response.json()["url"])
+
+    def test_deprecated_well_known_path_is_still_served(self):
+        """Peers that only know the pre-0.3 agent.json path (e.g. the Go
+        controller's AgentCardPathVersion2 fallback) must still find the card."""
+        client = TestClient(_mount_gateway_with_agent(_make_test_card()))
+        response = client.get("/a2a/agent/weather/.well-known/agent.json")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json()["url"], "http://localhost:8000/a2a/agent/weather/"
+        )
 
 
 if __name__ == "__main__":

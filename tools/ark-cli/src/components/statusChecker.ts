@@ -71,15 +71,31 @@ export const getKindVersion = (): CommandVersionConfig => ({
   },
 });
 
+function isForbiddenError(error: unknown): boolean {
+  return error instanceof Error && /forbidden/i.test(error.message);
+}
+
 function createErrorServiceStatus(
   name: string,
   url: string,
   error: unknown,
   defaultStatus: 'unhealthy' | 'not installed' = 'unhealthy',
-  defaultDetails?: string
+  defaultDetails?: string,
+  namespace?: string
 ): ServiceStatus {
   const errorMessage =
     error instanceof Error ? error.message : 'Unknown error occurred';
+  if (isForbiddenError(error)) {
+    return {
+      name,
+      status: 'no access',
+      url,
+      details: namespace
+        ? `No permission to read namespace '${namespace}'`
+        : 'No permission to read this resource',
+      namespace,
+    };
+  }
   return {
     name,
     status: defaultStatus,
@@ -334,7 +350,8 @@ export class StatusChecker {
         '',
         error,
         'unhealthy',
-        `Failed to check deployment: ${errorMessage}`
+        `Failed to check deployment: ${errorMessage}`,
+        namespace
       );
     }
   }
@@ -392,7 +409,8 @@ export class StatusChecker {
         '',
         error,
         'unhealthy',
-        `Failed to check helm status: ${errorMessage}`
+        `Failed to check helm status: ${errorMessage}`,
+        namespace
       );
     }
   }

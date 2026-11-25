@@ -44,6 +44,8 @@ func newFanoutWatcher(ns string, lf map[string]string, inputBuf, outBuf int) *po
 		ctx:      context.Background(),
 		done:     make(chan struct{}),
 		seenRVs:  make(map[string]int64),
+
+		initialSynced: true,
 	}
 }
 
@@ -254,6 +256,8 @@ func TestForwardRow_ReturnsFalseWhenShuttingDown(t *testing.T) {
 		ctx:     context.Background(),
 		done:    make(chan struct{}),
 		seenRVs: make(map[string]int64),
+
+		initialSynced: true,
 	}
 	close(w.done)
 
@@ -273,6 +277,8 @@ func TestForwardRow_ReturnsFalseWhenContextCancelled(t *testing.T) {
 		ctx:     ctx,
 		done:    make(chan struct{}),
 		seenRVs: make(map[string]int64),
+
+		initialSynced: true,
 	}
 	if w.forwardRow(&changeRow{rv: 1, uid: "u1", obj: newObj("a", "u1", nil)}) {
 		t.Error("forwardRow should return false when the watcher context is cancelled")
@@ -369,6 +375,24 @@ func TestBroadcaster_MarkSeen(t *testing.T) {
 	}
 	if b.markSeen("u1", 11) {
 		t.Error("markSeen should return false for a higher rv on the same uid")
+	}
+}
+
+func TestBroadcaster_HasSeenDoesNotMark(t *testing.T) {
+	t.Parallel()
+	b := newKindBroadcaster(nil, "Agent")
+	if b.hasSeen("u1", 10) {
+		t.Error("hasSeen should be false for a new uid")
+	}
+	if b.hasSeen("u1", 10) {
+		t.Error("hasSeen must not record the uid")
+	}
+	b.markSeen("u1", 10)
+	if !b.hasSeen("u1", 10) || !b.hasSeen("u1", 9) {
+		t.Error("hasSeen should be true at or below the recorded rv")
+	}
+	if b.hasSeen("u1", 11) {
+		t.Error("hasSeen should be false above the recorded rv")
 	}
 }
 

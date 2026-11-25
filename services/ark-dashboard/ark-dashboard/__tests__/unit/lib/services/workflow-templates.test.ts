@@ -304,6 +304,34 @@ spec:
     });
   });
 
+  describe('canDelete / canRun', () => {
+    it('should check delete access on workflowtemplates', async () => {
+      vi.mocked(apiClient.post).mockResolvedValueOnce({ allowed: true });
+
+      const result = await workflowTemplatesService.canDelete('default');
+
+      expect(apiClient.post).toHaveBeenCalledWith(
+        '/api/v1/resources/access-review',
+        { group: 'argoproj.io', resource: 'workflowtemplates', verb: 'delete' },
+        { params: { namespace: 'default' } },
+      );
+      expect(result).toBe(true);
+    });
+
+    it('should check create access on workflows to run a template', async () => {
+      vi.mocked(apiClient.post).mockResolvedValueOnce({ allowed: false });
+
+      const result = await workflowTemplatesService.canRun('default');
+
+      expect(apiClient.post).toHaveBeenCalledWith(
+        '/api/v1/resources/access-review',
+        { group: 'argoproj.io', resource: 'workflows', verb: 'create' },
+        { params: { namespace: 'default' } },
+      );
+      expect(result).toBe(false);
+    });
+  });
+
   describe('canCreate / canUpdate', () => {
     it('should check create access on workflowtemplates', async () => {
       vi.mocked(apiClient.post).mockResolvedValueOnce({ allowed: true });
