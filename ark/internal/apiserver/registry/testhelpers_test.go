@@ -25,10 +25,11 @@ const testAgentName = "test-agent"
 func testNS() string { return "default" } //nolint:goconst
 
 type mockBackend struct {
-	objects    map[string]runtime.Object
-	err        error
-	requireErr error
-	requiredRV uint64
+	objects           map[string]runtime.Object
+	err               error
+	requireErr        error
+	requiredRV        uint64
+	updateStatusCalls int
 }
 
 func newMockBackend() *mockBackend {
@@ -106,6 +107,7 @@ func (m *mockBackend) Update(ctx context.Context, kind, namespace, name string, 
 }
 
 func (m *mockBackend) UpdateStatus(ctx context.Context, kind, namespace, name string, obj runtime.Object) error {
+	m.updateStatusCalls++
 	return m.Update(ctx, kind, namespace, name, obj)
 }
 

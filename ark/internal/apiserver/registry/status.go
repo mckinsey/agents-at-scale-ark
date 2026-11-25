@@ -14,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apiserver/pkg/registry/rest"
+	"k8s.io/apiserver/pkg/util/dryrun"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/apiserver/metrics"
@@ -82,6 +83,12 @@ func (s *StatusStorage) Update(ctx context.Context, name string, objInfo rest.Up
 	if err != nil {
 		metrics.RecordStorageOperation("update_status", s.config.Kind, "error")
 		return nil, false, fmt.Errorf("failed to access object metadata: %w", err)
+	}
+
+	if options != nil && dryrun.IsDryRun(options.DryRun) {
+		metrics.RecordStorageOperation("update_status", s.config.Kind, "dry_run")
+		metrics.RecordStorageLatency("update_status", s.config.Kind, start)
+		return existing, false, nil
 	}
 
 	if err := s.backend.UpdateStatus(sctx, s.config.Kind, namespace, name, existing); err != nil {
