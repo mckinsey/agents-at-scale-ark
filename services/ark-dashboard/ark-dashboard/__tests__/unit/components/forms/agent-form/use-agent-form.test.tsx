@@ -8,7 +8,7 @@ import { storedIsExperimentalExecutionEngineEnabledAtom } from '@/atoms/experime
 import { AgentFormMode } from '@/components/forms/agent-form/types';
 import { useAgentForm } from '@/components/forms/agent-form/use-agent-form';
 import { toast } from '@/components/ui/sonner';
-import type { AgentTool } from '@/lib/services';
+import type { AgentOverride, AgentTool } from '@/lib/services';
 import { agentsService, executionEnginesService } from '@/lib/services';
 
 const OUTPUT_SCHEMA_KEY =
@@ -428,6 +428,49 @@ describe('useAgentForm tool approvals', () => {
           { type: 'custom', name: 'write', approval: { required: true } },
         ],
       }),
+    );
+  });
+});
+
+describe('useAgentForm MCP header overrides', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    store = createStore();
+  });
+
+  it('saves a loaded agent unchanged even when its overrides no longer validate', async () => {
+    const overrides: AgentOverride[] = [
+      {
+        resourceType: 'mcpserver',
+        headers: [{ name: 'X-Org-Id', value: { value: 'acme' } }],
+        labelSelector: { matchLabels: { 'ark.mckinsey.com/name': 'github' } },
+      },
+    ];
+    vi.mocked(agentsService.getByName).mockResolvedValue({
+      id: 'a1',
+      name: 'a1',
+      namespace: 'test-namespace',
+      isA2A: false,
+      executionEngine: { name: 'executor-langchain' },
+      overrides,
+    });
+    vi.mocked(agentsService.update).mockResolvedValue({
+      id: 'a1',
+      name: 'a1',
+      namespace: 'test-namespace',
+      isA2A: false,
+    });
+    const { result } = await renderLoadedForm();
+
+    await act(async () => {
+      await result.current.actions.onSubmit(result.current.form.getValues());
+    });
+
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(agentsService.update).toHaveBeenCalledWith(
+      'test-namespace',
+      'a1',
+      expect.objectContaining({ overrides }),
     );
   });
 });
