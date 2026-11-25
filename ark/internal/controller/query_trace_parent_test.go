@@ -6,11 +6,16 @@ import (
 	"context"
 	"testing"
 
+	"go.opentelemetry.io/otel"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/annotations"
+	eventingconfig "mckinsey.com/ark/internal/eventing/config"
+	otelimpl "mckinsey.com/ark/internal/telemetry/otel"
 )
 
 func queryWithAnnotations(values map[string]string) *arkv1alpha1.Query {
@@ -55,4 +60,36 @@ func TestWithParentTraceFromAnnotations(t *testing.T) {
 			t.Fatal("expected the original context")
 		}
 	})
+}
+
+func TestDispatchSpanIsChildOfAnnotatedParent(t *testing.T) {
+	recorder := tracetest.NewSpanRecorder()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+	previous := otel.GetTracerProvider()
+	otel.SetTracerProvider(provider)
+	t.Cleanup(func() { otel.SetTracerProvider(previous) })
+
+	query := queryWithAnnotations(map[string]string{
+		annotations.TraceParent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+	})
+	r := &QueryReconciler{Eventing: eventingconfig.NewProviderWithClient(context.Background(), nil)}
+
+	ctx := r.initializeQueryExecutionContext(context.Background(), query)
+	_, span := startDispatchSpan(ctx, otelimpl.NewTracer("test"), query)
+	span.End()
+
+	ended := recorder.Ended()
+	if len(ended) != 1 {
+		t.Fatalf("expected 1 span, got %d", len(ended))
+	}
+	dispatch := ended[0]
+	if dispatch.Name() != "query.q.dispatch" {
+		t.Errorf("span name = %s", dispatch.Name())
+	}
+	if got := dispatch.Parent().SpanID().String(); got != "00f067aa0ba902b7" {
+		t.Errorf("parent span id = %s", got)
+	}
+	if got := dispatch.SpanContext().TraceID().String(); got != "4bf92f3577b34da6a3ce929d0e0e4736" {
+		t.Errorf("trace id = %s", got)
+	}
 }
