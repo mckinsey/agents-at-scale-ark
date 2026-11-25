@@ -1,0 +1,279 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: marketplace-install
+  labels:
+    requires-images: "true"
+spec:
+  description: >
+    #3973, #3974: marketplace installs through a real ark-api in AUTH_MODE=sso
+    with impersonation, users from Dex, the real ark-tenant chart in two
+    namespaces, and the fixture chart on an in-cluster registry. The
+    capability is enabled for the listed installer on the real tenant chart.
+    The preview reads the catalogue as the user and the cluster as the
+    installer. The state of a release installed from the CLI is reported, the
+    preview refuses it, and it becomes installable again after an uninstall.
+    A user of another namespace cannot read the state.
+  timeouts:
+    apply: 120s
+    assert: 120s
+    exec: 240s
+
+  steps:
+  - name: install-dex
+    try:
+    - script:
+        timeout: 300s
+        content: |
+          helm upgrade --install dex ../../charts/ark-dex-dev \
+            --namespace "$NAMESPACE" \
+            --set issuer="http://dex.$NAMESPACE.svc.cluster.local:5556/dex" \
+            --set oauth2.passwordConnector=local \
+            --set rbac.create=false \
+            --set users.admin.email=alice@ark.local \
+            --set users.viewer.email=bob@ark.local \
+            --wait --timeout=240s
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - script:
+        content: |
+          kubectl -n $NAMESPACE get pods -o wide
+          kubectl -n $NAMESPACE logs -l app=dex --tail=100 || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    cleanup:
+    - script:
+        content: |
+          helm uninstall dex --namespace $NAMESPACE --wait --timeout=120s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: install-ark-api
+    try:
+    - script:
+        timeout: 240s
+        content: |
+          sed "s/__NAMESPACE__/$NAMESPACE/g" manifests/ark-api-values.yaml | \
+          helm upgrade --install ark-api ../../services/ark-api/chart \
+            --namespace "$NAMESPACE" \
+            -f - \
+            ${ARK_API_IMAGE:+--set app.image.repository=${ARK_API_IMAGE}} \
+            ${ARK_API_IMAGE_TAG:+--set app.image.tag=${ARK_API_IMAGE_TAG}} \
+            --wait --timeout=180s
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - script:
+        content: |
+          kubectl -n $NAMESPACE get pods -o wide
+          kubectl -n $NAMESPACE logs -l app=ark-api --tail=200 || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    cleanup:
+    - script:
+        content: |
+          helm uninstall ark-api --namespace $NAMESPACE --wait --timeout=120s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: registry-and-catalogue
+    try:
+    - script:
+        timeout: 240s
+        content: |
+          set -eu
+          . ./helpers.sh
+          kubectl -n "$NAMESPACE" create configmap catalog \
+            --from-literal=marketplace.json="$(catalog_json ok nosc)"
+          kubectl -n "$NAMESPACE" apply -f manifests/registry.yaml
+          kubectl -n "$NAMESPACE" rollout status deploy/registry deploy/catalog --timeout=180s
+          kubectl -n "$NAMESPACE" wait pod/mkt-curl --for=condition=Ready --timeout=180s
+          with_registry fixture/package.sh ok nosc
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - script:
+        content: |
+          kubectl -n $NAMESPACE get pods -o wide
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: install-tenants
+    try:
+    - script:
+        timeout: 300s
+        content: |
+          set -eu
+          . ./helpers.sh
+          kubectl create namespace "$TA"
+          kubectl label namespace "$TA" pod-security.kubernetes.io/enforce=restricted pod-security.kubernetes.io/warn=restricted
+          kubectl create namespace "$TB"
+          for pair in "$TA:$ALICE" "$TB:$BOB"; do
+            ns=${pair%%:*} user=${pair#*:}
+            helm install ark-tenant ../../charts/ark-tenant --namespace "$ns" \
+              --values manifests/tenant-values.yaml \
+              --set marketplaceInstall.arkApiServiceAccount.namespace="$NAMESPACE" \
+              --set "marketplaceInstall.installers[0].apiGroup=rbac.authorization.k8s.io" \
+              --set "marketplaceInstall.installers[0].kind=User" \
+              --set "marketplaceInstall.installers[0].name=$user" \
+              --set "rbac.additionalSubjects[0].apiGroup=rbac.authorization.k8s.io" \
+              --set "rbac.additionalSubjects[0].kind=User" \
+              --set "rbac.additionalSubjects[0].name=$user" \
+              --wait --timeout=120s
+            wait_enforced "$ns"
+            kubectl -n "$ns" create configmap marketplace-sources \
+              --from-literal=fixtures="{\"url\":\"http://catalog.$NAMESPACE.svc.cluster.local:8080/marketplace.json\",\"displayName\":\"Fixtures\"}"
+          done
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    cleanup:
+    - script:
+        content: |
+          . ./helpers.sh
+          for ns in "$TA" "$TB"; do
+            helm uninstall fixture-ok --namespace "$ns" --wait --timeout=60s 2>/dev/null || true
+            helm uninstall ark-tenant --namespace "$ns" --wait --timeout=120s || true
+            kubectl delete namespace "$ns" --ignore-not-found --wait --timeout=120s || true
+            kubectl delete validatingadmissionpolicybinding,validatingadmissionpolicy \
+              "ark-marketplace-installer-sa-$ns-bootstrap" --ignore-not-found || true
+          done
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: capability
+    try:
+    - script:
+        content: |
+          set -eu
+          . ./helpers.sh
+          A=$(token "$ALICE")
+          B=$(token "$BOB")
+          R=$(mkt "$A" GET "$TA" /capability)
+          expect_status "alice capability in TA" "$R" 200
+          expect_json "alice capability in TA" "$R" . '{"enabled":true,"reason":null}'
+          R=$(mkt "$B" GET "$TA" /capability)
+          expect_json "bob capability in TA" "$R" . '{"enabled":false,"reason":"not-permitted"}'
+          R=$(mkt "$B" GET "$TB" /capability)
+          expect_json "bob capability in TB" "$R" . '{"enabled":true,"reason":null}'
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - script:
+        content: |
+          kubectl -n $NAMESPACE logs -l app=ark-api --tail=100 || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: preview
+    try:
+    - script:
+        content: |
+          set -eu
+          . ./helpers.sh
+          A=$(token "$ALICE")
+          R=$(mkt "$A" POST "$TA" /fixture-ok/preview '{"source":"fixtures"}')
+          expect_status "preview fixture-ok" "$R" 200
+          expect_json "fixture-ok blocked" "$R" .blocked false
+          expect_json "fixture-ok states" "$R" '[.resources[].state] | unique' '["free"]'
+          expect_json "fixture-ok digest" "$R" '.digest | startswith("sha256:")' true
+          R=$(mkt "$A" POST "$TA" /fixture-nosc/preview '{"source":"fixtures"}')
+          expect_status "preview fixture-nosc" "$R" 200
+          expect_json "fixture-nosc blocked" "$R" .blocked true
+          expect_json "fixture-nosc psa" "$R" '[.resources[].state] | index("psa-violation") != null' true
+          created=$(kubectl -n "$TA" get deployments,agents -o name)
+          [ -z "$created" ] || { echo "FAIL: the preview created $created"; exit 1; }
+          echo ok
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - script:
+        content: |
+          kubectl -n $NAMESPACE logs -l app=ark-api --tail=100 || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: state-of-a-cli-release
+    try:
+    - script:
+        timeout: 240s
+        content: |
+          set -eu
+          . ./helpers.sh
+          A=$(token "$ALICE")
+          R=$(mkt "$A" GET "$TA" "")
+          expect_status "list in TA" "$R" 200
+          expect_json "tenant chart release" "$R" '[.items[] | select(.release == "ark-tenant") | .state]' '["installed"]'
+          expect_json "fixture-ok before" "$R" '[.items[] | select(.release == "fixture-ok")] | length' 0
+          R=$(mkt "$A" GET "$TA" "/fixture-ok?source=fixtures")
+          expect_json "fixture-ok installable" "$R" '[.state, .release, .itemName]' '["installable","fixture-ok","fixture-ok"]'
+
+          install() {
+            helm install fixture-ok "oci://$1/charts/fixture-ok" --version 0.1.0 --plain-http \
+              --namespace "$TA" --wait --timeout=120s
+          }
+          with_registry install
+
+          R=$(mkt "$A" GET "$TA" "")
+          expect_json "fixture-ok listed" "$R" '[.items[] | select(.release == "fixture-ok") | [.state, .itemName]]' '[["installed",null]]'
+          R=$(mkt "$A" GET "$TA" "/fixture-ok?source=fixtures")
+          expect_json "fixture-ok installed" "$R" '[.state, .itemName, .source]' '["installed","fixture-ok","fixtures"]'
+          R=$(mkt "$A" POST "$TA" /fixture-ok/preview '{"source":"fixtures"}')
+          expect_status "preview of an installed item" "$R" 409
+          expect_json "preview refusal" "$R" '[.detail.code, .detail.record.state, .detail.record.release]' '["already-installed","installed","fixture-ok"]'
+
+          helm uninstall fixture-ok --namespace "$TA" --wait --timeout=120s
+          R=$(mkt "$A" GET "$TA" "/fixture-ok?source=fixtures")
+          expect_json "fixture-ok after uninstall" "$R" .state '"installable"'
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - script:
+        content: |
+          kubectl -n $NAMESPACE logs -l app=ark-api --tail=100 || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: other-tenants-cannot-read
+    try:
+    - script:
+        content: |
+          set -eu
+          . ./helpers.sh
+          A=$(token "$ALICE")
+          B=$(token "$BOB")
+          R=$(mkt "$B" GET "$TA" "")
+          expect_status "bob lists TA" "$R" 403
+          expect_json "bob lists TA" "$R" .detail.code '"not-permitted"'
+          R=$(mkt "$B" GET "$TA" "/fixture-ok?source=fixtures")
+          expect_status "bob reads an item of TA" "$R" 403
+          R=$(mkt "$A" GET "$TB" "")
+          expect_status "alice lists TB" "$R" 403
+          R=$(mkt "$B" GET "$TB" "")
+          expect_status "bob lists TB" "$R" 200
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - script:
+        content: |
+          kubectl -n $NAMESPACE logs -l app=ark-api --tail=100 || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)

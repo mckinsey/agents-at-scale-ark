@@ -1,0 +1,25 @@
+app:
+  env:
+    - name: AUTH_MODE
+      value: "sso"
+    - name: OIDC_ISSUER_URL
+      value: "http://dex.__NAMESPACE__.svc.cluster.local:5556/dex"
+    - name: OIDC_APPLICATION_ID
+      value: "ark-dashboard"
+    - name: OIDC_JWKS_URL
+      value: "http://dex.__NAMESPACE__.svc.cluster.local:5556/dex/keys"
+    - name: READ_ONLY_MODE
+      value: "false"
+    - name: MARKETPLACE_INSTALL_REGISTRY_ALLOWLIST
+      value: "oci://registry.__NAMESPACE__.svc.cluster.local:5000/charts/"
+    - name: MARKETPLACE_INSTALL_PLAIN_HTTP_REGISTRIES
+      value: "registry.__NAMESPACE__.svc.cluster.local:5000"
+    - name: MARKETPLACE_INSTALL_PREVIEW_TIMEOUT_SECONDS
+      value: "25"
+
+impersonation:
+  enabled: true
+  fallback: false
+  usernameClaim: email
+  groupsClaim: groups
+  prefix: ""

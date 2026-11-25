@@ -1,0 +1,4 @@
+memory:
+  requireBroker: false
+marketplaceInstall:
+  enabled: true
