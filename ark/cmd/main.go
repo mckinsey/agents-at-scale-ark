@@ -156,7 +156,7 @@ func main() {
 
 	switch result.role {
 	case RoleAPIServer:
-		setupEmbeddedApiserver(mgr, result.config.enableLeaderElection)
+		setupEmbeddedApiserver(mgr, result.enableLeaderElection)
 	case RoleController:
 		ctx := context.Background()
 		restConfig := ctrl.GetConfigOrDie()

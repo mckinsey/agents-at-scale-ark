@@ -348,8 +348,6 @@ func (p *PostgreSQLBackend) StartWALConsumer() {
 func (p *PostgreSQLBackend) RunWALConsumer(ctx context.Context) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	stop := context.AfterFunc(p.ctx, cancel)
-	defer stop()
 
 	sampler := &slotLagSampler{interval: slotLagSampleInterval, query: p.querySlotLag}
 	var wg sync.WaitGroup
