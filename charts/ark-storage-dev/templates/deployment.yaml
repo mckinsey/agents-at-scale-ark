@@ -92,6 +92,11 @@ spec:
             - name: data
               mountPath: /var/lib/postgresql/data
             {{- end }}
+            {{- if .Values.runtimeRole.enabled }}
+            - name: initdb
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+            {{- end }}
             {{- if .Values.ssl.enabled }}
             - name: ssl
               mountPath: /etc/postgres-ssl
@@ -102,6 +107,11 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: {{ .Release.Name }}-data
+        {{- end }}
+        {{- if .Values.runtimeRole.enabled }}
+        - name: initdb
+          configMap:
+            name: {{ .Release.Name }}-initdb
         {{- end }}
         {{- if .Values.ssl.enabled }}
         - name: ssl-secret

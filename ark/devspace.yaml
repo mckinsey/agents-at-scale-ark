@@ -12,6 +12,10 @@ images:
     image: ark-controller
     dockerfile: ./Dockerfile
     context: .
+  ark-controller-migrate:
+    image: ark-controller-migrate
+    dockerfile: ./Dockerfile.migrate
+    context: .
   ark-completions:
     image: ark-completions
     dockerfile: ./Dockerfile.completions
@@ -121,6 +125,10 @@ deployments:
         image:
           repository: ${runtime.images.ark-controller.image}
           tag: ${runtime.images.ark-controller.tag}
+        migrate:
+          image:
+            repository: ${runtime.images.ark-controller-migrate.image}
+            tag: ${runtime.images.ark-controller-migrate.tag}
         postgresql:
           host: ark-storage-dev
           user: postgres

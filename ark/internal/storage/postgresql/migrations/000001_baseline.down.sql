@@ -1,0 +1,3 @@
+DROP PUBLICATION IF EXISTS ark_cdc;
+DROP TABLE IF EXISTS storage_metadata;
+DROP TABLE IF EXISTS resources;

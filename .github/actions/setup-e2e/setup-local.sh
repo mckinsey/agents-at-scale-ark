@@ -94,13 +94,15 @@ if [ "${INSTALL_BROKER}" = "true" ]; then
 fi
 if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
   # The Postgres backend installs ark-storage-dev (postgres:16-alpine) and the
-  # broker migration job during serial --wait helm installs. Prefetch so the
-  # pulls overlap the cert-manager/gateway setup that runs first, rather than
-  # blocking pod readiness. The aggregated apiserver reuses the already-prefetched
-  # ark-controller image.
+  # apiserver schema-migration hook Job during serial --wait helm installs.
+  # Prefetch so the pulls overlap the cert-manager/gateway setup that runs first,
+  # rather than blocking pod readiness. The aggregated apiserver reuses the
+  # already-prefetched ark-controller image; the migration Job uses the separate
+  # ark-controller-migrate (golang-migrate) image.
   for img in \
     docker.io/postgres:16-alpine \
-    docker.io/alpine:3; do
+    docker.io/alpine:3 \
+    "${REGISTRY}/ark-controller-migrate:${ARK_IMAGE_TAG}"; do
     sudo k3s crictl pull "$img" > /dev/null 2>&1 &
     IMAGE_PULL_PIDS+=($!)
   done
@@ -268,9 +270,14 @@ if [ "${STORAGE_BACKEND}" = "postgresql" ]; then
     --set image.repository="${REGISTRY}/ark-controller" \
     --set image.tag="${ARK_IMAGE_TAG}" \
     --set image.pullPolicy=IfNotPresent \
+    --set migrate.image.repository="${REGISTRY}/ark-controller-migrate" \
+    --set migrate.image.tag="${ARK_IMAGE_TAG}" \
+    --set migrate.image.pullPolicy=IfNotPresent \
     --set postgresql.host=ark-storage-dev \
-    --set postgresql.user=postgres \
-    --set postgresql.passwordSecretName=ark-storage-dev-password \
+    --set postgresql.user=ark_runtime \
+    --set postgresql.passwordSecretName=ark-storage-dev-runtime-password \
+    --set postgresql.migration.user=postgres \
+    --set postgresql.migration.passwordSecretName=ark-storage-dev-password \
     --set postgresql.sslMode=verify-full \
     --set postgresql.sslSecretName=ark-storage-dev-tls \
     --set postgresql.sslRootCertKey=ca.crt \

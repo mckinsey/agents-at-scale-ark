@@ -155,6 +155,15 @@ build-container: ## Build the ark-controller
 		-t $(IMAGE):$(IMAGE_TAG) \
 		-f Dockerfile .
 
+MIGRATE_IMAGE ?= ark-controller-migrate
+MIGRATE_IMAGE_TAG ?= $(IMAGE_TAG)
+
+.PHONY: build-migrate-container
+build-migrate-container: ## Build the ark-controller-migrate (golang-migrate) image
+	$(CONTAINER_TOOL) build \
+		-t $(MIGRATE_IMAGE):$(MIGRATE_IMAGE_TAG) \
+		-f Dockerfile.migrate .
+
 COMPLETIONS_IMAGE ?= ark-completions
 COMPLETIONS_IMAGE_TAG ?= latest
 

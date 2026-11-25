@@ -93,6 +93,9 @@ jobs:
           - path: ark
             image: ark-controller
           - path: ark
+            image: ark-controller-migrate
+            dockerfile: Dockerfile.migrate
+          - path: ark
             image: ark-completions
             dockerfile: Dockerfile.completions
           - path: services/ark-api
