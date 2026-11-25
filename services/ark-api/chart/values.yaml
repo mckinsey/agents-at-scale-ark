@@ -91,6 +91,12 @@ app:
       value: "oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts/"
     - name: MARKETPLACE_INSTALL_PLAIN_HTTP_REGISTRIES
       value: ""
+    - name: MARKETPLACE_INSTALL_PREVIEW_TIMEOUT_SECONDS
+      value: "25"
+    - name: MARKETPLACE_INSTALL_PREVIEW_CACHE_SECONDS
+      value: "600"
+    - name: MARKETPLACE_INSTALL_PREVIEW_CACHE_MAX_ENTRIES
+      value: "256"
     - name: API_KEY_RETENTION_SECONDS
       value: "7776000"
     - name: API_KEY_REAPER_INTERVAL_SECONDS
