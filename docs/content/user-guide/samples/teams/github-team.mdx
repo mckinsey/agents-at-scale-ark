@@ -40,10 +40,10 @@ ark query team/github-team "describe the most recent PR on my most popular repo"
 
 > github-team: The most recent pull request on your most popular repository "hacker-laws" includes a bug fix that corrects the mistranslation of Hyrum’s Law in Japanese.
 
-You can check the events associated with the team to see the detailed conversation history:
+To see each agent turn, LLM call and tool call, run the query with the event stream:
 
 ```bash
-kubectl get events -o json | jq -r '.items[] | select(.message | contains("github-team")) | "\(.lastTimestamp) \(.type) \(.reason) \(.message)"' | sort
+ark query team/github-team "describe the most recent PR on my most popular repo" -o events-pretty
 ```
 
 ## Cleanup

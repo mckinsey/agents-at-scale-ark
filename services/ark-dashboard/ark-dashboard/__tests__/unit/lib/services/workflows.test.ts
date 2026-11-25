@@ -1,22 +1,24 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { apiClient } from '@/lib/api/client';
 import {
-  workflowsService,
+  buildNodeHierarchy,
   calculateDuration,
   expandCompressedNodes,
-  getRootNodeId,
   getAllNodesFlat,
-  buildNodeHierarchy,
+  getRootNodeId,
+  workflowsService,
 } from '@/lib/services/workflows';
-import { apiClient } from '@/lib/api/client';
 import type {
+  ArgoNodeStatus,
   ArgoWorkflow,
   ArgoWorkflowList,
-  ArgoNodeStatus,
 } from '@/lib/types/argo-workflow';
 
 vi.mock('@/lib/api/client', () => ({
   apiClient: {
     get: vi.fn(),
+    put: vi.fn(),
   },
 }));
 
@@ -42,7 +44,8 @@ describe('workflowsService', () => {
       const result = await workflowsService.list('default');
 
       expect(apiClient.get).toHaveBeenCalledWith(
-        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow?namespace=default');
+        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow?namespace=default',
+      );
       expect(result.items).toEqual(mockWorkflows);
       expect(result.hasMore).toBe(false);
       expect(result.continueToken).toBeUndefined();
@@ -66,7 +69,8 @@ describe('workflowsService', () => {
       });
 
       expect(apiClient.get).toHaveBeenCalledWith(
-        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow?namespace=default&workflowName=test');
+        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow?namespace=default&workflowName=test',
+      );
       expect(result.items).toEqual(mockWorkflows);
     });
 
@@ -82,7 +86,8 @@ describe('workflowsService', () => {
       });
 
       expect(apiClient.get).toHaveBeenCalledWith(
-        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow?namespace=prod&workflowTemplateName=my-template');
+        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow?namespace=prod&workflowTemplateName=my-template',
+      );
     });
 
     it('should list workflows with status filter', async () => {
@@ -97,7 +102,8 @@ describe('workflowsService', () => {
       });
 
       expect(apiClient.get).toHaveBeenCalledWith(
-        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow?namespace=default&status=succeeded');
+        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow?namespace=default&status=succeeded',
+      );
     });
 
     it('should list workflows with all filters', async () => {
@@ -114,7 +120,8 @@ describe('workflowsService', () => {
       });
 
       expect(apiClient.get).toHaveBeenCalledWith(
-        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow?namespace=custom-ns&workflowName=prod&workflowTemplateName=ci-template&status=running');
+        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow?namespace=custom-ns&workflowName=prod&workflowTemplateName=ci-template&status=running',
+      );
     });
 
     it('should append limit and continue to the query string when given', async () => {
@@ -128,7 +135,8 @@ describe('workflowsService', () => {
       });
 
       expect(apiClient.get).toHaveBeenCalledWith(
-        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow?namespace=default&limit=25&continue=abc123');
+        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow?namespace=default&limit=25&continue=abc123',
+      );
     });
 
     it('forwards an AbortSignal to apiClient.get when given', async () => {
@@ -159,6 +167,28 @@ describe('workflowsService', () => {
       expect(result.continueToken).toBe('next-page-token');
     });
 
+    it('should surface the remaining item count as a number', async () => {
+      vi.mocked(apiClient.get).mockResolvedValue({
+        items: [],
+        metadata: { continue: '25', remainingItemCount: '40' },
+      } as ArgoWorkflowList);
+
+      const result = await workflowsService.list('default');
+
+      expect(result.remainingItemCount).toBe(40);
+    });
+
+    it('should leave the remaining item count undefined when absent', async () => {
+      vi.mocked(apiClient.get).mockResolvedValue({
+        items: [],
+        metadata: { continue: 'k8s-token' },
+      } as ArgoWorkflowList);
+
+      const result = await workflowsService.list('default');
+
+      expect(result.remainingItemCount).toBeUndefined();
+    });
+
     it('should report hasMore false when there is no continue token', async () => {
       vi.mocked(apiClient.get).mockResolvedValue({
         items: [],
@@ -185,7 +215,8 @@ describe('workflowsService', () => {
       const result = await workflowsService.get('default', 'my-workflow');
 
       expect(apiClient.get).toHaveBeenCalledWith(
-        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow/my-workflow?namespace=default');
+        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow/my-workflow?namespace=default',
+      );
       expect(result).toEqual(mockWorkflow);
     });
 
@@ -201,8 +232,49 @@ describe('workflowsService', () => {
       const result = await workflowsService.get('prod', 'test-wf');
 
       expect(apiClient.get).toHaveBeenCalledWith(
-        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow/test-wf?namespace=prod');
+        '/api/v1/resources/apis/argoproj.io/v1alpha1/Workflow/test-wf?namespace=prod',
+      );
       expect(result).toEqual(mockWorkflow);
+    });
+  });
+
+  describe('runLifecycleAction', () => {
+    it.each([
+      'suspend',
+      'resume',
+      'stop',
+      'terminate',
+      'retry',
+      'resubmit',
+    ] as const)(
+      'should PUT the %s action to the namespaced workflow endpoint',
+      async action => {
+        const updated = {
+          metadata: { name: 'wf-1', namespace: 'team-a' },
+          spec: {},
+          status: { phase: 'Running' },
+        } as ArgoWorkflow;
+        vi.mocked(apiClient.put).mockResolvedValue(updated);
+
+        const result = await workflowsService.runLifecycleAction(
+          'team-a',
+          'wf-1',
+          action,
+        );
+
+        expect(apiClient.put).toHaveBeenCalledWith(
+          `/api/v1/resources/apis/argoproj.io/v1alpha1/namespaces/team-a/workflows/wf-1/${action}`,
+        );
+        expect(result).toEqual(updated);
+      },
+    );
+
+    it('should propagate API errors', async () => {
+      vi.mocked(apiClient.put).mockRejectedValue(new Error('conflict'));
+
+      await expect(
+        workflowsService.runLifecycleAction('team-a', 'wf-1', 'stop'),
+      ).rejects.toThrow('conflict');
     });
   });
 
@@ -220,7 +292,7 @@ describe('workflowsService', () => {
           headers: {
             Accept: 'application/yaml',
           },
-        }
+        },
       );
       expect(result).toBe(mockYaml);
     });
@@ -238,7 +310,7 @@ describe('workflowsService', () => {
           headers: {
             Accept: 'application/yaml',
           },
-        }
+        },
       );
     });
   });
@@ -257,7 +329,7 @@ describe('workflowsService', () => {
           headers: {
             Accept: 'text/plain',
           },
-        }
+        },
       );
       expect(result).toBe(mockLogs);
     });
@@ -270,7 +342,7 @@ describe('workflowsService', () => {
       const result = await workflowsService.getPodLogs(
         'default',
         'pod-456',
-        'main'
+        'main',
       );
 
       expect(apiClient.get).toHaveBeenCalledWith(
@@ -279,7 +351,7 @@ describe('workflowsService', () => {
           headers: {
             Accept: 'text/plain',
           },
-        }
+        },
       );
       expect(result).toBe(mockLogs);
     });
@@ -297,7 +369,7 @@ describe('workflowsService', () => {
           headers: {
             Accept: 'text/plain',
           },
-        }
+        },
       );
     });
   });
@@ -311,7 +383,7 @@ describe('workflowsService', () => {
       const result = await workflowsService.getWorkflowLogs(
         'default',
         'my-workflow',
-        'node-id-123'
+        'node-id-123',
       );
 
       expect(apiClient.get).toHaveBeenCalledWith(
@@ -320,7 +392,7 @@ describe('workflowsService', () => {
           headers: {
             Accept: 'text/plain',
           },
-        }
+        },
       );
       expect(result).toBe(mockLogs);
     });
@@ -333,7 +405,7 @@ describe('workflowsService', () => {
       await workflowsService.getWorkflowLogs(
         'staging',
         'test-workflow',
-        'node-456'
+        'node-456',
       );
 
       expect(apiClient.get).toHaveBeenCalledWith(
@@ -342,11 +414,10 @@ describe('workflowsService', () => {
           headers: {
             Accept: 'text/plain',
           },
-        }
+        },
       );
     });
   });
-
 });
 
 describe('workflow utility functions', () => {
@@ -457,10 +528,10 @@ describe('workflow utility functions', () => {
 
     it('should build node with children', () => {
       const nodes = {
-        'root': {
+        root: {
           id: 'root',
           name: 'Root',
-          children: ['child-1', 'child-2']
+          children: ['child-1', 'child-2'],
         } as ArgoNodeStatus,
         'child-1': { id: 'child-1', name: 'Child 1' } as ArgoNodeStatus,
         'child-2': { id: 'child-2', name: 'Child 2' } as ArgoNodeStatus,
@@ -473,10 +544,10 @@ describe('workflow utility functions', () => {
 
     it('should filter out non-existent children', () => {
       const nodes = {
-        'root': {
+        root: {
           id: 'root',
           name: 'Root',
-          children: ['child-1', 'non-existent', 'child-2']
+          children: ['child-1', 'non-existent', 'child-2'],
         } as ArgoNodeStatus,
         'child-1': { id: 'child-1', name: 'Child 1' } as ArgoNodeStatus,
         'child-2': { id: 'child-2', name: 'Child 2' } as ArgoNodeStatus,

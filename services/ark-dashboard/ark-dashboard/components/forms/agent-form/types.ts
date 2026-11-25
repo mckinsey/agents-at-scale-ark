@@ -1,18 +1,45 @@
 import type { UseFormReturn } from 'react-hook-form';
 import * as z from 'zod';
 
+import type { CustomHeaderRows } from '@/components/forms/shared/custom-header-rows';
 import type { Parameter } from '@/components/ui/parameter-editor';
 import type { Agent, AgentTool, Model, Skill, Tool } from '@/lib/services';
 import { kubernetesNameSchema } from '@/lib/utils/kubernetes-validation';
+import {
+  supportsOutputSchema,
+  validateOutputSchema,
+} from '@/lib/utils/output-schema';
 
-export const agentFormSchema = z.object({
-  name: kubernetesNameSchema,
-  description: z.string().optional(),
-  selectedModelName: z.string().optional(),
-  selectedModelNamespace: z.string().optional(),
-  executionEngineName: z.string().optional(),
-  prompt: z.string().optional(),
-});
+export function createAgentFormSchema(
+  isOutputSchemaSupported: (
+    executionEngineName: string | undefined,
+  ) => boolean = supportsOutputSchema,
+) {
+  return z
+    .object({
+      name: kubernetesNameSchema,
+      description: z.string().optional(),
+      selectedModelName: z.string().optional(),
+      selectedModelNamespace: z.string().optional(),
+      executionEngineName: z.string().optional(),
+      prompt: z.string().optional(),
+      outputSchema: z.string().optional(),
+    })
+    .superRefine((values, ctx) => {
+      if (
+        isOutputSchemaSupported(values.executionEngineName) &&
+        validateOutputSchema(values.outputSchema ?? '')
+      ) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['outputSchema'],
+          message: 'Invalid output schema',
+        });
+      }
+    });
+}
+
+export const agentFormSchema = createAgentFormSchema();
 
 export type AgentFormValues = z.infer<typeof agentFormSchema>;
 
@@ -35,6 +62,7 @@ export interface AgentFormState {
   selectedTools: AgentTool[];
   unavailableTools: Tool[];
   parameters: Parameter[];
+  headerRows: CustomHeaderRows;
   isExperimentalExecutionEngineEnabled: boolean;
   hasChanges: boolean;
 }
@@ -44,7 +72,9 @@ export interface AgentFormActions {
   handleToolToggle: (tool: Tool, checked: boolean) => void;
   handleDeleteTool: (tool: Tool) => void;
   isToolSelected: (toolName: string) => boolean;
+  isOutputSchemaSupported: (executionEngineName: string | undefined) => boolean;
   onSubmit: (values: AgentFormValues) => Promise<void>;
+  onInvalid: () => void;
 }
 
 export interface AgentFormContextValue {

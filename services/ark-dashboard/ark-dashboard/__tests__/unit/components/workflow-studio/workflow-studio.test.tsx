@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { toast } from 'sonner';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -296,6 +297,26 @@ describe('WorkflowStudio', () => {
       expect(screen.getByTestId('studio-save')).toHaveTextContent(
         'Save changes',
       );
+    });
+
+    it('disables Run and explains why when the user cannot run workflows', async () => {
+      const user = userEvent.setup();
+      vi.mocked(workflowTemplatesService.getYaml).mockResolvedValue(validYaml);
+      render(
+        <WorkflowStudio
+          mode="edit"
+          initialName="existing-workflow"
+          canRun={false}
+        />,
+      );
+      const run = await screen.findByTestId('studio-run');
+      expect(run).toBeDisabled();
+      await user.hover(run.parentElement ?? run);
+      expect(
+        await screen.findAllByText(
+          'You do not have permission to run workflows',
+        ),
+      ).not.toHaveLength(0);
     });
 
     it('renders the draggable resize handle between chat and canvas', () => {

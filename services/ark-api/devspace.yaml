@@ -117,6 +117,8 @@ profiles:
             value: "http://${SSO_DEX_HOST}:${SSO_DEX_PORT}/dex/keys"
           - name: PROXY_TIMEOUT
             value: "10.0"
+          - name: ARGO_SERVER_URL
+            value: "http://argo-workflows-server:2746"
           - name: ARK_A2A_AGENT_CARD_PORT
             value: "8000"
           - name: ARK_A2A_AGENT_CARD_HOST

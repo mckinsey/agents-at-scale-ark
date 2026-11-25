@@ -14,6 +14,10 @@ class A2AServerResponse(BaseModel):
     ready: Optional[bool] = None
     discovering: Optional[bool] = None
     status_message: Optional[str] = None
+    negotiated_protocol: Optional[str] = None
+    card_version: Optional[str] = None
+    streaming_supported: Optional[bool] = None
+    skill_count: Optional[int] = None
 
 
 class A2AServerListResponse(PaginatedListResponse):

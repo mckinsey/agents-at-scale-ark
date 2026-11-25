@@ -31,6 +31,8 @@ kubectl get events --field-selector involvedObject.kind=Query -o json | jq -r '.
 kubectl get events --field-selector reason=QueryExecutionComplete
 ```
 
+Operation events such as `QueryExecutionComplete` appear as Kubernetes Events only when no broker is configured for the namespace. See [Event and Logging Guidelines](#event-and-logging-guidelines).
+
 You can also view events in `k9s` with the `:events` command:
 
 ![Screenshot of the events view in k9s](./images/events-k9s.png)
@@ -69,7 +71,9 @@ As an example, query execution emits these events following the `{Operation}{Sta
 - `Normal/AgentExecutionComplete`: Agent execution completes with duration
 - `Normal/QueryExecutionComplete`: Query execution completes
 
-All events with structured data store it in the `ark.mckinsey.com/event-data` annotation as JSON.
+Where these events go depends on the broker configured for the Query's namespace. With a broker, the controller and the completions executor send operation events to it, and you can read them with `ark query ... -o events-pretty`, the dashboard, or `GET /v1/broker/events/{queryUid}` on Ark API. Without one, the controller writes its `QueryExecution*` events as Kubernetes Events, and the executor's events, such as `AgentExecution*`, `LLMCall*`, `ToolCall*` and `TeamMember*`, are dropped.
+
+Kubernetes Events with structured data store it in the `ark.mckinsey.com/event-data` annotation as JSON. Broker events carry the same fields in `data`.
 
 Use Logging For:
 

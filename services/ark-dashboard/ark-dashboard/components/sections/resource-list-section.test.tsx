@@ -54,8 +54,6 @@ function makeProps(overrides: Partial<SectionProps>): SectionProps {
     icon: <span>icon</span>,
     title: 'Agents',
     subtitle: 'Manage agents',
-    createHref: '/agents/new',
-    createLabel: 'Create agent',
     learnMoreUrl: 'https://example.com',
     entityLabel: 'Agent',
     emptyTitle: 'No Agents Yet',
@@ -131,5 +129,19 @@ describe('ResourceListSection', () => {
     const alert = screen.getByRole('alert');
     expect(alert).toHaveTextContent(/couldn't refresh agents/i);
     expect(screen.getByText('agent-one')).toBeInTheDocument();
+  });
+
+  it('matches the search query against the item title', () => {
+    resetAppRouterMock('q=onboarding');
+    renderSection({
+      items: [
+        { id: '1', name: 'flow-one', title: 'Customer Onboarding' },
+        { id: '2', name: 'flow-two', title: 'Invoice Review' },
+      ],
+      dataUpdatedAt: 1_000,
+    });
+
+    expect(screen.getByText('flow-one')).toBeInTheDocument();
+    expect(screen.queryByText('flow-two')).not.toBeInTheDocument();
   });
 });

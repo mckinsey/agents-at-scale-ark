@@ -202,5 +202,17 @@ customCACert:
   secretName: "custom-ca-cert"
   key: "ca.crt"
 
+# Opt-in model URL allowlists, read from the same ConfigMap as the ark-controller
+# chart's modelUrlSecurity values. Enable the same keys in both charts. The
+# ConfigMap must exist in the namespace the executor runs in.
+modelUrlSecurity:
+  configMapName: "model-url-security"
+  domainWhitelist:
+    enabled: false
+    key: "whitelisted-domains"
+  privateIPAllowlist:
+    enabled: false
+    key: "allowed-private-ips"
+
 extraVolumes: []
 extraVolumeMounts: []

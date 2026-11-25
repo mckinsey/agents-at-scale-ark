@@ -75,6 +75,8 @@ export function StrategySection({
                 }
                 if (value !== 'sequential') {
                   form.setValue('loops', false);
+                } else if (!form.getValues('loops')) {
+                  form.setValue('maxTurns', '');
                 }
               }}
               value={field.value}

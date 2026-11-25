@@ -311,3 +311,51 @@ func TestFailQueryOnTimeout_DeclinesWriteWhenAlreadyTerminal(t *testing.T) {
 	assert.Equal(t, int64(150), after.Status.TokenUsage.TotalTokens,
 		"token usage of the completed query must not be regressed by the losing timeout write")
 }
+
+func TestPreExecutionTimeoutMessage(t *testing.T) {
+	tests := []struct {
+		name  string
+		phase string
+		want  string
+	}{
+		{
+			name:  "queued blames controller capacity",
+			phase: statusQueued,
+			want:  "Query timed out waiting for controller capacity",
+		},
+		{
+			name:  "unreconciled empty phase stays neutral",
+			phase: "",
+			want:  "Query timed out before execution began",
+		},
+		{
+			name:  "pending stays neutral",
+			phase: statusPending,
+			want:  "Query timed out before execution began",
+		},
+		{
+			name:  "provisioning stays neutral",
+			phase: statusProvisioning,
+			want:  "Query timed out before execution began",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			require.True(t, isPreExecutionPhase(tc.phase),
+				"pre-condition: preExecutionTimeoutMessage is only reached for phases isPreExecutionPhase accepts")
+			assert.Equal(t, tc.want, preExecutionTimeoutMessage(tc.phase),
+				"the message is surfaced verbatim as Response.Content and the Completed condition message, so operators key on its exact wording")
+		})
+	}
+}
+
+func TestPreExecutionTimeoutMessage_OnlyQueuedAttributesCapacity(t *testing.T) {
+	assert.Contains(t, preExecutionTimeoutMessage(statusQueued), "capacity",
+		"a queued query waited on the fair scheduler, so the message must say so")
+
+	for _, phase := range []string{"", statusPending, statusProvisioning} {
+		assert.NotContains(t, preExecutionTimeoutMessage(phase), "capacity",
+			"phase %q never reached the scheduler, so blaming capacity would misdirect debugging", phase)
+	}
+}

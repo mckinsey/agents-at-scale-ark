@@ -90,8 +90,12 @@ async def _resolve_auth_header(
     read the referenced credential.
     """
     display_name = source.displayName or source.name
-    if not source.secretRef or not source.scheme:
+    if not source.scheme:
         return None, None
+    if not source.secretRef:
+        return None, _error_result(
+            source.name, display_name, "credential is not accessible", "auth_error"
+        )
     try:
         secret = await core.read_namespaced_secret(source.secretRef, namespace)
     except ApiException:
@@ -128,7 +132,9 @@ async def _fetch_source(
     cache_key = (namespace, name, url)
     cached = _cache_get(cache_key)
     if cached is not None:
-        return MarketplaceItemsSourceResult(source=name, displayName=display_name, items=cached)
+        return MarketplaceItemsSourceResult(
+            source=name, displayName=display_name, url=url, items=cached
+        )
 
     logger.info("fetching marketplace items for source %s", name)
     try:
@@ -153,7 +159,9 @@ async def _fetch_source(
 
     items = manifest.get("items", []) if isinstance(manifest, dict) else []
     _cache_set(cache_key, items)
-    return MarketplaceItemsSourceResult(source=name, displayName=display_name, items=items)
+    return MarketplaceItemsSourceResult(
+        source=name, displayName=display_name, url=url, items=items
+    )
 
 
 @router.get("", response_model=list[MarketplaceItemsSourceResult])

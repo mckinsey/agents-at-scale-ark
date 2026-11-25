@@ -5,6 +5,7 @@ import { useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 
 import { DetailBreadcrumb } from '@/components/common/detail-breadcrumb';
+import { useCustomHeaderRows } from '@/components/forms/shared/custom-header-rows';
 import { NamespacedLink } from '@/components/namespaced-link';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
@@ -25,6 +26,8 @@ import {
   createModelUpdateConfig,
   getBaseUrlState,
   getDefaultValuesForUpdate,
+  getHeadersForUpdate,
+  providerSupportsHeaders,
 } from './utils';
 
 const formId = 'model-update-form';
@@ -51,6 +54,7 @@ export function UpdateModelForm({ model }: UpdateModelFormProps) {
     resolver: zodResolver(createSchema(baseUrlState.kind === 'literal')),
     defaultValues,
   });
+  const headerRows = useCustomHeaderRows(getHeadersForUpdate(model));
 
   const handleSuccess = useCallback(() => {
     push('/models');
@@ -59,7 +63,13 @@ export function UpdateModelForm({ model }: UpdateModelFormProps) {
   const { mutateAsync, isPending } = useUpdateModelById();
 
   const onSubmit = (formValues: FormValues) => {
-    const config = createModelUpdateConfig(formValues, baseUrlMode);
+    const headers = providerSupportsHeaders(formValues.provider)
+      ? headerRows.validate()
+      : [];
+    if (!headers) {
+      return;
+    }
+    const config = createModelUpdateConfig(formValues, baseUrlMode, headers);
     mutateAsync({
       id: model.id,
       model: formValues.model,
@@ -85,6 +95,7 @@ export function UpdateModelForm({ model }: UpdateModelFormProps) {
             ? defaultValues.bedrockAuthMethod
             : undefined,
         baseUrlState,
+        headerRows,
       }}>
       <div className="content-shell flex min-h-0 w-full flex-1 flex-col gap-5 overflow-hidden">
         <header className="flex flex-none flex-col gap-4">

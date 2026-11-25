@@ -5,7 +5,12 @@ import type { UseFormReturn } from 'react-hook-form';
 import { ConditionalInputRow } from '@/components/ui/conditionalInputRow';
 import { Plus } from '@/components/icons';
 import { Button } from '@/components/ui/button';
-import { FieldError, FieldSet, FieldTitle } from '@/components/ui/field';
+import {
+  FieldDescription,
+  FieldError,
+  FieldSet,
+  FieldTitle,
+} from '@/components/ui/field';
 import { FormField } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import {
@@ -38,7 +43,11 @@ export function McpServerFields({
   nameDisabled,
   transportDisabled,
 }: McpServerFieldsProps) {
-  const { data: secrets } = useGetAllSecrets();
+  const {
+    data: secrets,
+    isPending: isSecretsPending,
+    isError: isSecretsError,
+  } = useGetAllSecrets();
   const {
     headers,
     headerErrors,
@@ -106,6 +115,12 @@ export function McpServerFields({
                 </SelectItem>
               </SelectContent>
             </Select>
+            {field.value === 'sse' && (
+              <FieldDescription>
+                sse is deprecated in the MCP specification. Use it only if your
+                server does not support http.
+              </FieldDescription>
+            )}
             <FieldError>{fieldState.error?.message}</FieldError>
           </FieldSet>
         )}
@@ -121,6 +136,8 @@ export function McpServerFields({
               clearRowError(row.key, updated);
             }}
             secrets={secrets ?? []}
+            isSecretsPending={isSecretsPending}
+            isSecretsError={isSecretsError}
             deleteRow={deleteRow}
             nameError={headerErrors[row.key]?.nameError}
             valueError={headerErrors[row.key]?.valueError}

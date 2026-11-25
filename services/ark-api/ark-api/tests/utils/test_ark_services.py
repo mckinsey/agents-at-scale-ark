@@ -1,8 +1,10 @@
 import base64
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 from .dummy import DummyRelease
 import pytest
+from pyhelm3.errors import Error as HelmError
 
 from ark_api.utils.ark_services import (
     SecretType,
@@ -32,31 +34,32 @@ async def test_extract_helm_release_data_builds_expected_payload():
 
 @pytest.mark.asyncio
 async def test_get_helm_releases_collects_results(monkeypatch):
-    release = object()
+    release = SimpleNamespace(name="rel")
+    broken = SimpleNamespace(name="broken")
     client_mock = AsyncMock()
-    client_mock.list_releases = AsyncMock(return_value=[release])
+    client_mock.list_releases = AsyncMock(return_value=[release, broken])
     monkeypatch.setattr("ark_api.utils.ark_services.Client", lambda: client_mock)
 
-    extract_mock = AsyncMock(return_value={"name": "rel"})
+    extract_mock = AsyncMock(side_effect=[{"name": "rel"}, KeyError("manifest")])
     monkeypatch.setattr("ark_api.utils.ark_services.extract_helm_release_data", extract_mock)
 
     result = await get_helm_releases("ns")
 
-    assert result == [{"name": "rel"}]
-    client_mock.list_releases.assert_awaited_once_with(namespace="ns")
-    extract_mock.assert_awaited_once_with(release)
+    assert result == ([{"name": "rel"}], [{"name": "broken", "message": "The release data has an unexpected format."}])
+    client_mock.list_releases.assert_awaited_once_with(
+        namespace="ns", include_deployed=True, include_failed=True, include_pending=True
+    )
+    assert extract_mock.await_count == 2
 
 
 @pytest.mark.asyncio
 async def test_get_helm_releases_handles_error(monkeypatch):
     client_mock = AsyncMock()
-    client_mock.list_releases = AsyncMock(side_effect=RuntimeError("boom"))
+    client_mock.list_releases = AsyncMock(side_effect=HelmError(1, b"", b"Error: secrets is forbidden\n"))
     monkeypatch.setattr("ark_api.utils.ark_services.Client", lambda: client_mock)
 
-    result = await get_helm_releases("ns")
-
-    assert result == []
-    client_mock.list_releases.assert_awaited_once_with(namespace="ns")
+    with pytest.raises(HelmError, match="secrets is forbidden"):
+        await get_helm_releases("ns")
 
 
 def test_get_chart_annotations_and_description():

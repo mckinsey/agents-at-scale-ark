@@ -20,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 	"trpc.group/trpc-go/trpc-a2a-go/taskmanager"
@@ -1585,6 +1586,7 @@ func TestProcessMessageResumptionSucceeds(t *testing.T) {
 		_, _ = w.Write([]byte(`{"id":"cmpl-1","object":"chat.completion","created":0,"model":"gpt-test","choices":[{"index":0,"message":{"role":"assistant","content":"resumed answer"},"finish_reason":"stop"}],"usage":{}}`))
 	}))
 	defer llm.Close()
+	allowTestServerBaseURLs(t)
 
 	model := &arkv1alpha1.Model{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-model", Namespace: "default"},
@@ -1968,12 +1970,96 @@ func TestProcessMessageForwardsQueryConversationToEngineMember(t *testing.T) {
 		"a member resuming a conversation must not be handed a scope derived from the query name")
 }
 
+func TestWithQueryTimeout(t *testing.T) {
+	t.Run("applies spec.timeout", func(t *testing.T) {
+		query := &arkv1alpha1.Query{Spec: arkv1alpha1.QuerySpec{Timeout: &metav1.Duration{Duration: 15 * time.Minute}}}
+		ctx, cancel := withQueryTimeout(context.Background(), query)
+		defer cancel()
+
+		deadline, ok := ctx.Deadline()
+		require.True(t, ok)
+		assert.WithinDuration(t, time.Now().Add(15*time.Minute), deadline, time.Minute)
+	})
+
+	t.Run("leaves the context without a deadline when spec.timeout is unset", func(t *testing.T) {
+		ctx, cancel := withQueryTimeout(context.Background(), &arkv1alpha1.Query{})
+		defer cancel()
+
+		_, ok := ctx.Deadline()
+		assert.False(t, ok)
+	})
+}
+
+func TestProcessMessageAppliesQueryTimeoutToEngineMember(t *testing.T) {
+	stub := engineStub(t, "member reply", nil)
+	t.Cleanup(stub.Close)
+
+	engine := &arkv1prealpha1.ExecutionEngine{
+		ObjectMeta: metav1.ObjectMeta{Name: "mock-engine", Namespace: "default"},
+		Status:     arkv1prealpha1.ExecutionEngineStatus{LastResolvedAddress: stub.URL},
+	}
+	agent := &arkv1alpha1.Agent{
+		ObjectMeta: metav1.ObjectMeta{Name: "member-a", Namespace: "default"},
+		Spec: arkv1alpha1.AgentSpec{
+			Prompt:          "You are member A",
+			ExecutionEngine: &arkv1alpha1.ExecutionEngineRef{Name: "mock-engine"},
+		},
+	}
+	queryTimeout := 15 * time.Minute
+	query := &arkv1alpha1.Query{
+		ObjectMeta: metav1.ObjectMeta{Name: "team-query", Namespace: "default"},
+		Spec: arkv1alpha1.QuerySpec{
+			Target:  &arkv1alpha1.QueryTarget{Type: ToolTypeTeam, Name: "my-team"},
+			Input:   runtime.RawExtension{Raw: []byte(`"what is the weather?"`)},
+			Timeout: &metav1.Duration{Duration: queryTimeout},
+		},
+	}
+
+	var engineDeadline time.Time
+	var engineHasDeadline bool
+	k8sClient := fake.NewClientBuilder().
+		WithScheme(newTestScheme()).
+		WithObjects(engine, agent, query, teamWithMembers("my-team", "member-a")).
+		WithInterceptorFuncs(interceptor.Funcs{
+			Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+				if _, ok := obj.(*arkv1prealpha1.ExecutionEngine); ok {
+					engineDeadline, engineHasDeadline = ctx.Deadline()
+				}
+				return c.Get(ctx, key, obj, opts...)
+			},
+		}).
+		Build()
+	h := &Handler{
+		k8sClient: k8sClient,
+		telemetry: telemetrynoop.NewProvider(),
+		eventing:  eventingnoop.NewProvider(),
+	}
+	msg := protocol.Message{
+		Role:  protocol.MessageRoleUser,
+		Parts: []protocol.Part{protocol.NewTextPart("what is the weather?")},
+		Metadata: map[string]any{
+			arka2a.QueryExtensionMetadataKey: map[string]any{
+				"name":      "team-query",
+				"namespace": "default",
+			},
+		},
+	}
+	ctx := logf.IntoContext(context.Background(), funcr.New(func(pfx, args string) {}, funcr.Options{}))
+
+	_, err := h.ProcessMessage(ctx, msg, taskmanager.ProcessOptions{}, nil)
+	require.NoError(t, err)
+
+	require.True(t, engineHasDeadline, "a team member on an execution engine must run under the query's spec.timeout")
+	assert.WithinDuration(t, time.Now().Add(queryTimeout), engineDeadline, time.Minute)
+}
+
 func TestProcessMessageSubTargetRejectsApproval(t *testing.T) {
 	llm := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"id":"cmpl-1","object":"chat.completion","created":0,"model":"gpt-test","choices":[{"index":0,"message":{"role":"assistant","content":"","tool_calls":[{"id":"call-1","type":"function","function":{"name":"noop","arguments":"{}"}}]},"finish_reason":"tool_calls"}],"usage":{}}`))
 	}))
 	t.Cleanup(llm.Close)
+	allowTestServerBaseURLs(t)
 
 	model := &arkv1alpha1.Model{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-model", Namespace: "default"},

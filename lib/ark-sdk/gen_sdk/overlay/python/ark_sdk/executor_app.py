@@ -9,19 +9,21 @@ from typing import Any, List
 
 import uvicorn
 from a2a.server.agent_execution import AgentExecutor
-from a2a.server.apps import A2AStarletteApplication
 from a2a.server.events import EventQueue
 from a2a.server.request_handlers import DefaultRequestHandler
+from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes
 from a2a.server.tasks import InMemoryTaskStore
 from a2a.types import (
     AgentCapabilities,
     AgentCard,
     AgentExtension,
+    AgentInterface,
     AgentSkill,
     Part,
-    TextPart,
+    Role,
     Message as A2AMessage,
 )
+from a2a.utils.constants import AGENT_CARD_WELL_KNOWN_PATH, DEFAULT_RPC_URL, TransportProtocol
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -37,6 +39,11 @@ from .extensions.query import (
 from .query_status_updater import QueryStatusUpdater
 
 logger = logging.getLogger(__name__)
+
+# The 1.x a2a-sdk dropped this alias (a2a.utils.constants.PREV_AGENT_CARD_WELL_KNOWN_PATH
+# in 0.3.x); keep serving it ourselves so peers that only know the pre-0.3 path
+# (e.g. ark/internal/a2a/a2a.go's AgentCardPathVersion2 fallback) still find us.
+PREV_AGENT_CARD_WELL_KNOWN_PATH = "/.well-known/agent.json"
 
 # ---------------------------------------------------------------------------
 # OTEL — conditional setup shared by all executors
@@ -258,8 +265,8 @@ class A2AExecutorAdapter(AgentExecutor):
                 await broker.complete()
 
             response_msg = A2AMessage(
-                role="agent",
-                parts=[Part(root=TextPart(text=response_text))],
+                role=Role.ROLE_AGENT,
+                parts=[Part(text=response_text)],
                 message_id=context.message.message_id + "-response" if hasattr(context.message, "message_id") else "response",
             )
             if conversation_id:
@@ -269,8 +276,8 @@ class A2AExecutorAdapter(AgentExecutor):
             logger.error(f"Execution failed: {e}", exc_info=True)
             await event_queue.enqueue_event(
                 A2AMessage(
-                    role="agent",
-                    parts=[Part(root=TextPart(text=f"Execution error: {e}"))],
+                    role=Role.ROLE_AGENT,
+                    parts=[Part(text=f"Execution error: {e}")],
                     message_id="error-response",
                 )
             )
@@ -307,8 +314,13 @@ class ExecutorApp:
         self.agent_card = AgentCard(
             name=self.engine_name,
             description=self.description,
-            url="https://localhost:8000",
             version="1.0.0",
+            supported_interfaces=[
+                AgentInterface(
+                    url="https://localhost:8000",
+                    protocol_binding=TransportProtocol.JSONRPC,
+                ),
+            ],
             skills=self.skills,
             capabilities=AgentCapabilities(
                 extensions=[
@@ -327,11 +339,21 @@ class ExecutorApp:
         request_handler = DefaultRequestHandler(
             agent_executor=adapter,
             task_store=InMemoryTaskStore(),
+            agent_card=self.agent_card,
         )
 
-        self._a2a_app = A2AStarletteApplication(
-            agent_card=self.agent_card,
-            http_handler=request_handler,
+        # enable_v0_3_compat lets the same JSON-RPC endpoint also accept the
+        # pre-1.0 method names (message/send, message/stream, ...) that the
+        # Go controller's trpc-a2a-go client still sends. Likewise, serve the
+        # agent card at both the current and the deprecated well-known path.
+        self._routes = (
+            create_agent_card_routes(self.agent_card, card_url=AGENT_CARD_WELL_KNOWN_PATH)
+            + create_agent_card_routes(self.agent_card, card_url=PREV_AGENT_CARD_WELL_KNOWN_PATH)
+            + create_jsonrpc_routes(
+                request_handler,
+                rpc_url=DEFAULT_RPC_URL,
+                enable_v0_3_compat=True,
+            )
         )
 
         self._setup_logging()
@@ -342,7 +364,7 @@ class ExecutorApp:
         uvicorn_logger.addFilter(HealthFilter())
 
     def build(self) -> Starlette:
-        app = self._a2a_app.build()
+        app = Starlette(routes=list(self._routes))
 
         async def health_check(request: Request) -> JSONResponse:
             return JSONResponse({"status": "healthy", "engine": self.engine_name})
@@ -364,7 +386,7 @@ class ExecutorApp:
         return app
 
     def run(self, host: str = "0.0.0.0", port: int = 8000) -> None:
-        self.agent_card.url = f"https://{host}:{port}"
+        self.agent_card.supported_interfaces[0].url = f"https://{host}:{port}"
         logger.info(f"Starting {self.engine_name} A2A server on {host}:{port}")
         uvicorn.run(self.build(), host=host, port=port, access_log=True, log_level="info")
 

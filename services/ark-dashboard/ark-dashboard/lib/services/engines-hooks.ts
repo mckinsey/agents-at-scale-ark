@@ -6,6 +6,8 @@ import { useNamespace } from '@/providers/NamespaceProvider';
 import { executionEnginesService } from './engines';
 
 export const GET_ALL_EXECUTION_ENGINES_QUERY_KEY = 'get-all-execution-engines';
+export const GET_EXECUTION_ENGINE_DELETE_ACCESS_QUERY_KEY =
+  'get-execution-engine-delete-access';
 
 export const useGetAllExecutionEngines = () => {
   const { namespace } = useNamespace();
@@ -13,6 +15,16 @@ export const useGetAllExecutionEngines = () => {
   return useQuery({
     queryKey: [GET_ALL_EXECUTION_ENGINES_QUERY_KEY, namespace],
     queryFn: () => executionEnginesService.getAll(namespace),
+    enabled: Boolean(namespace),
+  });
+};
+
+export const useExecutionEngineDeleteAccess = () => {
+  const { namespace } = useNamespace();
+
+  return useQuery({
+    queryKey: [GET_EXECUTION_ENGINE_DELETE_ACCESS_QUERY_KEY, namespace],
+    queryFn: () => executionEnginesService.canDelete(namespace),
     enabled: Boolean(namespace),
   });
 };

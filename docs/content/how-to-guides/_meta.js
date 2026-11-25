@@ -22,9 +22,17 @@ export default {
     title: 'Add tools and MCP servers',
     href: '/user-guide/tools'
   },
+  'tool-approvals': {
+    title: 'Require human approval for tool calls',
+    href: '/user-guide/tool-approvals'
+  },
   configurations: {
     title: 'Parametrize resources per environment',
     href: '/user-guide/configurations'
+  },
+  secrets: {
+    title: 'Manage secrets',
+    href: '/user-guide/secrets'
   },
   'ark-cli': {
     title: 'Use the Ark CLI',

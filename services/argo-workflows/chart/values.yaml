@@ -60,7 +60,7 @@ argo-workflows:
   # Executor resources - these are the pods that execute steps.
   executor:
     image:
-      tag: v3.7.2-nonroot
+      nonroot: true
     resources:
       requests:
         memory: "128Mi"

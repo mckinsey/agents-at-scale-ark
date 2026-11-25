@@ -4,11 +4,11 @@ package postgresql
 
 import (
 	"context"
-	"database/sql"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/lib/pq"
 	"k8s.io/apimachinery/pkg/api/meta"
 	k8slabels "k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -130,22 +130,24 @@ func (b *kindBroadcaster) run() {
 	}
 }
 
-const broadcasterRelistQuery = `
-		SELECT resource_version, generation, namespace, name, uid, spec, status, labels, annotations, finalizers, owner_references, created_at, deleted_at, deletion_timestamp
+const broadcasterRelistKeysQuery = `
+		SELECT resource_version, uid
 		FROM resources
 		WHERE kind = $1 AND resource_version > $2
 		ORDER BY resource_version ASC`
 
-// relist runs ONE query for the kind and fans the rows out to all subscribers.
-// Mirrors the old postgresWatcher.relist lookback/dedup semantics, but without the
-// namespace/label SQL filters (those become in-memory predicates at fan-out) and
-// once per kind rather than once per watcher.
+const broadcasterRelistRowsQuery = `
+		SELECT resource_version, generation, namespace, name, uid, spec, status, labels, annotations, finalizers, owner_references, created_at, deleted_at, deletion_timestamp
+		FROM resources
+		WHERE kind = $1 AND resource_version = ANY($2)
+		ORDER BY resource_version ASC`
+
+// relist fans out the rows of one kind that changed since the cursor. The lookback
+// window is read as (resource_version, uid) pairs only; spec and status are loaded
+// just for the rows no earlier relist has delivered, so the cost of re-reading the
+// window no longer grows with object size. Namespace/label filters are in-memory
+// predicates applied at fan-out, once per kind rather than once per watcher.
 func (b *kindBroadcaster) relist() {
-	// relistQueryTimeout bounds a single relist query. run() calls relist()
-	// inline on one goroutine, so an unbounded query would stall fan-out to
-	// every subscriber of this kind; the deadline caps that blast radius.
-	// Generous relative to the 120s safety-net tick, so it only trips a query
-	// that is genuinely hung rather than merely large.
 	const relistQueryTimeout = 30 * time.Second
 	from := b.lastSeenRV.Load() - relistLookbackRVs
 	if from < 0 {
@@ -155,40 +157,13 @@ func (b *kindBroadcaster) relist() {
 	broadcasterRelistTotal.WithLabelValues(b.kind).Inc()
 	ctx, cancel := context.WithTimeout(b.backend.ctx, relistQueryTimeout)
 	defer cancel()
-	rows, err := b.backend.db.QueryContext(ctx, broadcasterRelistQuery, b.kind, from)
+
+	maxRV, unseen, err := b.scanWindow(ctx, from)
 	if err != nil {
 		b.onRelistFailure(err)
 		return
 	}
-	defer func() { _ = rows.Close() }()
-
-	maxRV := b.lastSeenRV.Load()
-	for rows.Next() {
-		var rv, generation int64
-		var ns, name, uid string
-		var spec, status, labels, annotations, finalizers, ownerRefs []byte
-		var createdAt time.Time
-		var deletedAt, deletionTimestamp sql.NullTime
-
-		if err := rows.Scan(&rv, &generation, &ns, &name, &uid, &spec, &status, &labels, &annotations, &finalizers, &ownerRefs, &createdAt, &deletedAt, &deletionTimestamp); err != nil {
-			// Partial read: do NOT advance the cursor, so the next relist re-reads
-			// from the same point and nothing is permanently skipped.
-			b.onRelistFailure(err)
-			return
-		}
-		if rv > maxRV {
-			maxRV = rv
-		}
-		if b.markSeen(uid, rv) {
-			continue
-		}
-		obj, rErr := b.backend.reconstructObject(b.kind, ns, name, rv, generation, uid, string(spec), string(status), string(labels), string(annotations), string(finalizers), string(ownerRefs), createdAt, nullTimePtr(deletionTimestamp))
-		if rErr != nil {
-			continue
-		}
-		b.fanout(&changeRow{rv: rv, uid: uid, ns: ns, obj: obj, deleted: deletedAt.Valid})
-	}
-	if err := rows.Err(); err != nil {
+	if err := b.fanoutRows(ctx, unseen); err != nil {
 		b.onRelistFailure(err)
 		return
 	}
@@ -196,6 +171,61 @@ func (b *kindBroadcaster) relist() {
 	b.advanceRV(maxRV)
 	b.pruneSeen()
 	b.consecutiveFailures = 0
+}
+
+func (b *kindBroadcaster) scanWindow(ctx context.Context, from int64) (int64, []int64, error) {
+	rows, err := b.backend.db.QueryContext(ctx, broadcasterRelistKeysQuery, b.kind, from)
+	if err != nil {
+		return 0, nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	maxRV := b.lastSeenRV.Load()
+	var unseen []int64
+	for rows.Next() {
+		var rv int64
+		var uid string
+		if err := rows.Scan(&rv, &uid); err != nil {
+			return 0, nil, err
+		}
+		if rv > maxRV {
+			maxRV = rv
+		}
+		if !b.hasSeen(uid, rv) {
+			unseen = append(unseen, rv)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return 0, nil, err
+	}
+	return maxRV, unseen, nil
+}
+
+func (b *kindBroadcaster) fanoutRows(ctx context.Context, rvs []int64) error {
+	if len(rvs) == 0 {
+		return nil
+	}
+	rows, err := b.backend.db.QueryContext(ctx, broadcasterRelistRowsQuery, b.kind, pq.Array(rvs))
+	if err != nil {
+		return err
+	}
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		r, err := scanChangeRow(rows)
+		if err != nil {
+			return err
+		}
+		if b.markSeen(r.uid, r.rv) {
+			continue
+		}
+		obj, rErr := b.backend.reconstructObject(b.kind, r.ns, r.name, r.rv, r.generation, r.uid, string(r.spec), string(r.status), string(r.labels), string(r.annotations), string(r.finalizers), string(r.ownerRefs), r.createdAt, nullTimePtr(r.deletionTimestamp))
+		if rErr != nil {
+			continue
+		}
+		b.fanout(&changeRow{rv: r.rv, uid: r.uid, ns: r.ns, obj: obj, deleted: r.deletedAt.Valid})
+	}
+	return rows.Err()
 }
 
 // onRelistFailure schedules a short-backoff retry (not the 120s tick). The cursor is
@@ -284,6 +314,13 @@ func (b *kindBroadcaster) advanceRV(rv int64) {
 			return
 		}
 	}
+}
+
+func (b *kindBroadcaster) hasSeen(uid string, rv int64) bool {
+	b.seenMu.Lock()
+	defer b.seenMu.Unlock()
+	seen, ok := b.seenRVs[uid]
+	return ok && seen >= rv
 }
 
 // markSeen returns true if (uid, rv) was already fanned out and should be skipped.

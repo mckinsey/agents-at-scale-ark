@@ -330,6 +330,9 @@ describe('ChatClient', () => {
   });
 
   describe('pollStreamResponse', () => {
+    const STREAM_WITH_CONTENT =
+      'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\ndata: [DONE]\n\n';
+
     function mockSSEResponse(chunks: string[]) {
       let index = 0;
       const encoder = new TextEncoder();
@@ -367,6 +370,52 @@ describe('ChatClient', () => {
       expect(result).toBe('Hello World');
       expect(onChunk).toHaveBeenCalledWith('Hello', undefined, undefined);
       expect(onChunk).toHaveBeenCalledWith(' World', undefined, undefined);
+
+      vi.unstubAllGlobals();
+    });
+
+    it('should send the query namespace on the chunk stream', async () => {
+      const client = new ChatClient(mockArkApiClient);
+      mockCreateQuery.mockResolvedValue({name: 'ns-q', namespace: 'team-a'});
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(mockSSEResponse([STREAM_WITH_CONTENT]));
+      vi.stubGlobal('fetch', fetchMock);
+
+      await client.sendMessage(
+        'agent/a',
+        [{role: 'user', content: 'Hi'}],
+        {streamingEnabled: true},
+        vi.fn()
+      );
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        'http://localhost:8000/v1/broker/chunks?watch=true&query-id=ns-q&namespace=team-a',
+        expect.anything()
+      );
+
+      vi.unstubAllGlobals();
+    });
+
+    it('should omit namespace when the query response has none', async () => {
+      const client = new ChatClient(mockArkApiClient);
+      mockCreateQuery.mockResolvedValue({name: 'no-ns-q'});
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(mockSSEResponse([STREAM_WITH_CONTENT]));
+      vi.stubGlobal('fetch', fetchMock);
+
+      await client.sendMessage(
+        'agent/a',
+        [{role: 'user', content: 'Hi'}],
+        {streamingEnabled: true},
+        vi.fn()
+      );
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        'http://localhost:8000/v1/broker/chunks?watch=true&query-id=no-ns-q',
+        expect.anything()
+      );
 
       vi.unstubAllGlobals();
     });

@@ -76,7 +76,11 @@ export function buildHeader(header: HeaderData): Header {
 
 export function A2AEditor({ open, onOpenChange, namespace, onSave }: Props) {
   const headerRows = useHeaderRows();
-  const { data: secrets } = useGetAllSecrets();
+  const {
+    data: secrets,
+    isPending: isSecretsPending,
+    isError: isSecretsError,
+  } = useGetAllSecrets();
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -228,6 +232,8 @@ export function A2AEditor({ open, onOpenChange, namespace, onSave }: Props) {
                       headerRows.clearRowError(row.key, updated);
                     }}
                     secrets={secrets ?? []}
+                    isSecretsPending={isSecretsPending}
+                    isSecretsError={isSecretsError}
                     deleteRow={headerRows.deleteRow}
                     nameError={headerRows.headerErrors[row.key]?.nameError}
                     valueError={headerRows.headerErrors[row.key]?.valueError}

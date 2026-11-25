@@ -36,6 +36,7 @@ const (
 	// used to be a no-op. Delete gets no server-side conflict retry the way patch does, so a
 	// resource under active reconciliation would surface a 409 it never used to.
 	maxDeleteConflictAttempts = 5
+	deleteCollectionPageSize  = int64(10000)
 )
 
 func storageContext(ctx context.Context) (context.Context, context.CancelFunc) {
@@ -71,6 +72,7 @@ var (
 	_ rest.Lister               = &GenericStorage{}
 	_ rest.CreaterUpdater       = &GenericStorage{}
 	_ rest.GracefulDeleter      = &GenericStorage{}
+	_ rest.CollectionDeleter    = &GenericStorage{}
 	_ rest.Watcher              = &GenericStorage{}
 	_ rest.Scoper               = &GenericStorage{}
 	_ rest.SingularNameProvider = &GenericStorage{}
@@ -104,18 +106,28 @@ func (s *GenericStorage) GetSingularName() string {
 }
 
 func (s *GenericStorage) Get(ctx context.Context, name string, options *metav1.GetOptions) (runtime.Object, error) {
+	return getResource(ctx, s.backend, s.config, name, options, "get")
+}
+
+func getResource(ctx context.Context, backend storage.Backend, config ResourceConfig, name string, options *metav1.GetOptions, operation string) (runtime.Object, error) {
 	start := time.Now()
-	namespace := s.config.namespace(ctx)
+	namespace := config.namespace(ctx)
 	sctx, cancel := storageContext(ctx)
 	defer cancel()
-	obj, err := s.backend.Get(sctx, s.config.Kind, namespace, name)
-	if err != nil {
-		metrics.RecordStorageOperation("get", s.config.Kind, "error")
-		metrics.RecordStorageLatency("get", s.config.Kind, start)
-		return nil, apierrors.NewNotFound(schema.GroupResource{Group: arkv1alpha1.GroupVersion.Group, Resource: s.config.Resource}, name)
+	if err := requireResourceVersion(sctx, backend, options); err != nil {
+		outcome, apiErr := classifyStorageError(err, err)
+		metrics.RecordStorageOperation(operation, config.Kind, outcome)
+		metrics.RecordStorageLatency(operation, config.Kind, start)
+		return nil, apiErr
 	}
-	metrics.RecordStorageOperation("get", s.config.Kind, "success")
-	metrics.RecordStorageLatency("get", s.config.Kind, start)
+	obj, err := backend.Get(sctx, config.Kind, namespace, name)
+	if err != nil {
+		metrics.RecordStorageOperation(operation, config.Kind, "error")
+		metrics.RecordStorageLatency(operation, config.Kind, start)
+		return nil, apierrors.NewNotFound(schema.GroupResource{Group: arkv1alpha1.GroupVersion.Group, Resource: config.Resource}, name)
+	}
+	metrics.RecordStorageOperation(operation, config.Kind, "success")
+	metrics.RecordStorageLatency(operation, config.Kind, start)
 	return obj, nil
 }
 
@@ -132,18 +144,18 @@ func (s *GenericStorage) List(ctx context.Context, options *metainternalversion.
 		}
 		opts.Limit = options.Limit
 		opts.Continue = options.Continue
+		opts.ResourceVersion = options.ResourceVersion
+		opts.ResourceVersionMatch = options.ResourceVersionMatch
 	}
 
 	sctx, cancel := storageContext(ctx)
 	defer cancel()
 	objects, continueToken, listRV, err := s.backend.List(sctx, s.config.Kind, namespace, opts)
 	if err != nil {
-		metrics.RecordStorageOperation("list", s.config.Kind, "error")
+		outcome, apiErr := classifyStorageError(err, fmt.Errorf("failed to list %s: %w", s.config.Resource, err))
+		metrics.RecordStorageOperation("list", s.config.Kind, outcome)
 		metrics.RecordStorageLatency("list", s.config.Kind, start)
-		if errors.Is(err, storage.ErrInvalidRequest) {
-			return nil, apierrors.NewBadRequest(err.Error())
-		}
-		return nil, apierrors.NewInternalError(fmt.Errorf("failed to list %s: %w", s.config.Resource, err))
+		return nil, apiErr
 	}
 
 	list := s.config.NewListFunc()
@@ -357,10 +369,9 @@ func (s *GenericStorage) Delete(ctx context.Context, name string, deleteValidati
 
 	sctx, cancel := storageContext(ctx)
 	defer cancel()
-	existing, err := s.backend.Get(sctx, s.config.Kind, namespace, name)
+	existing, err := s.readForDelete(sctx, namespace, name, start)
 	if err != nil {
-		metrics.RecordStorageOperation("delete", s.config.Kind, "not_found")
-		return nil, false, apierrors.NewNotFound(schema.GroupResource{Group: arkv1alpha1.GroupVersion.Group, Resource: s.config.Resource}, name)
+		return nil, false, err
 	}
 
 	if deleteValidation != nil {
@@ -417,6 +428,89 @@ func (s *GenericStorage) Delete(ctx context.Context, name string, deleteValidati
 	metrics.RecordStorageOperation("delete", s.config.Kind, "success")
 	metrics.RecordStorageLatency("delete", s.config.Kind, start)
 	return existing, true, nil
+}
+
+func (s *GenericStorage) readForDelete(sctx context.Context, namespace, name string, start time.Time) (runtime.Object, error) {
+	existing, err := s.backend.Get(sctx, s.config.Kind, namespace, name)
+	if err == nil {
+		return existing, nil
+	}
+	if !errors.Is(err, storage.ErrNotFound) {
+		outcome, apiErr := classifyStorageError(err, fmt.Errorf("failed to read %s for delete: %w", s.config.SingularName, err))
+		metrics.RecordStorageOperation("delete", s.config.Kind, outcome)
+		metrics.RecordStorageLatency("delete", s.config.Kind, start)
+		return nil, apiErr
+	}
+	metrics.RecordStorageOperation("delete", s.config.Kind, "not_found")
+	return nil, apierrors.NewNotFound(schema.GroupResource{Group: arkv1alpha1.GroupVersion.Group, Resource: s.config.Resource}, name)
+}
+
+func (s *GenericStorage) DeleteCollection(ctx context.Context, deleteValidation rest.ValidateObjectFunc, options *metav1.DeleteOptions, listOptions *metainternalversion.ListOptions) (runtime.Object, error) {
+	if options != nil && len(options.DryRun) > 0 {
+		return nil, apierrors.NewBadRequest("dry-run is not supported for collection deletes")
+	}
+	listOptions, hasLimit := deleteCollectionListOptions(listOptions)
+
+	var items []runtime.Object
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		page, err := s.List(ctx, listOptions)
+		if err != nil {
+			return nil, err
+		}
+		pageItems, err := meta.ExtractList(page)
+		if err != nil {
+			return nil, fmt.Errorf("failed to extract %s list: %w", s.config.Resource, err)
+		}
+		if err := s.deleteItems(ctx, pageItems, deleteValidation, options); err != nil {
+			return nil, err
+		}
+		items = append(items, pageItems...)
+
+		listMeta, err := meta.ListAccessor(page)
+		if err != nil {
+			return nil, fmt.Errorf("failed to access list metadata: %w", err)
+		}
+		if hasLimit || listMeta.GetContinue() == "" {
+			if err := meta.SetList(page, items); err != nil {
+				return nil, fmt.Errorf("failed to set list items: %w", err)
+			}
+			return page, nil
+		}
+		listOptions.Continue = listMeta.GetContinue()
+		listOptions.ResourceVersion = ""
+		listOptions.ResourceVersionMatch = ""
+	}
+}
+
+func deleteCollectionListOptions(in *metainternalversion.ListOptions) (*metainternalversion.ListOptions, bool) {
+	out := &metainternalversion.ListOptions{}
+	if in != nil {
+		out = in.DeepCopy()
+	}
+	if out.Limit > 0 {
+		return out, true
+	}
+	out.Limit = deleteCollectionPageSize
+	return out, false
+}
+
+func (s *GenericStorage) deleteItems(ctx context.Context, items []runtime.Object, deleteValidation rest.ValidateObjectFunc, options *metav1.DeleteOptions) error {
+	for _, item := range items {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		accessor, err := meta.Accessor(item)
+		if err != nil {
+			return fmt.Errorf("failed to access object metadata: %w", err)
+		}
+		if _, _, err := s.Delete(ctx, accessor.GetName(), deleteValidation, options.DeepCopy()); err != nil && !apierrors.IsNotFound(err) {
+			return err
+		}
+	}
+	return nil
 }
 
 // markForDeletion stamps deletionTimestamp so finalizers can run, retrying on a lost race. On
@@ -495,10 +589,16 @@ func (s *GenericStorage) Watch(ctx context.Context, options *metainternalversion
 			opts.FieldSelector = options.FieldSelector.String()
 		}
 		opts.ResourceVersion = options.ResourceVersion
+		opts.AllowWatchBookmarks = options.AllowWatchBookmarks
+		opts.SendInitialEvents = options.SendInitialEvents != nil && *options.SendInitialEvents
 	}
 
 	watcher, err := s.backend.Watch(ctx, s.config.Kind, namespace, opts)
 	if err != nil {
+		var tooLarge *storage.TooLargeResourceVersionError
+		if errors.As(err, &tooLarge) {
+			return errorWatcher(resourceVersionError(err)), nil
+		}
 		if errors.Is(err, storage.ErrInvalidRequest) {
 			return nil, apierrors.NewBadRequest(err.Error())
 		}
@@ -609,8 +709,8 @@ func setListItems(list runtime.Object, objects []runtime.Object, continueToken s
 	}
 	// listRV is the backend's store head revision: always at or above the purge
 	// floor, so the list→watch handoff never resumes below the floor, and set
-	// even for an empty kind so a watch can still resume. Zero means the store
-	// is empty (nothing ever written); leave the RV unset in that case.
+	// even for an empty kind so a watch can still resume. The PostgreSQL backend
+	// reports at least its head revision base; leave the RV unset on zero.
 	if listRV > 0 {
 		accessor.SetResourceVersion(strconv.FormatInt(listRV, 10))
 	}

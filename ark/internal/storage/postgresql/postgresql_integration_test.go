@@ -1104,7 +1104,8 @@ func TestWatchResumeDoesNotDropOutOfOrderCommit_Integration(t *testing.T) {
 
 	// Step 3: resume from seen-row's rv, exactly as a client that Listed here would.
 	w, err := backend.Watch(ctx, testKind, testNS, storage.WatchOptions{
-		ResourceVersion: strconv.FormatInt(rvSeen, 10),
+		ResourceVersion:     strconv.FormatInt(rvSeen, 10),
+		AllowWatchBookmarks: true,
 	})
 	if err != nil {
 		t.Fatalf("Watch failed: %v", err)

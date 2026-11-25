@@ -11,7 +11,7 @@ export default function NewWorkflowTemplatePage() {
   const nameParam = searchParams.get('name') ?? undefined;
   const titleParam = searchParams.get('title') ?? undefined;
   const descriptionParam = searchParams.get('description') ?? undefined;
-  const { canCreate, loading } = useWorkflowTemplateAccess();
+  const { canCreate, canRun, canDelete, loading } = useWorkflowTemplateAccess();
 
   if (loading) {
     return (
@@ -39,6 +39,8 @@ export default function NewWorkflowTemplatePage() {
         initialName={nameParam}
         initialTitle={titleParam}
         initialDescription={descriptionParam}
+        canRun={canRun}
+        canDelete={canDelete}
       />
     </div>
   );

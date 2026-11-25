@@ -31,6 +31,7 @@ interface ResourceStudioLayoutProps {
   yamlContent: ReactNode;
   formContent: ReactNode;
   chatPanel: ReactNode;
+  titleAdornment?: ReactNode;
 }
 
 /**
@@ -56,6 +57,7 @@ export function ResourceStudioLayout({
   yamlContent,
   formContent,
   chatPanel,
+  titleAdornment,
 }: Readonly<ResourceStudioLayoutProps>) {
   const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState(false);
   const returnHref = useListReturnHref(listHref);
@@ -100,9 +102,12 @@ export function ResourceStudioLayout({
           {!isLeftPanelCollapsed && (
             <div className="flex min-h-0 flex-1 flex-col">
               <div className="flex flex-none items-end justify-between gap-4 pb-4">
-                <h1 className="text-fg-primary text-xl leading-7">
-                  {displayName}
-                </h1>
+                <div className="flex items-center gap-1">
+                  <h1 className="text-fg-primary text-xl leading-7">
+                    {displayName}
+                  </h1>
+                  {titleAdornment}
+                </div>
                 {hasChanges && (
                   <div className="flex items-center gap-1">
                     <IconShell

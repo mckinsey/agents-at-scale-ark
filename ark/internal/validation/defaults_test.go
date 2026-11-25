@@ -3,20 +3,32 @@ package validation
 
 import (
 	"context"
+	"reflect"
+	"strings"
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/annotations"
+	"mckinsey.com/ark/internal/labels"
 )
 
-func TestDefaultAgent(t *testing.T) {
+//nolint:gocognit
+func TestDefaultAgentModelRef(t *testing.T) {
 	t.Run("sets default modelRef", func(t *testing.T) {
 		agent := &arkv1alpha1.Agent{ObjectMeta: metav1.ObjectMeta{Name: "a"}}
 		DefaultAgent(agent)
 		if agent.Spec.ModelRef == nil || agent.Spec.ModelRef.Name != "default" {
 			t.Fatal("expected default modelRef")
+		}
+	})
+
+	t.Run("marks an injected modelRef as defaulted", func(t *testing.T) {
+		agent := &arkv1alpha1.Agent{ObjectMeta: metav1.ObjectMeta{Name: "a"}}
+		DefaultAgent(agent)
+		if !HasDefaultedModelRef(agent) {
+			t.Fatal("expected the injected modelRef to be marked as defaulted")
 		}
 	})
 
@@ -29,6 +41,94 @@ func TestDefaultAgent(t *testing.T) {
 		DefaultAgent(agent)
 		if agent.Spec.ModelRef.Name != "custom" {
 			t.Fatal("should preserve existing modelRef")
+		}
+		if HasDefaultedModelRef(agent) {
+			t.Fatal("an explicit modelRef should not be marked as defaulted")
+		}
+	})
+
+	t.Run("does not mark an explicit default modelRef as defaulted", func(t *testing.T) {
+		agent := &arkv1alpha1.Agent{
+			Spec: arkv1alpha1.AgentSpec{
+				ModelRef: &arkv1alpha1.AgentModelRef{Name: "default"},
+			},
+		}
+		DefaultAgent(agent)
+		if HasDefaultedModelRef(agent) {
+			t.Fatal("a user-supplied 'default' modelRef should not be marked as defaulted")
+		}
+	})
+
+	t.Run("clears the marker when an explicit modelRef replaces the injected one", func(t *testing.T) {
+		agent := &arkv1alpha1.Agent{ObjectMeta: metav1.ObjectMeta{Name: "a"}}
+		DefaultAgent(agent)
+
+		agent.Spec.ModelRef = &arkv1alpha1.AgentModelRef{Name: "custom"}
+		DefaultAgent(agent)
+
+		if agent.Spec.ModelRef.Name != "custom" {
+			t.Fatal("should preserve the explicit modelRef")
+		}
+		if HasDefaultedModelRef(agent) {
+			t.Fatal("expected the defaulted marker to be cleared")
+		}
+	})
+
+	t.Run("skips default for execution engine agent", func(t *testing.T) {
+		agent := &arkv1alpha1.Agent{
+			ObjectMeta: metav1.ObjectMeta{Name: "a"},
+			Spec: arkv1alpha1.AgentSpec{
+				ExecutionEngine: &arkv1alpha1.ExecutionEngineRef{Name: "engine"},
+			},
+		}
+		DefaultAgent(agent)
+		if agent.Spec.ModelRef != nil {
+			t.Fatal("execution engine agent should not get default modelRef")
+		}
+	})
+
+	t.Run("removes the injected modelRef when an execution engine is added", func(t *testing.T) {
+		agent := &arkv1alpha1.Agent{ObjectMeta: metav1.ObjectMeta{Name: "a"}}
+		DefaultAgent(agent)
+
+		agent.Spec.ExecutionEngine = &arkv1alpha1.ExecutionEngineRef{Name: "engine"}
+		DefaultAgent(agent)
+
+		if agent.Spec.ModelRef != nil {
+			t.Fatal("expected the injected modelRef to be removed")
+		}
+		if HasDefaultedModelRef(agent) {
+			t.Fatal("expected the defaulted marker to be cleared")
+		}
+	})
+
+	t.Run("keeps an explicit modelRef set together with an execution engine", func(t *testing.T) {
+		agent := &arkv1alpha1.Agent{ObjectMeta: metav1.ObjectMeta{Name: "a"}}
+		DefaultAgent(agent)
+
+		agent.Spec.ExecutionEngine = &arkv1alpha1.ExecutionEngineRef{Name: "engine"}
+		agent.Spec.ModelRef = &arkv1alpha1.AgentModelRef{Name: "custom"}
+		DefaultAgent(agent)
+
+		if agent.Spec.ModelRef == nil || agent.Spec.ModelRef.Name != "custom" {
+			t.Fatal("should preserve the explicit modelRef")
+		}
+		if HasDefaultedModelRef(agent) {
+			t.Fatal("expected the defaulted marker to be cleared")
+		}
+	})
+
+	t.Run("keeps an explicit modelRef on an execution engine agent", func(t *testing.T) {
+		agent := &arkv1alpha1.Agent{
+			ObjectMeta: metav1.ObjectMeta{Name: "a"},
+			Spec: arkv1alpha1.AgentSpec{
+				ModelRef:        &arkv1alpha1.AgentModelRef{Name: "custom"},
+				ExecutionEngine: &arkv1alpha1.ExecutionEngineRef{Name: "engine"},
+			},
+		}
+		DefaultAgent(agent)
+		if agent.Spec.ModelRef == nil || agent.Spec.ModelRef.Name != "custom" {
+			t.Fatal("should preserve an explicit modelRef")
 		}
 	})
 
@@ -43,7 +143,9 @@ func TestDefaultAgent(t *testing.T) {
 			t.Fatal("a2a agent should not get default modelRef")
 		}
 	})
+}
 
+func TestDefaultAgent(t *testing.T) {
 	t.Run("adds custom tool deprecation warning", func(t *testing.T) {
 		agent := &arkv1alpha1.Agent{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-agent"},
@@ -184,8 +286,35 @@ func TestDefaultTeam(t *testing.T) {
 			t.Fatal("expected maxTurns to be nil")
 		}
 		key := annotations.MigrationWarningPrefix + "graph"
-		if team.Annotations[key] == "" {
+		warning := team.Annotations[key]
+		if warning == "" {
 			t.Fatal("expected migration warning annotation")
+		}
+		if !strings.Contains(warning, "Only the 'graph' strategy value will be removed") {
+			t.Fatalf("expected warning to scope removal to the strategy value, got %q", warning)
+		}
+	})
+
+	t.Run("keeps graph on selector teams", func(t *testing.T) {
+		maxTurns := 10
+		edges := []arkv1alpha1.TeamGraphEdge{{From: "a", To: "b"}}
+		team := &arkv1alpha1.Team{
+			ObjectMeta: metav1.ObjectMeta{Name: "t"},
+			Spec: arkv1alpha1.TeamSpec{
+				Strategy: "selector",
+				MaxTurns: &maxTurns,
+				Graph:    &arkv1alpha1.TeamGraphSpec{Edges: edges},
+			},
+		}
+		DefaultTeam(team)
+		if team.Spec.Strategy != "selector" {
+			t.Fatalf("expected strategy 'selector', got '%s'", team.Spec.Strategy)
+		}
+		if team.Spec.Graph == nil || !reflect.DeepEqual(team.Spec.Graph.Edges, edges) {
+			t.Fatalf("expected graph edges to be retained, got %+v", team.Spec.Graph)
+		}
+		if _, ok := team.Annotations[annotations.MigrationWarningPrefix+"graph"]; ok {
+			t.Fatal("expected no graph migration warning for selector teams")
 		}
 	})
 }
@@ -243,6 +372,64 @@ func TestDefaultQuery(t *testing.T) {
 		}
 		if query.Spec.TTL == nil {
 			t.Fatal("expected TTL to be populated from fallback")
+		}
+	})
+}
+
+func TestDefaultMCPServer(t *testing.T) {
+	newServer := func(name string, serverLabels map[string]string) *arkv1alpha1.MCPServer {
+		return &arkv1alpha1.MCPServer{ObjectMeta: metav1.ObjectMeta{Name: name, Labels: serverLabels}}
+	}
+
+	t.Run("adds the name label", func(t *testing.T) {
+		server := newServer("github", nil)
+		DefaultMCPServer(server)
+		if server.Labels[labels.NameLabel] != "github" {
+			t.Fatalf("expected name label github, got %v", server.Labels)
+		}
+	})
+
+	t.Run("replaces a name label copied from another server and keeps other labels", func(t *testing.T) {
+		server := newServer("echo", map[string]string{labels.NameLabel: "github", "team": "a"})
+		DefaultMCPServer(server)
+		if server.Labels[labels.NameLabel] != "echo" || server.Labels["team"] != "a" {
+			t.Fatalf("unexpected labels %v", server.Labels)
+		}
+	})
+
+	t.Run("accepts a 63 character name", func(t *testing.T) {
+		name := strings.Repeat("a", 63)
+		server := newServer(name, nil)
+		DefaultMCPServer(server)
+		if server.Labels[labels.NameLabel] != name {
+			t.Fatalf("expected the name label, got %v", server.Labels)
+		}
+	})
+
+	t.Run("removes the name label when the name cannot be a label value", func(t *testing.T) {
+		server := newServer(strings.Repeat("a", 64), map[string]string{labels.NameLabel: "github", "team": "a"})
+		DefaultMCPServer(server)
+		if _, ok := server.Labels[labels.NameLabel]; ok {
+			t.Fatalf("expected no name label, got %v", server.Labels)
+		}
+		if server.Labels["team"] != "a" {
+			t.Fatalf("expected other labels kept, got %v", server.Labels)
+		}
+	})
+
+	t.Run("leaves a server without a name alone", func(t *testing.T) {
+		server := newServer("", nil)
+		DefaultMCPServer(server)
+		if server.Labels != nil {
+			t.Fatalf("expected no labels, got %v", server.Labels)
+		}
+	})
+
+	t.Run("is applied through ApplyDefaults", func(t *testing.T) {
+		server := newServer("github", nil)
+		ApplyDefaults(context.Background(), server, nil)
+		if server.Labels[labels.NameLabel] != "github" {
+			t.Fatalf("expected name label from ApplyDefaults, got %v", server.Labels)
 		}
 	})
 }
