@@ -5,6 +5,14 @@ image:
   pullPolicy: IfNotPresent
   # tag defaults to .Chart.AppVersion if not specified
 
+# Image for the schema-migration hook Job. Built from Dockerfile.migrate
+# (golang-migrate) and ships the SQL migrations; applied before the runtime starts.
+migrate:
+  image:
+    repository: ghcr.io/mckinsey/agents-at-scale-ark/ark-controller-migrate
+    pullPolicy: IfNotPresent
+    # tag defaults to image.tag / .Chart.AppVersion if not specified
+
 serviceAccountName: ark-apiserver
 
 apiserver:
@@ -17,11 +25,11 @@ postgresql:
   user: ""
   passwordSecretName: ""
   passwordSecretKey: "password"
-  # Schema migrations run as a distinct pre-install/pre-upgrade hook Job with a
-  # privileged role so the runtime role above needs only DML + REPLICATION.
-  # Leave these empty to reuse the runtime credentials (requires that role to
-  # hold DDL/ownership privileges). Set them to a dedicated owner role for
-  # least-privilege operation.
+  # Schema migrations run as a distinct pre-install/pre-upgrade hook Job (the
+  # ark-controller-migrate / golang-migrate image) with a privileged role so the
+  # runtime role above needs only DML + REPLICATION. Leave these empty to reuse the
+  # runtime credentials (requires that role to hold DDL/ownership privileges). Set
+  # them to a dedicated owner role for least-privilege operation.
   migration:
     enabled: true
     user: ""

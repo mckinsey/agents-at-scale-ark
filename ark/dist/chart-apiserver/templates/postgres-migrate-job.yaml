@@ -26,10 +26,14 @@ spec:
         {{- end }}
       containers:
         - name: postgres-migrate
-          image: {{ include "ark-apiserver.image" . }}
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          image: {{ include "ark-apiserver.migrateImage" . }}
+          imagePullPolicy: {{ .Values.migrate.image.pullPolicy }}
           args:
-            - --role=postgres-migrate
+            - -path
+            - /migrations
+            - -database
+            - {{ include "ark-apiserver.postgresMigrateUrl" . | quote }}
+            - up
           env:
             {{- include "ark-apiserver.postgresMigrateEnv" . | nindent 12 }}
           {{- if .Values.postgresql.sslSecretName }}

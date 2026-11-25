@@ -25,8 +25,8 @@ The default etcd/CRD backend is not affected by any of this.
 
 ## Impact
 
-- **Code**: `ark/internal/storage/postgresql/postgresql.go` (`initSchema()` removed from runtime startup; version assertion added), new migration source (embedded migration files + runner), `ark/go.mod` (new migration library dependency).
-- **Dependencies**: adds a Go migration library (candidate: `pressly/goose`; evaluated in design). Existing stack is `jackc/pgx/v5` + `lib/pq` + `pglogrepl`.
+- **Code**: `ark/internal/storage/postgresql/postgresql.go` (`initSchema()` removed from runtime startup; version assertion added), golang-migrate `*.up.sql`/`*.down.sql` files, `ark/Dockerfile.migrate`.
+- **Dependencies**: no Go migration library added to the controller — migrations run via the `ark-controller-migrate` image (`FROM migrate/migrate`, golang-migrate), matching `ark-broker`. Existing stack is `jackc/pgx/v5` + `lib/pq` + `pglogrepl`.
 - **Deployment**: ark-controller Helm chart and `ark-storage-dev` chart — migration Job / init container, two DB roles (privileged migrator, least-privilege runtime), connection-string wiring.
 - **Operators**: upgrade runbook for the role split and rollback path; version-skew behavior during rolling upgrades.
 - **Tests**: migration apply/record/rollback, simulated rolling-upgrade skew, least-privilege runtime role, per-row storage-version migration without data loss; confirm the etcd backend is unaffected.

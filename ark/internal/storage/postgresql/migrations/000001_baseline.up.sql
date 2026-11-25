@@ -1,4 +1,3 @@
--- +goose Up
 CREATE TABLE IF NOT EXISTS resources (
 	id SERIAL PRIMARY KEY,
 	kind TEXT NOT NULL,
@@ -39,15 +38,8 @@ CREATE TABLE IF NOT EXISTS storage_metadata (
 DROP TRIGGER IF EXISTS resource_change_trigger ON resources;
 DROP FUNCTION IF EXISTS notify_resource_change();
 
--- +goose StatementBegin
 DO $$ BEGIN
 	IF NOT EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'ark_cdc') THEN
 		CREATE PUBLICATION ark_cdc FOR TABLE resources;
 	END IF;
 END $$;
--- +goose StatementEnd
-
--- +goose Down
-DROP PUBLICATION IF EXISTS ark_cdc;
-DROP TABLE IF EXISTS storage_metadata;
-DROP TABLE IF EXISTS resources;

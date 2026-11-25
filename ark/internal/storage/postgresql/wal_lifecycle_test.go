@@ -33,8 +33,8 @@ func TestAssertSchemaCompatible_CompatibleVersion(t *testing.T) {
 	}
 	defer func() { _ = db.Close() }()
 
-	mock.ExpectQuery("SELECT max\\(version_id\\) FROM goose_db_version").
-		WillReturnRows(sqlmock.NewRows([]string{"max"}).AddRow(expectedSchemaVersion))
+	mock.ExpectQuery("SELECT version, dirty FROM schema_migrations").
+		WillReturnRows(sqlmock.NewRows([]string{"version", "dirty"}).AddRow(expectedSchemaVersion, false))
 
 	if err := assertSchemaCompatible(context.Background(), db); err != nil {
 		t.Fatalf("assertSchemaCompatible: %v", err)
@@ -53,7 +53,7 @@ func TestAssertSchemaCompatible_Errors(t *testing.T) {
 		{
 			name: "missing version table",
 			expect: func(mock sqlmock.Sqlmock) {
-				mock.ExpectQuery("SELECT max\\(version_id\\) FROM goose_db_version").
+				mock.ExpectQuery("SELECT version, dirty FROM schema_migrations").
 					WillReturnError(&pq.Error{Code: undefinedTableCode})
 			},
 			wantUnmig: true,
@@ -61,16 +61,23 @@ func TestAssertSchemaCompatible_Errors(t *testing.T) {
 		{
 			name: "no rows recorded",
 			expect: func(mock sqlmock.Sqlmock) {
-				mock.ExpectQuery("SELECT max\\(version_id\\) FROM goose_db_version").
-					WillReturnRows(sqlmock.NewRows([]string{"max"}).AddRow(nil))
+				mock.ExpectQuery("SELECT version, dirty FROM schema_migrations").
+					WillReturnRows(sqlmock.NewRows([]string{"version", "dirty"}))
 			},
 			wantUnmig: true,
 		},
 		{
+			name: "dirty schema",
+			expect: func(mock sqlmock.Sqlmock) {
+				mock.ExpectQuery("SELECT version, dirty FROM schema_migrations").
+					WillReturnRows(sqlmock.NewRows([]string{"version", "dirty"}).AddRow(expectedSchemaVersion, true))
+			},
+		},
+		{
 			name: "database too old",
 			expect: func(mock sqlmock.Sqlmock) {
-				mock.ExpectQuery("SELECT max\\(version_id\\) FROM goose_db_version").
-					WillReturnRows(sqlmock.NewRows([]string{"max"}).AddRow(minCompatibleSchemaVersion - 1))
+				mock.ExpectQuery("SELECT version, dirty FROM schema_migrations").
+					WillReturnRows(sqlmock.NewRows([]string{"version", "dirty"}).AddRow(minCompatibleSchemaVersion-1, false))
 			},
 		},
 	}

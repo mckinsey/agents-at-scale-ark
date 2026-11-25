@@ -49,7 +49,7 @@ func TestSchemaVersionRecorded(t *testing.T) {
 
 	var version int64
 	if err := backend.db.QueryRowContext(context.Background(),
-		"SELECT max(version_id) FROM "+gooseVersionTable).Scan(&version); err != nil {
+		"SELECT version FROM "+schemaMigrationsTable+" LIMIT 1").Scan(&version); err != nil {
 		t.Fatalf("read schema version: %v", err)
 	}
 	if version != expectedSchemaVersion {

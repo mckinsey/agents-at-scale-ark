@@ -82,42 +82,36 @@ An external transaction-pooling layer in front of the query path is optional and
 
 ## Schema migrations
 
-The schema is managed by **versioned migrations**, not by DDL run at apiserver startup. A dedicated migration step applies them and records the applied version in a `goose_db_version` table; the runtime never executes DDL.
+The schema is managed by **versioned migrations** ([golang-migrate](https://github.com/golang-migrate/migrate)), not by DDL run at apiserver startup. A dedicated migration step applies them and records the applied version in a `schema_migrations` table; the runtime never executes DDL.
 
-- **When they run.** The chart ships a `pre-install`/`pre-upgrade` hook Job (`ark-apiserver-postgres-migrate`, `--role=postgres-migrate`) that runs with the privileged migration role before any apiserver pod starts. A failed migration fails the Helm release, so pods never start against an unmigrated schema.
-- **Adoption of existing databases.** The baseline migration is idempotent, so a database provisioned by an older build (schema present, no `goose_db_version` table) is adopted in place with no data loss and recorded at the baseline version; later migrations apply on top.
-- **Version-skew / rolling upgrades.** On startup each apiserver pod asserts the recorded schema version is within the range it supports and fails fast otherwise (an unmigrated or too-old database is rejected rather than silently created). Migrations are additive (expand/contract), so during a rollout a previous-release pod keeps serving against a database the migration step has already advanced.
-- **Rollback.** Prefer forward-fix. If you must revert, run the migration step with `--migrate-down-to=<version>` (see below), then redeploy the prior apiserver image. Destructive down steps are only defined where safe.
+- **When they run.** The chart ships a `pre-install`/`pre-upgrade` hook Job (`ark-apiserver-postgres-migrate`) that runs the `ark-controller-migrate` image with the privileged migration role before any apiserver pod starts. A failed migration fails the Helm release, so pods never start against an unmigrated schema.
+- **Adoption of existing databases.** The baseline migration is idempotent (`CREATE … IF NOT EXISTS`), so a database provisioned by an older build (schema present, no `schema_migrations` table) is adopted in place with no data loss and recorded at the baseline version; later migrations apply on top.
+- **Version-skew / rolling upgrades.** On startup each apiserver pod asserts the recorded schema version is within the range it supports and fails fast otherwise (an unmigrated, dirty, or too-old database is rejected rather than silently created). Migrations are additive (expand/contract), so during a rollout a previous-release pod keeps serving against a database the migration step has already advanced.
+- **Rollback.** Prefer forward-fix. If you must revert, run the migration step's `down`/`goto` command (see below), then redeploy the prior apiserver image. Destructive down steps are only defined where safe.
 
 ### Running migrations manually
 
 Under Helm the hook Job runs migrations automatically on every `install`/`upgrade`, so you normally do not run anything by hand. Run them manually when you apply migrations as a separate step (for example against a managed Postgres where DDL is gated), to re-run after a transient failure, or to roll back.
 
-The controller image is the migration tool: `--role=postgres-migrate` applies all pending migrations (add `--migrate-down-to=<version>` to roll back instead). It reads the connection from the same `ARK_POSTGRES_*` env vars as the apiserver — supply the **privileged migration role**, not the runtime role.
-
-Run the image directly against a reachable database. Use the same `<tag>` as the apiserver, and set `ARK_POSTGRES_SSL_MODE` (plus the TLS env vars) to match your deployment:
+The `ark-controller-migrate` image is the migration tool: it is the standard `migrate/migrate` CLI with the Ark migrations baked in at `/migrations`. Pass a `-database` URL for the **privileged migration role**, not the runtime role. Use the same `<tag>` as the apiserver, and set `sslmode` (plus any `sslrootcert`/`sslcert`/`sslkey` paths) in the URL to match your deployment:
 
 ```bash
 # Apply all pending migrations.
 kubectl -n ark-system run ark-migrate --rm -i --restart=Never \
-  --image=ghcr.io/mckinsey/agents-at-scale-ark/ark-controller:<tag> \
-  --env="ARK_POSTGRES_HOST=<host>" \
-  --env="ARK_POSTGRES_DATABASE=ark" \
-  --env="ARK_POSTGRES_USER=<migration-role>" \
-  --env="ARK_POSTGRES_PASSWORD=<password>" \
-  --env="ARK_POSTGRES_SSL_MODE=require" \
-  -- --role=postgres-migrate
+  --image=ghcr.io/mckinsey/agents-at-scale-ark/ark-controller-migrate:<tag> \
+  -- -path /migrations \
+  -database "postgres://<migration-role>:<password>@<host>:5432/ark?sslmode=require" up
 
-# Roll back to a specific version (e.g. 1) by appending the flag.
-#   -- --role=postgres-migrate --migrate-down-to=1
+# Roll back to a specific version (e.g. 1) by replacing the final argument:
+#   ... up      ->  goto 1
 ```
 
-The chart's hook Job (`ark-apiserver-postgres-migrate`) uses this same command with the migration-role credentials already wired. Because it is cleaned up after it succeeds (`hook-delete-policy: hook-succeeded`), clone it with `kubectl create job --from=job/ark-apiserver-postgres-migrate` only while a run is still present (for example a failed one you are retrying).
+The chart's hook Job (`ark-apiserver-postgres-migrate`) uses this same image with the migration-role credentials already wired. Because it is cleaned up after it succeeds (`hook-delete-policy: hook-succeeded`), clone it with `kubectl create job --from=job/ark-apiserver-postgres-migrate` only while a run is still present (for example a failed one you are retrying).
 
-The migration records its applied version in `goose_db_version`; check the current version with:
+The migration records its applied version in `schema_migrations`; check the current version with:
 
 ```sql
-SELECT max(version_id) FROM goose_db_version;
+SELECT version, dirty FROM schema_migrations;
 ```
 
 The migration step creates:

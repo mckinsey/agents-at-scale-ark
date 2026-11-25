@@ -407,6 +407,9 @@ jobs:
           - path: ark
             image: ark-controller
           - path: ark
+            image: ark-controller-migrate
+            dockerfile: Dockerfile.migrate
+          - path: ark
             image: ark-completions
             dockerfile: Dockerfile.completions
           - path: services/ark-api
@@ -478,6 +481,7 @@ jobs:
       matrix:
         image:
           - ark-controller
+          - ark-controller-migrate
           - ark-completions
           - ark-api
           - ark-dashboard

@@ -31,7 +31,7 @@ spec:
             - --role=postgres-cleanup
           env:
             {{- /* cleanup drops the publication (DDL/ownership), so it uses the privileged migration role */}}
-            {{- include "ark-apiserver.postgresMigrateEnv" . | nindent 12 }}
+            {{- include "ark-apiserver.postgresCleanupEnv" . | nindent 12 }}
           {{- if .Values.postgresql.sslSecretName }}
           volumeMounts:
             - name: postgres-tls
