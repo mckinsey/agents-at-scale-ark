@@ -1152,7 +1152,11 @@ class TestAPIKeyLastUsedCoalescing(unittest.IsolatedAsyncioTestCase):
         self.v1.patch_namespaced_secret.assert_awaited_once()
 
     async def test_cache_is_scoped_per_namespace(self):
-        other = APIKeyService(namespace="other-namespace")
+        with patch(
+            'ark_api.services.api_keys.get_context',
+            return_value={"namespace": "other-namespace", "cluster": "test"},
+        ):
+            other = APIKeyService()
 
         await self.service._update_last_used("api-key-test")
         await other._update_last_used("api-key-test")

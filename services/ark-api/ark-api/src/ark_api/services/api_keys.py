@@ -67,10 +67,6 @@ def _parse_utc_timestamp(value: Any) -> Optional[datetime]:
 
 class APIKeyService:
     """Service for managing API keys stored as Kubernetes secrets."""
-<<<<<<< Updated upstream
-    
-    def __init__(self):
-=======
 
     _last_used_cache: Dict[Tuple[str, str], datetime] = {}
 
@@ -78,8 +74,7 @@ class APIKeyService:
     def _reset_last_used_cache(cls) -> None:
         cls._last_used_cache.clear()
 
-    def __init__(self, namespace: Optional[str] = None):
->>>>>>> Stashed changes
+    def __init__(self):
         """Initialize API key service.
         
         API keys are always stored in the current context namespace for security.
