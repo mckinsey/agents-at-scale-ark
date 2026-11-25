@@ -14,6 +14,7 @@ from ...marketplace_install.errors import install_error
 from ...models.marketplace_installs import (
     CapabilityReason,
     MarketplaceInstallCapability,
+    MarketplaceInstallError,
     MarketplaceInstallList,
     MarketplaceInstallPreview,
     MarketplaceInstallPreviewRequest,
@@ -99,6 +100,7 @@ async def _build_preview(
     await gate.require_install(request, impersonation, namespace)
     await _require_namespace_ready(namespace)
     resolved = await catalog.resolve(namespace, source, item, impersonation)
+    await _require_absent(namespace, resolved)
     pulled, objects = await _render(resolved, namespace)
     rows = await preview.check_objects(namespace, objects)
     blocked = any(row.state != "free" for row in rows)
@@ -143,7 +145,7 @@ async def _build_preview(
     )
 
 
-@router.post("/{item}/preview", response_model=MarketplaceInstallPreview)
+@router.post("/{item}/preview", response_model=MarketplaceInstallPreview, responses={409: {"model": MarketplaceInstallError}})
 async def preview_marketplace_install(
     request: Request,
     body: MarketplaceInstallPreviewRequest,
@@ -163,6 +165,25 @@ async def preview_marketplace_install(
 
 def _installer_api(namespace: str):
     return get_impersonating_api_client(ImpersonationConfig(username=installer_username(namespace), groups=[]))
+
+
+async def _current_record(namespace: str, resolved: "catalog.ResolvedItem") -> MarketplaceInstallRecord:
+    async with _installer_api(namespace) as api:
+        record = state.record(await state.load(api, namespace, resolved.release))
+    record.source = record.source or resolved.source
+    record.itemName = record.itemName or resolved.item
+    return record
+
+
+async def _require_absent(namespace: str, resolved: "catalog.ResolvedItem") -> None:
+    record = await _current_record(namespace, resolved)
+    if record.state != "installable":
+        raise install_error(
+            409,
+            "already-installed",
+            f"Release {resolved.release} of marketplace item {resolved.item} is {record.state}",
+            record=record,
+        )
 
 
 @router.get("", response_model=MarketplaceInstallList)

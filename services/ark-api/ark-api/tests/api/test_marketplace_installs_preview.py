@@ -1,4 +1,5 @@
 import asyncio
+from contextlib import asynccontextmanager
 import os
 import tempfile
 import time
@@ -10,7 +11,8 @@ from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
 from src.ark_api.api.v1.marketplace_installs import router
-from src.ark_api.marketplace_install import catalog, helm, preview, preview_cache
+from src.ark_api.marketplace_install import catalog, helm, preview, preview_cache, state
+from src.ark_api.marketplace_install.releases import Revision
 from src.ark_api.marketplace_install.checks import ObjectRef
 from src.ark_api.marketplace_install.errors import install_error
 from src.ark_api.models.auth import UserIdentity
@@ -32,6 +34,8 @@ app.include_router(router, prefix="/v1")
 client = TestClient(app)
 
 URL = "/v1/namespaces/team-a/marketplace-installs/phoenix/preview"
+ROUTE = "src.ark_api.api.v1.marketplace_installs"
+STATE = "src.ark_api.marketplace_install.state"
 CAPABILITY = "src.ark_api.marketplace_install.capability"
 GATE = "src.ark_api.marketplace_install.gate"
 CATALOG = "src.ark_api.marketplace_install.catalog"
@@ -46,6 +50,11 @@ RESOLVED = catalog.ResolvedItem(source="official", item="phoenix", chart_ref=CHA
 CONFIG_MAP = ObjectRef("v1", "ConfigMap", "phoenix", "configmaps", True)
 
 
+@asynccontextmanager
+async def _no_api(namespace):
+    yield object()
+
+
 def _row(state="free", ref=CONFIG_MAP, **fields):
     return preview.Row(api_version="v1", kind="ConfigMap", name="phoenix", namespace=None, state=state, ref=ref, **fields)
 
@@ -56,6 +65,8 @@ class PreviewRouteTestCase(unittest.TestCase):
         self.addCleanup(preview_cache.clear)
         self.env = dict(OPEN)
         self.mocks = {
+            f"{ROUTE}._installer_api": _no_api,
+            f"{STATE}.load": AsyncMock(return_value=state.Observed("phoenix")),
             f"{CAPABILITY}.installer_enabled": AsyncMock(return_value=True),
             f"{CAPABILITY}.policy_in_place": AsyncMock(return_value=True),
             f"{GATE}.can_install": AsyncMock(return_value=True),
@@ -82,6 +93,43 @@ class PreviewRouteTestCase(unittest.TestCase):
     def assert_error(self, response, status, code):
         self.assertEqual(response.status_code, status, response.text)
         self.assertEqual(response.json()["detail"]["code"], code)
+
+
+def _job(conditions):
+    return {
+        "metadata": {"name": "marketplace-install-phoenix", "labels": {"ark.mckinsey.com/marketplace-install": "phoenix"}},
+        "spec": {"template": {"spec": {"serviceAccountName": "ark-marketplace-installer"}}},
+        "status": {"conditions": [{"type": t, "status": "True", "reason": r} for t, r in conditions]},
+    }
+
+
+class TestPreviewOfPresentItems(PreviewRouteTestCase):
+    def test_present_items_get_the_record(self):
+        cases = {
+            "installed": state.Observed("phoenix", None, [], Revision("phoenix", 1, "deployed", "s")),
+            "installing": state.Observed("phoenix", _job([]), [], None),
+            "failed": state.Observed("phoenix", _job([("Failed", "BackoffLimitExceeded")]), [], None),
+            "timed-out": state.Observed("phoenix", _job([("Failed", "DeadlineExceeded")]), [], None),
+            "platform-managed": state.Observed("phoenix", None, [], Revision("phoenix", 2, "deployed", "s")),
+        }
+        for expected, observed in cases.items():
+            with self.subTest(state=expected):
+                self.mocks[f"{STATE}.load"] = AsyncMock(return_value=observed)
+                self.mocks[f"{HELM}.pull"].reset_mock()
+                response = self.post()
+                self.assert_error(response, 409, "already-installed")
+                record = response.json()["detail"]["record"]
+                self.assertEqual((record["state"], record["release"], record["itemName"], record["source"]), (expected, "phoenix", "phoenix", "official"))
+                self.mock(f"{HELM}.pull").assert_not_awaited()
+                self.assertIsNone(preview_cache.get("team-a", "official", "phoenix", DIGEST))
+
+    def test_conflict_response_is_documented(self):
+        responses = app.openapi()["paths"][URL.replace("team-a", "{namespace}").replace("phoenix", "{item}")]["post"]["responses"]
+        self.assertTrue(responses["409"]["content"]["application/json"]["schema"]["$ref"].endswith("/MarketplaceInstallError"))
+
+    def test_state_is_read_for_the_catalogue_release(self):
+        self.post()
+        self.assertEqual(self.mock(f"{STATE}.load").await_args.args[1:], ("team-a", "phoenix"))
 
 
 class TestPreviewSuccess(PreviewRouteTestCase):
