@@ -4,9 +4,18 @@ package apiserver
 
 import (
 	"context"
+	"errors"
+	"os"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/rest"
+	k8stesting "k8s.io/client-go/testing"
 )
 
 func waitFor(t *testing.T, what string, ch <-chan struct{}) {
@@ -151,5 +160,243 @@ func TestWALLeader_SurvivesLeaseLossAndCampaignsAgain(t *testing.T) {
 	case <-done:
 	case <-time.After(5 * time.Second):
 		t.Fatal("WAL leader did not stop after context cancellation")
+	}
+}
+
+var fastLeaseTiming = leaseTiming{
+	leaseDuration: 2 * time.Second,
+	renewDeadline: time.Second,
+	retryPeriod:   100 * time.Millisecond,
+}
+
+func TestWALConsumer_WithoutElectionRunsConsumerDirectly(t *testing.T) {
+	t.Parallel()
+
+	started := make(chan struct{})
+	ready := make(chan struct{})
+	close(ready)
+	s := New(Config{})
+	w, err := s.WALConsumer()
+	if err != nil {
+		t.Fatalf("WALConsumer() error = %v", err)
+	}
+	w.ready = ready
+	w.run = func(ctx context.Context) {
+		close(started)
+		<-ctx.Done()
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- w.Start(ctx) }()
+	waitFor(t, "consumer to start without leader election", started)
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("WAL leader did not stop after context cancellation")
+	}
+}
+
+func TestWALConsumer_FailsWithoutNamespaceFile(t *testing.T) {
+	t.Parallel()
+
+	s := New(Config{WALLeaderElection: true, RestConfig: &rest.Config{Host: "http://127.0.0.1:1"}})
+	if _, err := s.WALConsumer(); err == nil {
+		t.Fatal("expected error when the service account namespace file is missing")
+	}
+}
+
+func TestReadLeaseNamespace(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	valid := filepath.Join(dir, "valid")
+	empty := filepath.Join(dir, "empty")
+	if err := os.WriteFile(valid, []byte("ark-system\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(empty, []byte("  \n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := readLeaseNamespace(valid)
+	if err != nil || got != "ark-system" {
+		t.Errorf("readLeaseNamespace(valid) = %q, %v; want ark-system, nil", got, err)
+	}
+	if _, err := readLeaseNamespace(empty); err == nil {
+		t.Error("readLeaseNamespace(empty) = nil error, want error")
+	}
+	if _, err := readLeaseNamespace(filepath.Join(dir, "missing")); err == nil {
+		t.Error("readLeaseNamespace(missing) = nil error, want error")
+	}
+}
+
+func TestNewLeaseCampaignFromConfig_RequiresRestConfig(t *testing.T) {
+	t.Parallel()
+
+	if _, err := newLeaseCampaignFromConfig(nil, ""); err == nil {
+		t.Fatal("expected error for nil rest config")
+	}
+}
+
+func TestLeaseCampaign_RunsConsumerWhileHoldingLeaseAndWaitsForItOnStop(t *testing.T) {
+	t.Parallel()
+
+	cs := fake.NewSimpleClientset()
+	campaign := newLeaseCampaign(cs, "ark-system", "pod-a", fastLeaseTiming)
+
+	leading := make(chan struct{})
+	var finished atomic.Bool
+	ctx, cancel := context.WithCancel(context.Background())
+	returned := make(chan struct{})
+	go func() {
+		defer close(returned)
+		campaign(ctx, func(leaderCtx context.Context) {
+			close(leading)
+			<-leaderCtx.Done()
+			time.Sleep(100 * time.Millisecond)
+			finished.Store(true)
+		})
+	}()
+
+	waitFor(t, "lease to be acquired", leading)
+	lease, err := cs.CoordinationV1().Leases("ark-system").Get(context.Background(), WALLeaseName, metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("get lease: %v", err)
+	}
+	if lease.Spec.HolderIdentity == nil || *lease.Spec.HolderIdentity != "pod-a" {
+		t.Errorf("lease holder = %v, want pod-a", lease.Spec.HolderIdentity)
+	}
+
+	cancel()
+	waitFor(t, "campaign to return", returned)
+	if !finished.Load() {
+		t.Error("campaign returned before the consumer finished stopping")
+	}
+}
+
+func TestLeaseCampaign_CancelsConsumerWhenRenewalFails(t *testing.T) {
+	t.Parallel()
+
+	cs := fake.NewSimpleClientset()
+	campaign := newLeaseCampaign(cs, "ark-system", "pod-a", fastLeaseTiming)
+
+	var failUpdates atomic.Bool
+	cs.PrependReactor("update", "leases", func(k8stesting.Action) (bool, runtime.Object, error) {
+		if failUpdates.Load() {
+			return true, nil, errors.New("apiserver unavailable")
+		}
+		return false, nil, nil
+	})
+
+	leading := make(chan struct{})
+	stopped := make(chan struct{})
+	returned := make(chan struct{})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		defer close(returned)
+		campaign(ctx, func(leaderCtx context.Context) {
+			close(leading)
+			<-leaderCtx.Done()
+			close(stopped)
+		})
+	}()
+
+	waitFor(t, "lease to be acquired", leading)
+	failUpdates.Store(true)
+	waitFor(t, "consumer to be cancelled after renewal failure", stopped)
+	waitFor(t, "campaign to return after lease loss", returned)
+	if ctx.Err() != nil {
+		t.Error("lease loss cancelled the parent context")
+	}
+}
+
+func TestLeaseCampaign_OnlyOneCandidateLeadsAtATime(t *testing.T) {
+	t.Parallel()
+
+	cs := fake.NewSimpleClientset()
+	var leaders, maxLeaders atomic.Int32
+	firstLeading := make(chan struct{}, 2)
+
+	run := func(identity string) (context.CancelFunc, <-chan struct{}) {
+		campaign := newLeaseCampaign(cs, "ark-system", identity, fastLeaseTiming)
+		ctx, cancel := context.WithCancel(context.Background())
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			campaign(ctx, func(leaderCtx context.Context) {
+				n := leaders.Add(1)
+				for {
+					m := maxLeaders.Load()
+					if n <= m || maxLeaders.CompareAndSwap(m, n) {
+						break
+					}
+				}
+				firstLeading <- struct{}{}
+				<-leaderCtx.Done()
+				leaders.Add(-1)
+			})
+		}()
+		return cancel, done
+	}
+
+	cancelA, doneA := run("pod-a")
+	cancelB, doneB := run("pod-b")
+
+	select {
+	case <-firstLeading:
+	case <-time.After(5 * time.Second):
+		t.Fatal("no candidate became leader")
+	}
+	time.Sleep(time.Second)
+	if got := maxLeaders.Load(); got != 1 {
+		t.Errorf("concurrent leaders = %d, want 1", got)
+	}
+
+	cancelA()
+	cancelB()
+	waitFor(t, "candidate A to stop", doneA)
+	waitFor(t, "candidate B to stop", doneB)
+}
+
+func TestNewLeaseCampaignFromConfig_BuildsCampaign(t *testing.T) {
+	t.Parallel()
+
+	nsFile := filepath.Join(t.TempDir(), "namespace")
+	if err := os.WriteFile(nsFile, []byte("ark-system"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	campaign, err := newLeaseCampaignFromConfig(&rest.Config{Host: "http://127.0.0.1:1"}, nsFile)
+	if err != nil {
+		t.Fatalf("newLeaseCampaignFromConfig() error = %v", err)
+	}
+	if campaign == nil {
+		t.Fatal("newLeaseCampaignFromConfig() returned a nil campaign")
+	}
+}
+
+func TestNewLeaseCampaignFromConfig_FailsWithoutNamespace(t *testing.T) {
+	t.Parallel()
+
+	_, err := newLeaseCampaignFromConfig(&rest.Config{Host: "http://127.0.0.1:1"}, filepath.Join(t.TempDir(), "missing"))
+	if err == nil {
+		t.Fatal("expected error when the namespace file is missing")
+	}
+}
+
+func TestLeaseCampaign_InvalidTimingNeverLeads(t *testing.T) {
+	t.Parallel()
+
+	campaign := newLeaseCampaign(fake.NewSimpleClientset(), "ark-system", "pod-a", leaseTiming{
+		leaseDuration: time.Second,
+		renewDeadline: 2 * time.Second,
+		retryPeriod:   100 * time.Millisecond,
+	})
+	var led atomic.Bool
+	campaign(context.Background(), func(context.Context) { led.Store(true) })
+	if led.Load() {
+		t.Error("campaign led despite an invalid lease timing configuration")
 	}
 }

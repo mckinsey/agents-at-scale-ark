@@ -76,7 +76,7 @@ func (s *Server) WALConsumer() (*walLeader, error) {
 		}
 		return w, nil
 	}
-	campaign, err := newLeaseCampaign(s.config.RestConfig)
+	campaign, err := newLeaseCampaignFromConfig(s.config.RestConfig, namespaceFilePath)
 	if err != nil {
 		return nil, err
 	}
@@ -84,11 +84,23 @@ func (s *Server) WALConsumer() (*walLeader, error) {
 	return w, nil
 }
 
-func newLeaseCampaign(restConfig *rest.Config) (campaignFunc, error) {
+type leaseTiming struct {
+	leaseDuration time.Duration
+	renewDeadline time.Duration
+	retryPeriod   time.Duration
+}
+
+var defaultLeaseTiming = leaseTiming{
+	leaseDuration: walLeaseDuration,
+	renewDeadline: walRenewDeadline,
+	retryPeriod:   walRetryPeriod,
+}
+
+func newLeaseCampaignFromConfig(restConfig *rest.Config, namespacePath string) (campaignFunc, error) {
 	if restConfig == nil {
 		return nil, fmt.Errorf("WAL leader election requires a rest config")
 	}
-	namespace, err := leaseNamespace()
+	namespace, err := readLeaseNamespace(namespacePath)
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +113,10 @@ func newLeaseCampaign(restConfig *rest.Config) (campaignFunc, error) {
 		return nil, fmt.Errorf("resolve hostname for WAL leader election: %w", err)
 	}
 	identity := hostname + "_" + string(uuid.NewUUID())
+	return newLeaseCampaign(clientset, namespace, identity, defaultLeaseTiming), nil
+}
 
+func newLeaseCampaign(clientset kubernetes.Interface, namespace, identity string, timing leaseTiming) campaignFunc {
 	return func(ctx context.Context, onLeading func(ctx context.Context)) {
 		lock, err := resourcelock.New(
 			resourcelock.LeasesResourceLock,
@@ -119,9 +134,9 @@ func newLeaseCampaign(restConfig *rest.Config) (campaignFunc, error) {
 		done := make(chan struct{})
 		elector, err := leaderelection.NewLeaderElector(leaderelection.LeaderElectionConfig{
 			Lock:          lock,
-			LeaseDuration: walLeaseDuration,
-			RenewDeadline: walRenewDeadline,
-			RetryPeriod:   walRetryPeriod,
+			LeaseDuration: timing.leaseDuration,
+			RenewDeadline: timing.renewDeadline,
+			RetryPeriod:   timing.retryPeriod,
 			Name:          WALLeaseName,
 			Callbacks: leaderelection.LeaderCallbacks{
 				OnStartedLeading: func(leaderCtx context.Context) {
@@ -140,17 +155,17 @@ func newLeaseCampaign(restConfig *rest.Config) (campaignFunc, error) {
 		if started.Load() {
 			<-done
 		}
-	}, nil
+	}
 }
 
-func leaseNamespace() (string, error) {
-	data, err := os.ReadFile(namespaceFilePath)
+func readLeaseNamespace(path string) (string, error) {
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return "", fmt.Errorf("read lease namespace: %w", err)
 	}
 	ns := strings.TrimSpace(string(data))
 	if ns == "" {
-		return "", fmt.Errorf("lease namespace file %s is empty", namespaceFilePath)
+		return "", fmt.Errorf("lease namespace file %s is empty", path)
 	}
 	return ns, nil
 }
