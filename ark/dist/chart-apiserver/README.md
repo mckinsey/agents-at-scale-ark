@@ -98,8 +98,7 @@ If you redeploy the apiserver later, it detects the existing slot on startup and
 
 ### Multi-replica behaviour
 
-The chart defaults to a single replica — note that an unavailable aggregated apiserver degrades kube-apiserver discovery and garbage collection cluster-wide, so for production run `replicas=2` with `podDisruptionBudget.enabled=true`.
-
+The chart defaults to two replicas, a PodDisruptionBudget (`minAvailable: 1`) and a `topologySpread` rule that prefers different nodes (`ScheduleAnyway`, so single-node clusters still schedule both pods). An unavailable aggregated apiserver degrades kube-apiserver discovery and garbage collection cluster-wide, so a single replica is a cluster-wide single point of failure. The PodDisruptionBudget is only rendered when `replicas` is greater than 1, so `replicas: 1` does not block `kubectl drain`.
 All replicas serve API traffic; only the leader (`Lease/ark-apiserver-leader`) runs the WAL consumer, since the replication slot admits a single connection (the slot's `active` flag is a backstop). Non-leader replicas do not touch the slot. Cross-replica watch delivery does not depend on the lease: every write emits a `pg_notify` after commit and every replica holds a `LISTEN` connection that wakes its watchers, so a watch served by any replica sees writes taken by any other typically well under a second; the periodic relist (~120s) remains as the backstop.
 
 ### Required PostgreSQL configuration

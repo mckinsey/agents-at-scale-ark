@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.0-rc.1](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.2.0-rc...v0.2.0-rc.1) (2026-11-23)
+
+
+### Bug Fixes
+
+* address CVEs from issue [#4024](https://github.com/mckinsey/agents-at-scale-ark/issues/4024) (parse5, tolerate pip XRAY-1172638) ([#4025](https://github.com/mckinsey/agents-at-scale-ark/issues/4025)) ([fbb7f3c](https://github.com/mckinsey/agents-at-scale-ark/commit/fbb7f3ca741a745cd72d78ffa41a134ed61c6020))
+* **ark-api:** accept the Memory CRD spec on POST and PUT /v1/memories ([#3861](https://github.com/mckinsey/agents-at-scale-ark/issues/3861)) ([0f93dbf](https://github.com/mckinsey/agents-at-scale-ark/commit/0f93dbfe4869ba608e09b0d0af625f1a38aa6042))
+* **ark-api:** reject an empty impersonation username ([#4021](https://github.com/mckinsey/agents-at-scale-ark/issues/4021)) ([e46ef3c](https://github.com/mckinsey/agents-at-scale-ark/commit/e46ef3c2dab8715c9f85bc80b323af3c676b4e54))
+* **ark-api:** report Kubernetes 409 Conflict as a concurrent modification ([#3944](https://github.com/mckinsey/agents-at-scale-ark/issues/3944)) ([46c353f](https://github.com/mckinsey/agents-at-scale-ark/commit/46c353fbab4cf1e423c63e583bc74908ebeb6e6c))
+* **dashboard:** keep chat sessions per namespace so a running query resumes where it was created ([#4018](https://github.com/mckinsey/agents-at-scale-ark/issues/4018)) ([2be32bb](https://github.com/mckinsey/agents-at-scale-ark/commit/2be32bbf40271c18ba1439e414a73f807837e918))
+* **dashboard:** remove the MCP credentials block from chat ([#3984](https://github.com/mckinsey/agents-at-scale-ark/issues/3984)) ([4aa66ea](https://github.com/mckinsey/agents-at-scale-ark/commit/4aa66eaae80748616a7e8a4d47ee230508ea5659))
+* resolve Xray violations for typebox and anyio ([#4020](https://github.com/mckinsey/agents-at-scale-ark/issues/4020)) ([bd9a9a9](https://github.com/mckinsey/agents-at-scale-ark/commit/bd9a9a9af565a5d7129283947e1e1ffae744f04a)), closes [#3994](https://github.com/mckinsey/agents-at-scale-ark/issues/3994)
+
 ## [0.2.0-rc](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.1.73...v0.2.0-rc) (2026-11-18)
 
 

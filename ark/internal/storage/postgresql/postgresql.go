@@ -255,12 +255,37 @@ func buildConnString(cfg Config) string {
 	return strings.Join(parts, " ")
 }
 
+const defaultMaxOpenConns = 40
+
+func poolSizes(cfg Config) (maxOpen, maxIdle int, err error) {
+	if cfg.MaxOpenConns < 0 {
+		return 0, 0, fmt.Errorf("invalid MaxOpenConns %d: must not be negative", cfg.MaxOpenConns)
+	}
+	if cfg.MaxIdleConns < 0 {
+		return 0, 0, fmt.Errorf("invalid MaxIdleConns %d: must not be negative", cfg.MaxIdleConns)
+	}
+	maxOpen = cfg.MaxOpenConns
+	if maxOpen == 0 {
+		maxOpen = defaultMaxOpenConns
+	}
+	maxIdle = cfg.MaxIdleConns
+	if maxIdle == 0 {
+		maxIdle = max(1, maxOpen/2)
+	}
+	return maxOpen, maxIdle, nil
+}
+
 func New(cfg Config, converter storage.TypeConverter) (*PostgreSQLBackend, error) {
 	if cfg.SSLMode == "" {
 		cfg.SSLMode = "require"
 	}
 	if cfg.Port == 0 {
 		cfg.Port = 5432
+	}
+
+	maxOpen, maxIdle, err := poolSizes(cfg)
+	if err != nil {
+		return nil, err
 	}
 
 	connStr := buildConnString(cfg)
@@ -270,14 +295,8 @@ func New(cfg Config, converter storage.TypeConverter) (*PostgreSQLBackend, error
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
-	if cfg.MaxOpenConns == 0 {
-		cfg.MaxOpenConns = 40
-	}
-	if cfg.MaxIdleConns == 0 {
-		cfg.MaxIdleConns = cfg.MaxOpenConns / 2
-	}
-	db.SetMaxOpenConns(cfg.MaxOpenConns)
-	db.SetMaxIdleConns(cfg.MaxIdleConns)
+	db.SetMaxOpenConns(maxOpen)
+	db.SetMaxIdleConns(maxIdle)
 	db.SetConnMaxLifetime(30 * time.Minute)
 	db.SetConnMaxIdleTime(5 * time.Minute)
 
@@ -1629,19 +1648,14 @@ func (w *postgresWatcher) relist() error {
 	defer func() { _ = rows.Close() }()
 
 	for rows.Next() {
-		var rv, generation int64
-		var ns, name, uid string
-		var spec, status, labels, annotations, finalizers, ownerRefs []byte
-		var createdAt time.Time
-		var deletedAt, deletionTimestamp sql.NullTime
-
-		if err := rows.Scan(&rv, &generation, &ns, &name, &uid, &spec, &status, &labels, &annotations, &finalizers, &ownerRefs, &createdAt, &deletedAt, &deletionTimestamp); err != nil {
+		r, err := scanChangeRow(rows)
+		if err != nil {
 			// Partial read: do NOT advance/prune, so the next relist re-reads
 			// the same window and nothing is permanently skipped.
 			watcherRelistFailures.WithLabelValues(w.kind).Inc()
 			return err
 		}
-		if !w.emitRow(rv, generation, ns, name, uid, spec, status, labels, annotations, finalizers, ownerRefs, createdAt, deletedAt, deletionTimestamp) {
+		if !w.emitRow(r.rv, r.generation, r.ns, r.name, r.uid, r.spec, r.status, r.labels, r.annotations, r.finalizers, r.ownerRefs, r.createdAt, r.deletedAt, r.deletionTimestamp) {
 			return nil // watcher shutting down, not a relist failure
 		}
 	}
