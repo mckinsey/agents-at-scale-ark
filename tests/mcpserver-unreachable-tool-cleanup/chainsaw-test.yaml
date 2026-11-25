@@ -1,0 +1,120 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: mcpserver-unreachable-tool-cleanup
+spec:
+  description: Tools of an MCPServer that becomes unreachable are removed and dependent Agents become unavailable
+  steps:
+  - name: setup-mock-llm
+    try:
+    - script:
+        timeout: 180s
+        content: |
+          bash ../shared/install-mock-llm.sh
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: delete-collection-is-served
+    try:
+    - script:
+        content: |
+          kubectl delete --raw "/apis/ark.mckinsey.com/v1alpha1/namespaces/$NAMESPACE/tools?labelSelector=mcp%2Fserver%3Dnone"
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: discover-tools
+    try:
+    - apply:
+        file: manifests/a01-mcpserver.yaml
+    - wait:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: MCPServer
+        name: cleanup-mcp
+        timeout: 2m
+        for:
+          condition:
+            name: Available
+            value: 'True'
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Tool
+          metadata:
+            name: cleanup-mcp-echo
+            labels:
+              mcp/server: cleanup-mcp
+    - apply:
+        file: manifests/a02-agent.yaml
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: cleanup-agent
+          status:
+            (conditions[?type == 'Available'] | [0].status): 'True'
+    catch:
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: MCPServer
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Agent
+
+  - name: unreachable-server-removes-tools
+    try:
+    - patch:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: MCPServer
+          metadata:
+            name: cleanup-mcp
+          spec:
+            address:
+              value: http://127.0.0.1:1/mcp
+              valueFrom: null
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: MCPServer
+          metadata:
+            name: cleanup-mcp
+          status:
+            (conditions[?type == 'Available'] | [0].reason): ClientCreationFailed
+            (toolCount || `0`): 0
+    - error:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Tool
+          metadata:
+            name: cleanup-mcp-echo
+    - assert:
+        resource:
+          apiVersion: ark.mckinsey.com/v1alpha1
+          kind: Agent
+          metadata:
+            name: cleanup-agent
+          status:
+            (conditions[?type == 'Available'] | [0].status): 'False'
+            (conditions[?type == 'Available'] | [0].reason): ToolNotFound
+    catch:
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: MCPServer
+    - describe:
+        apiVersion: ark.mckinsey.com/v1alpha1
+        kind: Tool
+    - podLogs:
+        namespace: ark-system
+        selector: app.kubernetes.io/name=ark-controller
+        tail: 100
+
+    cleanup:
+    - script:
+        content: |
+          helm uninstall mock-llm --namespace $NAMESPACE --wait --timeout=180s || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
