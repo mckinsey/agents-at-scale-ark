@@ -3,23 +3,28 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Path, Request
+from fastapi import APIRouter, Depends, Path, Query, Request
 
 from ark_sdk.impersonation import ImpersonationConfig
 
 from ...auth.dependencies import get_impersonation_config
-from ...marketplace_install import capability, catalog, gate, helm, preview, preview_cache
-from ...marketplace_install.constants import NAMESPACE_PATTERN
+from ...marketplace_install import capability, catalog, events, gate, helm, logs, preview, preview_cache, state
+from ...marketplace_install.constants import NAMESPACE_PATTERN, installer_username
 from ...marketplace_install.errors import install_error
 from ...models.marketplace_installs import (
     CapabilityReason,
     MarketplaceInstallCapability,
+    MarketplaceInstallList,
     MarketplaceInstallPreview,
     MarketplaceInstallPreviewRequest,
+    MarketplaceInstallRecord,
     MarketplaceInstallResource,
 )
+from .client_utils import get_impersonating_api_client
 
 ITEM_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._-]{0,252}$"
+SOURCE_PATTERN = r"^[-._a-zA-Z0-9]+$"
+LOG_STATES = {"installing", "failed", "timed-out"}
 PREVIEW_TIMEOUT_ENV = "MARKETPLACE_INSTALL_PREVIEW_TIMEOUT_SECONDS"
 DEFAULT_PREVIEW_TIMEOUT_SECONDS = 25.0
 HELM_ERROR_STATUS = {helm.CHART_UNAVAILABLE: 502, helm.RENDER_FAILED: 422}
@@ -154,3 +159,49 @@ async def preview_marketplace_install(
         raise install_error(
             504, "preview-timeout", f"The preview did not finish within {timeout:g} seconds"
         ) from None
+
+
+def _installer_api(namespace: str):
+    return get_impersonating_api_client(ImpersonationConfig(username=installer_username(namespace), groups=[]))
+
+
+@router.get("", response_model=MarketplaceInstallList)
+async def list_marketplace_installs(
+    request: Request,
+    namespace: str = Path(pattern=NAMESPACE_PATTERN),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
+) -> MarketplaceInstallList:
+    await gate.require_read(request, impersonation, namespace)
+    await _require_namespace_ready(namespace)
+    async with _installer_api(namespace) as api:
+        observed = await state.load_all(api, namespace)
+    return MarketplaceInstallList(items=[state.record(entry) for entry in observed])
+
+
+@router.get("/{item}", response_model=MarketplaceInstallRecord)
+async def get_marketplace_install(
+    request: Request,
+    namespace: str = Path(pattern=NAMESPACE_PATTERN),
+    item: str = Path(pattern=ITEM_PATTERN),
+    source: str = Query(min_length=1, max_length=253, pattern=SOURCE_PATTERN),
+    impersonation: Optional[ImpersonationConfig] = Depends(get_impersonation_config),
+) -> MarketplaceInstallRecord:
+    await gate.require_read(request, impersonation, namespace)
+    await _require_namespace_ready(namespace)
+    async with _installer_api(namespace) as api:
+        found = await state.item_job(api, namespace, source, item)
+        if found is None:
+            release = (await catalog.resolve(namespace, source, item, impersonation)).release
+        else:
+            release = found[0]
+        observed = await state.load(api, namespace, release)
+        record = state.record(observed)
+        record.source, record.itemName = source, item
+        record.events = await events.collect(api, namespace, release, observed.job)
+        if (
+            record.state in LOG_STATES
+            and observed.job is not None
+            and await gate.logs_visible(request, impersonation, namespace)
+        ):
+            record.log = await logs.job_log(api, namespace, observed.job)
+    return record

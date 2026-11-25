@@ -194,6 +194,13 @@ async def our_jobs(api, namespace: str) -> dict[str, dict]:
     return jobs
 
 
+async def item_job(api, namespace: str, source: str, item: str) -> Optional[tuple[str, dict]]:
+    for release, job in sorted((await our_jobs(api, namespace)).items()):
+        if _annotation(job, SOURCE_ANNOTATION) == source and _annotation(job, ITEM_ANNOTATION) == item:
+            return release, job
+    return None
+
+
 async def load_all(api, namespace: str) -> list[Observed]:
     jobs = await our_jobs(api, namespace)
     revisions = await releases.latest_all(api, namespace)
