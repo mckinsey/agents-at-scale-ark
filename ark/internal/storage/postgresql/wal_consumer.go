@@ -3,6 +3,7 @@
 package postgresql
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -46,7 +47,7 @@ func (s *walStreamState) ackLSN() pglogrepl.LSN {
 	return max(s.lastWriteLSN, s.serverWALEnd)
 }
 
-func (p *PostgreSQLBackend) handleWALMessage(conn *pgconn.PgConn, rawMsg pgproto3.BackendMessage, state *walStreamState) error {
+func (p *PostgreSQLBackend) handleWALMessage(ctx context.Context, conn *pgconn.PgConn, rawMsg pgproto3.BackendMessage, state *walStreamState) error {
 	if errMsg, ok := rawMsg.(*pgproto3.ErrorResponse); ok {
 		return fmt.Errorf("postgres error: %s %s", errMsg.Code, errMsg.Message)
 	}
@@ -66,7 +67,7 @@ func (p *PostgreSQLBackend) handleWALMessage(conn *pgconn.PgConn, rawMsg pgproto
 		}
 		state.serverWALEnd = msg.ServerWALEnd
 		if msg.ReplyRequested {
-			if err := p.sendStandbyStatus(conn, state.ackLSN()); err != nil {
+			if err := p.sendStandbyStatus(ctx, conn, state.ackLSN()); err != nil {
 				return fmt.Errorf("standby status reply: %w", err)
 			}
 			state.lastStatusUpdate = time.Now()

@@ -188,7 +188,7 @@ func TestHandleWALMessageUpdatesLastMessageTimestamp(t *testing.T) {
 
 	walLastMessageTimestamp.Set(0)
 	msg := &pgproto3.CopyData{Data: append([]byte{pglogrepl.PrimaryKeepaliveMessageByteID}, make([]byte, 17)...)}
-	if err := backend.handleWALMessage(nil, msg, state); err != nil {
+	if err := backend.handleWALMessage(context.Background(), nil, msg, state); err != nil {
 		t.Fatalf("handleWALMessage keepalive: %v", err)
 	}
 	if got := testutil.ToFloat64(walLastMessageTimestamp); got == 0 {
@@ -197,7 +197,7 @@ func TestHandleWALMessageUpdatesLastMessageTimestamp(t *testing.T) {
 
 	walLastMessageTimestamp.Set(0)
 	msg = &pgproto3.CopyData{Data: encodeXLogData(0x200, encodeInsertMessage(1, makeTuple("Agent", "default", "a")))}
-	if err := backend.handleWALMessage(nil, msg, state); err != nil {
+	if err := backend.handleWALMessage(context.Background(), nil, msg, state); err != nil {
 		t.Fatalf("handleWALMessage xlog: %v", err)
 	}
 	if got := testutil.ToFloat64(walLastMessageTimestamp); got == 0 {
@@ -211,7 +211,7 @@ func TestStartWALConsumerSetsActiveGauge(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		p.startWALConsumer()
+		p.startWALConsumer(ctx)
 		close(done)
 	}()
 

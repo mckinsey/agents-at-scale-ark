@@ -345,7 +345,7 @@ func New(cfg Config, converter storage.TypeConverter) (*PostgreSQLBackend, error
 // election). Repeated calls are no-ops.
 func (p *PostgreSQLBackend) StartWALConsumer() {
 	p.walOnce.Do(func() {
-		go p.startWALConsumer()
+		go p.startWALConsumer(p.ctx)
 		sampler := &slotLagSampler{interval: slotLagSampleInterval, query: p.querySlotLag}
 		go sampler.run(p.ctx)
 	})

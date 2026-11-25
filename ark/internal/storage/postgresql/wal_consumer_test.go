@@ -316,7 +316,7 @@ func TestHandleWALMessageErrorResponse(t *testing.T) {
 	state := &walStreamState{relations: make(map[uint32]*pglogrepl.RelationMessage)}
 
 	errMsg := &pgproto3.ErrorResponse{Code: "XX000", Message: "test error"}
-	err := backend.handleWALMessage(nil, errMsg, state)
+	err := backend.handleWALMessage(context.Background(), nil, errMsg, state)
 
 	if err == nil {
 		t.Fatal("expected error")
@@ -330,7 +330,7 @@ func TestHandleWALMessageNonCopyData(t *testing.T) {
 	backend, _ := newTestBackendWithBroadcasters()
 	state := &walStreamState{relations: make(map[uint32]*pglogrepl.RelationMessage)}
 
-	err := backend.handleWALMessage(nil, &pgproto3.NoticeResponse{}, state)
+	err := backend.handleWALMessage(context.Background(), nil, &pgproto3.NoticeResponse{}, state)
 	if err != nil {
 		t.Errorf("non-CopyData should return nil: %v", err)
 	}
@@ -343,7 +343,7 @@ func TestHandleWALMessageKeepaliveNoReply(t *testing.T) {
 	keepalive := encodePrimaryKeepalive(0, false)
 	msg := &pgproto3.CopyData{Data: keepalive}
 
-	err := backend.handleWALMessage(nil, msg, state)
+	err := backend.handleWALMessage(context.Background(), nil, msg, state)
 	if err != nil {
 		t.Errorf("keepalive without reply should not error: %v", err)
 	}
@@ -362,7 +362,7 @@ func TestHandleWALMessageXLogDataInsert(t *testing.T) {
 	xlogData := encodeXLogData(100, walData)
 	msg := &pgproto3.CopyData{Data: xlogData}
 
-	err := backend.handleWALMessage(nil, msg, state)
+	err := backend.handleWALMessage(context.Background(), nil, msg, state)
 	if err != nil {
 		t.Errorf("xlog insert should not error: %v", err)
 	}
@@ -396,7 +396,7 @@ func TestHandleWALMessageXLogDataRelation(t *testing.T) {
 	xlogData := encodeXLogData(200, walData)
 	msg := &pgproto3.CopyData{Data: xlogData}
 
-	err := backend.handleWALMessage(nil, msg, state)
+	err := backend.handleWALMessage(context.Background(), nil, msg, state)
 	if err != nil {
 		t.Errorf("xlog relation should not error: %v", err)
 	}
@@ -411,7 +411,7 @@ func TestHandleWALMessageInvalidKeepalive(t *testing.T) {
 	state := &walStreamState{relations: make(map[uint32]*pglogrepl.RelationMessage)}
 
 	msg := &pgproto3.CopyData{Data: []byte{pglogrepl.PrimaryKeepaliveMessageByteID, 0x01}}
-	err := backend.handleWALMessage(nil, msg, state)
+	err := backend.handleWALMessage(context.Background(), nil, msg, state)
 	if err != nil {
 		t.Errorf("invalid keepalive should log and return nil: %v", err)
 	}
@@ -422,7 +422,7 @@ func TestHandleWALMessageInvalidXLogData(t *testing.T) {
 	state := &walStreamState{relations: make(map[uint32]*pglogrepl.RelationMessage)}
 
 	msg := &pgproto3.CopyData{Data: []byte{pglogrepl.XLogDataByteID, 0x01}}
-	err := backend.handleWALMessage(nil, msg, state)
+	err := backend.handleWALMessage(context.Background(), nil, msg, state)
 	if err != nil {
 		t.Errorf("invalid xlog should log and return nil: %v", err)
 	}
