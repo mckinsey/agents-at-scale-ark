@@ -17,8 +17,6 @@ def _hex_id(seed: str, length: int) -> int:
 
 
 def trace_id_for(run: dict) -> int:
-    if run.get("trace_id"):
-        return int(run["trace_id"], 16)
     return _hex_id(f"argo-workflow:{run['uid']}", 32)
 
 
@@ -60,10 +58,7 @@ def is_exportable_node(node: dict) -> bool:
 
 def node_span(run: dict, node: dict) -> ReadableSpan:
     trace_id = trace_id_for(run)
-    if run.get("trace_id") and node.get("span_id"):
-        parent = _context(trace_id, int(node["span_id"], 16), remote=True)
-    else:
-        parent = _context(trace_id, root_span_id_for(run), remote=True)
+    parent = _context(trace_id, root_span_id_for(run), remote=True)
 
     attributes = {
         "session.id": session_id_for(run),
@@ -122,5 +117,5 @@ def root_span(run: dict) -> ReadableSpan:
     )
 
 
-def needs_root_span(run: dict) -> bool:
-    return not run.get("trace_id") and run.get("phase") in FINISHED_PHASES and bool(run.get("finished_at"))
+def is_finished_run(run: dict) -> bool:
+    return run.get("phase") in FINISHED_PHASES and bool(run.get("finished_at"))

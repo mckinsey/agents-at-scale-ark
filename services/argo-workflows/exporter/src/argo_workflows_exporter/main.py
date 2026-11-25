@@ -18,7 +18,7 @@ from .config import Config, load_config
 from .spans import (
     FINISHED_PHASES,
     is_exportable_node,
-    needs_root_span,
+    is_finished_run,
     node_span,
     root_span,
 )
@@ -128,14 +128,6 @@ def fetch_run(http: httpx.Client, config: Config, namespace: str, name: str) -> 
     return response.json()
 
 
-def without_argo_trace(run: dict) -> dict:
-    return {
-        **run,
-        "trace_id": None,
-        "nodes": [{**node, "trace_id": None, "span_id": None} for node in run["nodes"]],
-    }
-
-
 def export_workflow(
     http: httpx.Client,
     config: Config,
@@ -153,11 +145,9 @@ def export_workflow(
         return
 
     run = fetch_run(http, config, metadata["namespace"], metadata["name"])
-    if not config.argo_tracing_enabled:
-        run = without_argo_trace(run)
     nodes = [node for node in run["nodes"] if is_exportable_node(node) and node["id"] not in exported]
     spans = [node_span(run, node) for node in nodes]
-    send_root = finished and needs_root_span(run)
+    send_root = finished and is_finished_run(run)
     if send_root:
         spans.append(root_span(run))
     if spans:
@@ -167,7 +157,7 @@ def export_workflow(
             return
         logger.info(f"Exported {len(spans)} spans for workflow {metadata['namespace']}/{metadata['name']}")
     exported.update(node["id"] for node in nodes)
-    if finished and (send_root or not needs_root_span(run)):
+    if send_root:
         state.done.add(uid)
 
 

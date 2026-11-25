@@ -4,18 +4,15 @@ from opentelemetry.trace import StatusCode
 
 from argo_workflows_exporter.spans import (
     is_exportable_node,
-    needs_root_span,
+    is_finished_run,
     node_span,
     root_span,
     root_span_id_for,
     trace_id_for,
 )
 
-ARGO_TRACE = "4bf92f3577b34da6a3ce929d0e0e4736"
-ARGO_SPAN = "00f067aa0ba902b7"
 
-
-def run(trace_id=None, phase="Succeeded"):
+def run(phase="Succeeded"):
     return {
         "name": "wf",
         "namespace": "default",
@@ -23,12 +20,11 @@ def run(trace_id=None, phase="Succeeded"):
         "phase": phase,
         "started_at": "2026-11-18T10:00:00Z",
         "finished_at": "2026-11-18T10:01:00Z",
-        "trace_id": trace_id,
         "nodes": [],
     }
 
 
-def step(phase="Succeeded", span_id=ARGO_SPAN, message=None):
+def step(phase="Succeeded", message=None):
     return {
         "id": "wf-123",
         "name": "wf[0].ask",
@@ -42,28 +38,21 @@ def step(phase="Succeeded", span_id=ARGO_SPAN, message=None):
         "inputs": [{"name": "input", "value": "hello"}],
         "outputs": [{"name": "response", "value": "hi"}],
         "exit_code": "0",
-        "span_id": span_id,
         "log": {"excerpt": "line", "truncated": False, "source": "pod"},
     }
 
 
 class TestNodeSpan(unittest.TestCase):
-    def test_parents_on_argo_span_when_argo_tracing_is_on(self):
-        span = node_span(run(trace_id=ARGO_TRACE), step())
-
-        self.assertEqual(span.context.trace_id, int(ARGO_TRACE, 16))
-        self.assertEqual(span.parent.span_id, int(ARGO_SPAN, 16))
-        self.assertTrue(span.parent.is_remote)
-
-    def test_parents_on_own_root_when_argo_tracing_is_off(self):
+    def test_parents_on_the_workflow_root_span(self):
         r = run()
-        span = node_span(r, step(span_id=None))
+        span = node_span(r, step())
 
         self.assertEqual(span.context.trace_id, trace_id_for(r))
         self.assertEqual(span.parent.span_id, root_span_id_for(r))
+        self.assertTrue(span.parent.is_remote)
 
     def test_carries_session_inputs_outputs_log_and_timings(self):
-        span = node_span(run(trace_id=ARGO_TRACE), step())
+        span = node_span(run(), step())
 
         self.assertEqual(span.name, "argo.step.ask")
         self.assertEqual(span.attributes["session.id"], "wf-wf")
@@ -85,10 +74,10 @@ class TestNodeSpan(unittest.TestCase):
 
 
 class TestRootSpan(unittest.TestCase):
-    def test_only_needed_without_argo_trace_and_once_finished(self):
-        self.assertTrue(needs_root_span(run()))
-        self.assertFalse(needs_root_span(run(trace_id=ARGO_TRACE)))
-        self.assertFalse(needs_root_span({**run(phase="Running"), "finished_at": None}))
+    def test_sent_once_the_run_is_finished(self):
+        self.assertTrue(is_finished_run(run()))
+        self.assertFalse(is_finished_run({**run(phase="Running"), "finished_at": None}))
+        self.assertFalse(is_finished_run({**run(), "finished_at": None}))
 
     def test_root_span_has_no_parent(self):
         span = root_span(run())

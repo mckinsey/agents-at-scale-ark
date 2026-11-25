@@ -69,27 +69,14 @@ def parse_parameters():
 def hex_id(seed, length):
     return hashlib.sha256(seed.encode()).hexdigest()[:length]
 
-def argo_traceparent(node_id):
-    trace_id = os.environ.get("ARK_ARGO_TRACE_ID", "")
-    span_id = os.environ.get("ARK_ARGO_SPAN_ID", "")
-    if len(trace_id) == 32 and len(span_id) == 16:
-        return "00-" + trace_id + "-" + span_id + "-01"
-    workflow_uid = os.environ.get("ARK_ARGO_WORKFLOW_UID", "")
-    if workflow_uid and node_id:
-        trace_id = hex_id("argo-workflow:" + workflow_uid, 32)
-        span_id = hex_id("argo-node:" + workflow_uid + ":" + node_id, 16)
-        return "00-" + trace_id + "-" + span_id + "-01"
-    return ""
-
 def argo_annotations():
-    annotations = {}
+    workflow_uid = os.environ.get("ARK_ARGO_WORKFLOW_UID", "")
     node_id = os.environ.get("ARK_ARGO_NODE_ID", "")
-    if node_id:
-        annotations["ark.mckinsey.com/argo-node-id"] = node_id
-    traceparent = argo_traceparent(node_id)
-    if traceparent:
-        annotations["ark.mckinsey.com/traceparent"] = traceparent
-    return annotations
+    if not workflow_uid or not node_id:
+        return {}
+    trace_id = hex_id("argo-workflow:" + workflow_uid, 32)
+    span_id = hex_id("argo-node:" + workflow_uid + ":" + node_id, 16)
+    return {"ark.mckinsey.com/traceparent": "00-" + trace_id + "-" + span_id + "-01"}
 
 def main(): # NOSONAR - main function of a script.
     write_file("query", "{}")

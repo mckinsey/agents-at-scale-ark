@@ -82,8 +82,6 @@ spec:
               value: {{ .Values.exporter.lookbackSeconds | quote }}
             - name: LOG_LINES
               value: {{ .Values.exporter.logLines | quote }}
-            - name: ARGO_TRACING_ENABLED
-              value: {{ dig "tracing" "enabled" false .Values.AsMap | quote }}
             {{- with .Values.exporter.arkApiKeySecret }}
             - name: ARK_API_PUBLIC_KEY
               valueFrom:

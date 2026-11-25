@@ -30,7 +30,6 @@ def config(**overrides):
         "otel_secret_name": "otel-environment-variables",
         "default_traces_endpoint": "",
         "default_headers": "",
-        "argo_tracing_enabled": False,
     }
     values.update(overrides)
     return Config(**values)
@@ -47,7 +46,7 @@ def workflow(phase="Succeeded", node_phase="Succeeded", finished_at="2026-11-18T
     }
 
 
-def run_body(phase="Succeeded", node_phase="Succeeded", trace_id=None, span_id=None):
+def run_body(phase="Succeeded", node_phase="Succeeded"):
     return {
         "name": "wf",
         "namespace": "default",
@@ -55,7 +54,6 @@ def run_body(phase="Succeeded", node_phase="Succeeded", trace_id=None, span_id=N
         "phase": phase,
         "started_at": "2026-11-18T10:00:00Z",
         "finished_at": "2026-11-18T10:01:00Z" if phase == "Succeeded" else None,
-        "trace_id": trace_id,
         "nodes": [{
             "id": "wf-123",
             "name": "wf[0].ask",
@@ -65,8 +63,6 @@ def run_body(phase="Succeeded", node_phase="Succeeded", trace_id=None, span_id=N
             "finished_at": "2026-11-18T10:00:30Z" if node_phase == "Succeeded" else None,
             "inputs": [],
             "outputs": [],
-            "trace_id": trace_id,
-            "span_id": span_id,
         }],
     }
 
@@ -173,29 +169,31 @@ class TestRunOnce(unittest.TestCase):
         self.assertEqual(names, ["argo.step.wf-123", "argo.workflow.wf"])
         self.assertIn("uid-1", state.done)
 
-    def test_ignores_argo_trace_ids_when_argo_tracing_is_off(self):
+    def test_ignores_argo_trace_ids_on_the_run(self):
         exporter = Mock()
         exporter.export.return_value = SpanExportResult.SUCCESS
-        http = http_returning(run_body(trace_id="4bf92f3577b34da6a3ce929d0e0e4736", span_id="00f067aa0ba902b7"))
+        body = run_body()
+        body["trace_id"] = "4bf92f3577b34da6a3ce929d0e0e4736"
+        body["nodes"][0].update(trace_id="4bf92f3577b34da6a3ce929d0e0e4736", span_id="00f067aa0ba902b7")
 
-        run_once(config(), custom_listing(workflow()), destinations_with(exporter), http, State(), NOW)
+        run_once(config(), custom_listing(workflow()), destinations_with(exporter), http_returning(body), State(), NOW)
 
         step, root = exporter.export.call_args.args[0]
         self.assertEqual(root.name, "argo.workflow.wf")
         self.assertEqual(step.parent.span_id, root.context.span_id)
         self.assertNotEqual(step.context.trace_id, int("4bf92f3577b34da6a3ce929d0e0e4736", 16))
 
-    def test_parents_on_argo_span_when_argo_tracing_is_on(self):
+    def test_finished_workflow_waits_for_ark_api_to_report_the_finish(self):
         exporter = Mock()
         exporter.export.return_value = SpanExportResult.SUCCESS
         state = State()
-        http = http_returning(run_body(trace_id="4bf92f3577b34da6a3ce929d0e0e4736", span_id="00f067aa0ba902b7"))
+        body = {**run_body(), "finished_at": None}
 
-        run_once(config(argo_tracing_enabled=True), custom_listing(workflow()), destinations_with(exporter), http, state, NOW)
+        run_once(config(), custom_listing(workflow()), destinations_with(exporter), http_returning(body), state, NOW)
 
         (step,) = exporter.export.call_args.args[0]
-        self.assertEqual(step.parent.span_id, int("00f067aa0ba902b7", 16))
-        self.assertIn("uid-1", state.done)
+        self.assertEqual(step.name, "argo.step.wf-123")
+        self.assertNotIn("uid-1", state.done)
 
     def test_running_workflow_exports_finished_steps_without_root(self):
         exporter = Mock()

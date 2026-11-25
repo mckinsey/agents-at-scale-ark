@@ -14,7 +14,6 @@ class Config:
     otel_secret_name: str
     default_traces_endpoint: str
     default_headers: str
-    argo_tracing_enabled: bool
 
 
 def load_config() -> Config:
@@ -29,5 +28,4 @@ def load_config() -> Config:
         otel_secret_name=os.getenv("OTEL_SECRET_NAME", "otel-environment-variables"),
         default_traces_endpoint=os.getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", ""),
         default_headers=os.getenv("OTEL_EXPORTER_OTLP_TRACES_HEADERS", ""),
-        argo_tracing_enabled=os.getenv("ARGO_TRACING_ENABLED", "false").lower() == "true",
     )
