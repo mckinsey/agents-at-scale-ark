@@ -369,10 +369,9 @@ func (s *GenericStorage) Delete(ctx context.Context, name string, deleteValidati
 
 	sctx, cancel := storageContext(ctx)
 	defer cancel()
-	existing, err := s.backend.Get(sctx, s.config.Kind, namespace, name)
+	existing, err := s.readForDelete(sctx, namespace, name, start)
 	if err != nil {
-		metrics.RecordStorageOperation("delete", s.config.Kind, "not_found")
-		return nil, false, apierrors.NewNotFound(schema.GroupResource{Group: arkv1alpha1.GroupVersion.Group, Resource: s.config.Resource}, name)
+		return nil, false, err
 	}
 
 	if deleteValidation != nil {
@@ -429,6 +428,21 @@ func (s *GenericStorage) Delete(ctx context.Context, name string, deleteValidati
 	metrics.RecordStorageOperation("delete", s.config.Kind, "success")
 	metrics.RecordStorageLatency("delete", s.config.Kind, start)
 	return existing, true, nil
+}
+
+func (s *GenericStorage) readForDelete(sctx context.Context, namespace, name string, start time.Time) (runtime.Object, error) {
+	existing, err := s.backend.Get(sctx, s.config.Kind, namespace, name)
+	if err == nil {
+		return existing, nil
+	}
+	if !errors.Is(err, storage.ErrNotFound) {
+		outcome, apiErr := classifyStorageError(err, fmt.Errorf("failed to read %s for delete: %w", s.config.SingularName, err))
+		metrics.RecordStorageOperation("delete", s.config.Kind, outcome)
+		metrics.RecordStorageLatency("delete", s.config.Kind, start)
+		return nil, apiErr
+	}
+	metrics.RecordStorageOperation("delete", s.config.Kind, "not_found")
+	return nil, apierrors.NewNotFound(schema.GroupResource{Group: arkv1alpha1.GroupVersion.Group, Resource: s.config.Resource}, name)
 }
 
 func (s *GenericStorage) DeleteCollection(ctx context.Context, deleteValidation rest.ValidateObjectFunc, options *metav1.DeleteOptions, listOptions *metainternalversion.ListOptions) (runtime.Object, error) {

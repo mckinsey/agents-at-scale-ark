@@ -271,6 +271,20 @@ func TestGenericStorage_DeleteCollection_CancelledContext(t *testing.T) {
 	assertStrings(t, "stored objects", storedKeys(backend), []string{"Agent/default/t1"})
 }
 
+func TestGenericStorage_DeleteCollection_ReadFailureIsNotSkipped(t *testing.T) {
+	t.Parallel()
+	gs, backend := newTestStorage()
+	putAgent(backend, "default", "t1", nil)
+	putAgent(backend, "default", "t2", nil)
+	backend.getErr = map[string]error{"Agent/default/t1": errors.New("connection reset")}
+
+	_, err := gs.DeleteCollection(contextWithNamespace("default"), nil, nil, nil)
+	if err == nil || apierrors.IsNotFound(err) {
+		t.Fatalf("expected the read failure to surface, got %v", err)
+	}
+	assertStrings(t, "stored objects", storedKeys(backend), []string{"Agent/default/t1", "Agent/default/t2"})
+}
+
 func TestGenericStorage_DeleteCollection_RejectsDryRun(t *testing.T) {
 	t.Parallel()
 	gs, backend := newTestStorage()

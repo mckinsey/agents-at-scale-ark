@@ -34,6 +34,7 @@ type mockBackend struct {
 	requiredRV uint64
 	maxPage    int64
 	deleteErr  map[string]error
+	getErr     map[string]error
 }
 
 func newMockBackend() *mockBackend {
@@ -61,6 +62,9 @@ func (m *mockBackend) Get(ctx context.Context, kind, namespace, name string) (ru
 		return nil, m.err
 	}
 	key := m.key(kind, namespace, name)
+	if err := m.getErr[key]; err != nil {
+		return nil, err
+	}
 	obj, ok := m.objects[key]
 	if !ok {
 		// The sentinel, matching the PostgreSQL backend: callers distinguish a genuine
