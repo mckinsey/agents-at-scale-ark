@@ -339,16 +339,29 @@ func New(cfg Config, converter storage.TypeConverter) (*PostgreSQLBackend, error
 	return backend, nil
 }
 
-// StartWALConsumer starts the logical-replication consumer that drives the
-// watch stream. New never starts it: the slot is single-consumer, so the caller
-// decides when this replica may take it (the apiserver gates it behind leader
-// election). Repeated calls are no-ops.
 func (p *PostgreSQLBackend) StartWALConsumer() {
 	p.walOnce.Do(func() {
-		go p.startWALConsumer(p.ctx)
-		sampler := &slotLagSampler{interval: slotLagSampleInterval, query: p.querySlotLag}
-		go sampler.run(p.ctx)
+		go p.RunWALConsumer(p.ctx)
 	})
+}
+
+func (p *PostgreSQLBackend) RunWALConsumer(ctx context.Context) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	stop := context.AfterFunc(p.ctx, cancel)
+	defer stop()
+
+	sampler := &slotLagSampler{interval: slotLagSampleInterval, query: p.querySlotLag}
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		sampler.run(ctx)
+	}()
+
+	p.startWALConsumer(ctx)
+	cancel()
+	wg.Wait()
 }
 
 func (p *PostgreSQLBackend) warmPool() {
