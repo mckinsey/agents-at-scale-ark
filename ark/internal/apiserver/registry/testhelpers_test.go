@@ -7,11 +7,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	genericrequest "k8s.io/apiserver/pkg/endpoints/request"
@@ -29,6 +32,8 @@ type mockBackend struct {
 	err        error
 	requireErr error
 	requiredRV uint64
+	maxPage    int64
+	deleteErr  map[string]error
 }
 
 func newMockBackend() *mockBackend {
@@ -72,7 +77,36 @@ func (m *mockBackend) List(ctx context.Context, kind, namespace string, opts sto
 	if opts.FieldSelector != "" {
 		return nil, "", 0, fmt.Errorf("%w: field selector %q not yet implemented", storage.ErrInvalidRequest, opts.FieldSelector)
 	}
-	var result []runtime.Object
+	keys, listRV, err := m.matchingKeys(kind, namespace, opts)
+	if err != nil {
+		return nil, "", 0, err
+	}
+	sort.Strings(keys)
+	limit := opts.Limit
+	if m.maxPage > 0 && (limit == 0 || limit > m.maxPage) {
+		limit = m.maxPage
+	}
+	var continueToken string
+	if limit > 0 && int64(len(keys)) > limit {
+		keys = keys[:limit]
+		continueToken = keys[len(keys)-1]
+	}
+	result := make([]runtime.Object, 0, len(keys))
+	for _, key := range keys {
+		result = append(result, m.objects[key])
+	}
+	return result, continueToken, listRV, nil
+}
+
+func (m *mockBackend) matchingKeys(kind, namespace string, opts storage.ListOptions) ([]string, int64, error) {
+	selector := labels.Everything()
+	if opts.LabelSelector != "" {
+		parsed, err := labels.Parse(opts.LabelSelector)
+		if err != nil {
+			return nil, 0, fmt.Errorf("%w: %v", storage.ErrInvalidRequest, err)
+		}
+		selector = parsed
+	}
 	prefix := kind + "/"
 	if namespace != "" {
 		prefix = kind + "/" + namespace + "/"
@@ -80,17 +114,23 @@ func (m *mockBackend) List(ctx context.Context, kind, namespace string, opts sto
 	// listRV is the numeric max over stored objects: this in-memory fake has no
 	// purge floor, so the head revision is simply the highest item RV.
 	var listRV int64
+	var keys []string
 	for key, obj := range m.objects {
-		if len(key) >= len(prefix) && key[:len(prefix)] == prefix {
-			result = append(result, obj)
-			if objMeta, err := meta.Accessor(obj); err == nil {
-				if n, perr := strconv.ParseInt(objMeta.GetResourceVersion(), 10, 64); perr == nil && n > listRV {
-					listRV = n
-				}
-			}
+		if !strings.HasPrefix(key, prefix) {
+			continue
+		}
+		objMeta, err := meta.Accessor(obj)
+		if err != nil {
+			continue
+		}
+		if n, perr := strconv.ParseInt(objMeta.GetResourceVersion(), 10, 64); perr == nil && n > listRV {
+			listRV = n
+		}
+		if key > opts.Continue && selector.Matches(labels.Set(objMeta.GetLabels())) {
+			keys = append(keys, key)
 		}
 	}
-	return result, "", listRV, nil
+	return keys, listRV, nil
 }
 
 func (m *mockBackend) Update(ctx context.Context, kind, namespace, name string, obj runtime.Object) error {
@@ -114,6 +154,9 @@ func (m *mockBackend) Delete(ctx context.Context, kind, namespace, name string) 
 		return m.err
 	}
 	key := m.key(kind, namespace, name)
+	if err := m.deleteErr[key]; err != nil {
+		return err
+	}
 	if _, exists := m.objects[key]; !exists {
 		return errors.New("not found")
 	}
