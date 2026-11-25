@@ -1,0 +1,24 @@
+# Mock LLM with MCP enabled and a models endpoint for the Model probe
+terminationGracePeriodSeconds: 3
+ark:
+  mcp:
+    enabled: true
+
+config:
+  rules:
+  - path: "/v1/models"
+    method: "GET"
+    response:
+      status: 200
+      content: |
+        {
+          "object": "list",
+          "data": [
+            {
+              "id": "gpt-4.1-mini",
+              "object": "model",
+              "owned_by": "openai"
+            }
+          ]
+        }
+
