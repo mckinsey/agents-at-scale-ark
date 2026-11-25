@@ -40,19 +40,33 @@ The **messages**, **operation events**, and **sessions** stores can each opt in 
 
 ### Storage backend
 
-When using the default etcd-backed storage, scalability is bounded by the cluster's etcd capacity. For deployments with a high volume of resources, the [PostgreSQL storage backend](/operations-guide/postgres-storage-backend) provides more headroom. PostgreSQL connection pooling is configured with sensible defaults (max open connections, idle connection management, connection lifetime limits) and can be tuned for higher throughput.
+When using the default etcd-backed storage, scalability is bounded by the cluster's etcd capacity. For deployments with a high volume of resources, the [PostgreSQL storage backend](/operations-guide/postgres-storage-backend) provides more headroom. Each apiserver replica holds up to 40 query connections by default. Set `postgresql.maxOpenConns` in the chart to change it, and budget `maxOpenConns + 2` connections per replica against PostgreSQL `max_connections`. See [connection budget](/operations-guide/postgres-storage-backend) for sizing.
 
-The PostgreSQL backend's advantage grows with resource count — it is most pronounced on `LIST` operations. Benchmarks at 10,000 Ark resources:
+In load tests on a Kind cluster, a `LIST` of 2,000 objects of 10 KB took 1.68 s (P50) on PostgreSQL and 0.71 s on etcd. The aggregated apiserver has no watch cache, so every `LIST` reads all rows from PostgreSQL. That `LIST` had no `resourceVersion`; informers send `resourceVersion=0`, which is faster.
 
-| Operation | etcd | PostgreSQL |
-|-----------|------|------------|
-| LIST latency (P50) | 2,980ms | 1,504ms (~2x faster) |
-| LIST throughput | 6.1 ops/sec | 12.5 ops/sec (~2x higher) |
-| Create latency (P50) | 107ms | 106ms (comparable) |
-| Get latency (P50) | 103ms | 106ms (comparable) |
-| Watch latency (P50) | — | 73ms |
+Replicas share load only with aggregator routing (see [Replicas](#replicas)). With routing off, a second replica gets no watches, so it adds no re-reads and shares no load. With routing on, reads scale, but writes and watches get slower: on every change notification, each replica with watches re-reads the rows of that kind among the last 500 resource versions. `resource_version` is one sequence for all kinds, so the window is 500 versions overall, filtered by kind; with the single kind in this benchmark, the two are the same. The table was measured with routing on. Load: 20 updates per second, 10 watchers, 30 seconds.
 
-On PostgreSQL, production capacity is roughly ~230 ops/sec burst / ~180 ops/sec sustained, 200+ concurrent watchers at ~80ms P50, with optimal concurrency around 50–100 workers. See [Core Architecture → Storage backends](/reference/core-architecture#storage-backends) for the trade-off and [PostgreSQL Storage Backend](/operations-guide/postgres-storage-backend) for setup.
+| | 1 replica | 3 replicas |
+|---|---|---|
+| Rows re-read (10 KB objects) | 264,614 | 731,572 |
+| Update latency P50 (10 KB) | 10 ms | 39 ms |
+| Watch lag P50 (10 KB) | 27 ms | 80 ms |
+| Update latency P50 (100 KB) | 57 ms | 745 ms |
+| Watch lag P50 (100 KB) | 246 ms | 2.2 s |
+
+Change notifications run inside the write transaction and serialize commits on a PostgreSQL lock. With 32 concurrent clients, each inserting one row (pgbench), PostgreSQL did 4,948 commits per second without notifications and 298 with them. This limit applies to the PostgreSQL instance, whatever the replica count.
+
+These numbers come from a shared laptop. Compare the ratios, not the absolute values.
+
+#### Replicas
+
+Extra replicas share load only when requests reach them. kube-apiserver reaches the APIService through the Service ClusterIP over one HTTP/2 connection, and kube-proxy pins that connection to one pod. On Kind, with three replicas and a single kube-apiserver, one pod served 3,000 requests and the other two served none. With `--enable-aggregator-routing=true`, the split was 507, 515 and 478. With several kube-apiserver instances, each holds its own connection, so replicas can get load without the flag. Check requests per pod on your cluster instead of assuming. If one pod takes all the requests, extra replicas add availability, not capacity.
+
+#### Memory
+
+A `LIST` holds all rows in memory before encoding, so the peak is about four times the response size, for each concurrent unpaginated `LIST`. In a load test, a single unpaginated `LIST` of 2,000 Queries of 100 KB was OOM-killed at a 256Mi limit, and peaked at 790Mi with a 2Gi limit. The chart default limit is 1Gi. The same `LIST` paginated at 250 peaked at 207Mi at 256Mi with no OOM, because the limit reaches the SQL query. Two such unpaginated `LIST`s at once were OOM-killed at 1Gi. Paginate large `LIST`s, and size `resources.limits.memory` from about four times the response, times the number of concurrent unpaginated `LIST`s.
+
+See [Core Architecture → Storage backends](/reference/core-architecture#storage-backends) for the trade-off and [PostgreSQL Storage Backend](/operations-guide/postgres-storage-backend) for setup.
 
 ### Executors
 
@@ -109,13 +123,13 @@ For production planning, consider:
 
 ### Cluster-level capacity
 
-Ark does not ship PodDisruptionBudgets by default. Production deployments should add PDBs for the controller and API to ensure availability during node maintenance. See the [Kubernetes PDB documentation](https://kubernetes.io/docs/tasks/run-application/configure-pdb/) for guidance.
+The `ark-apiserver` chart ships a PodDisruptionBudget (`minAvailable: 1`) and two replicas by default. Other Ark components ship no PodDisruptionBudget by default. Production deployments should add PDBs for the controller and API to ensure availability during node maintenance. See the [Kubernetes PDB documentation](https://kubernetes.io/docs/tasks/run-application/configure-pdb/) for guidance.
 
 Node capacity should account for executor workloads, which are typically the most resource-intensive components. LLM-backed executors may require significant memory for request/response buffering, especially with long-context models.
 
 ### Scaling path
 
-1. **Start with defaults** — Deploy with the default Helm values and a single replica per service.
+1. **Start with defaults** — Deploy with the default Helm values: one replica per service, except the `ark-apiserver`, which runs two.
 2. **Monitor under load** — Use Prometheus metrics and pod resource usage to identify bottlenecks.
 3. **Scale horizontally** — Increase replica counts for the API, dashboard, and executors as needed.
 4. **Tune the controller** — Increase CPU and memory limits based on observed reconciliation load.
