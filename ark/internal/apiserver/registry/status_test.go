@@ -6,6 +6,8 @@ import (
 	"context"
 	"testing"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
@@ -92,6 +94,49 @@ func TestStatusStorage_Update(t *testing.T) {
 	}
 	if result == nil {
 		t.Error("expected non-nil result")
+	}
+}
+
+func TestStatusStorage_Update_StaleResourceVersionConflicts(t *testing.T) {
+	t.Parallel()
+	storage, backend := newTestStatusStorage()
+	ctx := contextWithNamespace(testNS())
+
+	agent := &arkv1alpha1.Agent{}
+	agent.Name = testAgentName
+	agent.Namespace = testNS()
+	agent.ResourceVersion = "7"
+	backend.objects["Agent/default/test-agent"] = agent
+
+	stale := agent.DeepCopy()
+	stale.ResourceVersion = "6"
+	stale.Status.Conditions = []metav1.Condition{{Type: "Ready", Status: metav1.ConditionTrue}}
+
+	_, _, err := storage.Update(ctx, testAgentName, &simpleUpdatedObjectInfo{obj: stale}, nil, nil, false, &metav1.UpdateOptions{})
+	if !apierrors.IsConflict(err) {
+		t.Fatalf("expected Conflict, got %v", err)
+	}
+	if len(agent.Status.Conditions) != 0 {
+		t.Errorf("stored status changed: %v", agent.Status.Conditions)
+	}
+}
+
+func TestStatusStorage_Update_MatchingResourceVersionSucceeds(t *testing.T) {
+	t.Parallel()
+	storage, backend := newTestStatusStorage()
+	ctx := contextWithNamespace(testNS())
+
+	agent := &arkv1alpha1.Agent{}
+	agent.Name = testAgentName
+	agent.Namespace = testNS()
+	agent.ResourceVersion = "7"
+	backend.objects["Agent/default/test-agent"] = agent
+
+	current := agent.DeepCopy()
+	current.Status.Conditions = []metav1.Condition{{Type: "Ready", Status: metav1.ConditionTrue}}
+
+	if _, _, err := storage.Update(ctx, testAgentName, &simpleUpdatedObjectInfo{obj: current}, nil, nil, false, &metav1.UpdateOptions{}); err != nil {
+		t.Fatalf("Update() error = %v", err)
 	}
 }
 
@@ -185,5 +230,46 @@ func TestCopyStatusOnly(t *testing.T) {
 	}
 	if dst.Name != "dst-agent" {
 		t.Errorf("name should not change, got '%s'", dst.Name)
+	}
+}
+
+func TestCopyStatusOnly_ClearsFieldsTheUpdateOmits(t *testing.T) {
+	t.Parallel()
+	src := &arkv1alpha1.MCPServer{}
+	src.Status.ToolCount = 0
+	src.Status.Conditions = []metav1.Condition{{Type: "Available", Status: metav1.ConditionFalse, Reason: "ClientCreationFailed"}}
+
+	dst := &arkv1alpha1.MCPServer{}
+	dst.Name = "server"
+	dst.Labels = map[string]string{"app": "test"}
+	dst.Spec.Transport = "http"
+	dst.Status.ToolCount = 2
+	dst.Status.Conditions = []metav1.Condition{{Type: "Available", Status: metav1.ConditionTrue, Reason: "ToolsDiscovered"}}
+
+	if err := copyStatusOnly(dst, src); err != nil {
+		t.Fatalf("copyStatusOnly() error = %v", err)
+	}
+
+	if dst.Status.ToolCount != 0 {
+		t.Errorf("toolCount = %d, want 0", dst.Status.ToolCount)
+	}
+	if len(dst.Status.Conditions) != 1 || dst.Status.Conditions[0].Reason != "ClientCreationFailed" {
+		t.Errorf("conditions = %v, want the update's conditions", dst.Status.Conditions)
+	}
+	if dst.Name != "server" || dst.Labels["app"] != "test" || dst.Spec.Transport != "http" {
+		t.Errorf("metadata or spec changed: %+v", dst.ObjectMeta)
+	}
+}
+
+func TestCopyStatusOnly_KeepsStatusWhenTheUpdateHasNone(t *testing.T) {
+	t.Parallel()
+	dst := &arkv1alpha1.MCPServer{}
+	dst.Status.ToolCount = 2
+
+	if err := copyStatusOnly(dst, &metav1.Status{}); err != nil {
+		t.Fatalf("copyStatusOnly() error = %v", err)
+	}
+	if dst.Status.ToolCount != 2 {
+		t.Errorf("toolCount = %d, want 2", dst.Status.ToolCount)
 	}
 }
