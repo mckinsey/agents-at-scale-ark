@@ -5,10 +5,9 @@ package apiserver
 import (
 	"context"
 	"errors"
-	"os"
-	"path/filepath"
 	"sync/atomic"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -210,24 +209,14 @@ func TestWALConsumer_FailsWithoutNamespaceFile(t *testing.T) {
 func TestReadLeaseNamespace(t *testing.T) {
 	t.Parallel()
 
-	dir := t.TempDir()
-	valid := filepath.Join(dir, "valid")
-	empty := filepath.Join(dir, "empty")
-	if err := os.WriteFile(valid, []byte("ark-system\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(empty, []byte("  \n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	got, err := readLeaseNamespace(valid)
+	got, err := readLeaseNamespace(fstest.MapFS{"namespace": {Data: []byte("ark-system\n")}})
 	if err != nil || got != "ark-system" {
 		t.Errorf("readLeaseNamespace(valid) = %q, %v; want ark-system, nil", got, err)
 	}
-	if _, err := readLeaseNamespace(empty); err == nil {
+	if _, err := readLeaseNamespace(fstest.MapFS{"namespace": {Data: []byte("  \n")}}); err == nil {
 		t.Error("readLeaseNamespace(empty) = nil error, want error")
 	}
-	if _, err := readLeaseNamespace(filepath.Join(dir, "missing")); err == nil {
+	if _, err := readLeaseNamespace(fstest.MapFS{}); err == nil {
 		t.Error("readLeaseNamespace(missing) = nil error, want error")
 	}
 }
@@ -235,7 +224,7 @@ func TestReadLeaseNamespace(t *testing.T) {
 func TestNewLeaseCampaignFromConfig_RequiresRestConfig(t *testing.T) {
 	t.Parallel()
 
-	if _, err := newLeaseCampaignFromConfig(nil, ""); err == nil {
+	if _, err := newLeaseCampaignFromConfig(nil, fstest.MapFS{}); err == nil {
 		t.Fatal("expected error for nil rest config")
 	}
 }
@@ -364,11 +353,8 @@ func TestLeaseCampaign_OnlyOneCandidateLeadsAtATime(t *testing.T) {
 func TestNewLeaseCampaignFromConfig_BuildsCampaign(t *testing.T) {
 	t.Parallel()
 
-	nsFile := filepath.Join(t.TempDir(), "namespace")
-	if err := os.WriteFile(nsFile, []byte("ark-system"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	campaign, err := newLeaseCampaignFromConfig(&rest.Config{Host: "http://127.0.0.1:1"}, nsFile)
+	secrets := fstest.MapFS{"namespace": {Data: []byte("ark-system")}}
+	campaign, err := newLeaseCampaignFromConfig(&rest.Config{Host: "http://127.0.0.1:1"}, secrets)
 	if err != nil {
 		t.Fatalf("newLeaseCampaignFromConfig() error = %v", err)
 	}
@@ -380,7 +366,7 @@ func TestNewLeaseCampaignFromConfig_BuildsCampaign(t *testing.T) {
 func TestNewLeaseCampaignFromConfig_FailsWithoutNamespace(t *testing.T) {
 	t.Parallel()
 
-	_, err := newLeaseCampaignFromConfig(&rest.Config{Host: "http://127.0.0.1:1"}, filepath.Join(t.TempDir(), "missing"))
+	_, err := newLeaseCampaignFromConfig(&rest.Config{Host: "http://127.0.0.1:1"}, fstest.MapFS{})
 	if err == nil {
 		t.Fatal("expected error when the namespace file is missing")
 	}

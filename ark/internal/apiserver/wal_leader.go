@@ -5,6 +5,7 @@ package apiserver
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"strings"
 	"sync/atomic"
@@ -23,7 +24,8 @@ const (
 	walLeaseDuration   = 15 * time.Second
 	walRenewDeadline   = 10 * time.Second
 	walRetryPeriod     = 2 * time.Second
-	namespaceFilePath  = "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
+	namespaceDir       = "/var/run/secrets/kubernetes.io/serviceaccount"
+	namespaceFileName  = "namespace"
 	walCampaignBackoff = time.Second
 )
 
@@ -76,7 +78,7 @@ func (s *Server) WALConsumer() (*walLeader, error) {
 		}
 		return w, nil
 	}
-	campaign, err := newLeaseCampaignFromConfig(s.config.RestConfig, namespaceFilePath)
+	campaign, err := newLeaseCampaignFromConfig(s.config.RestConfig, os.DirFS(namespaceDir))
 	if err != nil {
 		return nil, err
 	}
@@ -96,11 +98,11 @@ var defaultLeaseTiming = leaseTiming{
 	retryPeriod:   walRetryPeriod,
 }
 
-func newLeaseCampaignFromConfig(restConfig *rest.Config, namespacePath string) (campaignFunc, error) {
+func newLeaseCampaignFromConfig(restConfig *rest.Config, secrets fs.FS) (campaignFunc, error) {
 	if restConfig == nil {
 		return nil, fmt.Errorf("WAL leader election requires a rest config")
 	}
-	namespace, err := readLeaseNamespace(namespacePath)
+	namespace, err := readLeaseNamespace(secrets)
 	if err != nil {
 		return nil, err
 	}
@@ -158,14 +160,14 @@ func newLeaseCampaign(clientset kubernetes.Interface, namespace, identity string
 	}
 }
 
-func readLeaseNamespace(path string) (string, error) {
-	data, err := os.ReadFile(path)
+func readLeaseNamespace(secrets fs.FS) (string, error) {
+	data, err := fs.ReadFile(secrets, namespaceFileName)
 	if err != nil {
 		return "", fmt.Errorf("read lease namespace: %w", err)
 	}
 	ns := strings.TrimSpace(string(data))
 	if ns == "" {
-		return "", fmt.Errorf("lease namespace file %s is empty", path)
+		return "", fmt.Errorf("lease namespace file %s is empty", namespaceFileName)
 	}
 	return ns, nil
 }
