@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -73,6 +74,11 @@ func (s *StatusStorage) Update(ctx context.Context, name string, objInfo rest.Up
 		return nil, false, fmt.Errorf("failed to get updated object: %w", err)
 	}
 
+	if err := checkStatusResourceVersion(existing, updated, s.config.Resource, name); err != nil {
+		metrics.RecordStorageOperation("update_status", s.config.Kind, "conflict")
+		return nil, false, err
+	}
+
 	if err := copyStatusOnly(existing, updated); err != nil {
 		metrics.RecordStorageOperation("update_status", s.config.Kind, "error")
 		return nil, false, err
@@ -95,6 +101,23 @@ func (s *StatusStorage) Update(ctx context.Context, name string, objInfo rest.Up
 		return nil, false, apierrors.NewNotFound(schema.GroupResource{Group: arkv1alpha1.GroupVersion.Group, Resource: s.config.Resource}, name)
 	}
 	return result, false, nil
+}
+
+func checkStatusResourceVersion(existing, updated runtime.Object, resource, name string) error {
+	existingAccessor, err := meta.Accessor(existing)
+	if err != nil {
+		return fmt.Errorf("failed to access object metadata: %w", err)
+	}
+	updatedAccessor, err := meta.Accessor(updated)
+	if err != nil {
+		return fmt.Errorf("failed to access object metadata: %w", err)
+	}
+	rv := updatedAccessor.GetResourceVersion()
+	if rv == "" || rv == existingAccessor.GetResourceVersion() {
+		return nil
+	}
+	gr := schema.GroupResource{Group: arkv1alpha1.GroupVersion.Group, Resource: resource}
+	return apierrors.NewConflict(gr, name, fmt.Errorf("the object has been modified; please apply your changes to the latest version and try again"))
 }
 
 func copyStatusOnly(dst, src runtime.Object) error {
@@ -124,5 +147,10 @@ func copyStatusOnly(dst, src runtime.Object) error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal merged: %w", err)
 	}
+	target := reflect.ValueOf(dst)
+	if target.Kind() != reflect.Pointer || target.IsNil() {
+		return fmt.Errorf("destination must be a non-nil pointer, got %T", dst)
+	}
+	target.Elem().Set(reflect.Zero(target.Elem().Type()))
 	return json.Unmarshal(merged, dst)
 }
