@@ -19,7 +19,7 @@ app:
       memory: "256Mi"
       cpu: "250m"
     limits:
-      memory: "512Mi"
+      memory: "1Gi"
       cpu: "500m"
 
   # L2 FIX: Pod security context for hardening
@@ -132,6 +132,38 @@ app:
   #   - secretRef:
   #       name: azure-openai-secret
   #       optional: true
+
+# Number of replicas. Ignored when autoscaling is enabled. Extra PVCs are
+# ReadWriteOnce, so mounting one limits the Deployment to a single node.
+replicaCount: 1
+
+# HorizontalPodAutoscaler. When enabled, the Deployment omits replicas and the
+# HPA owns the count. Requires metrics-server in the cluster.
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  # Absolute per-pod CPU target. A pod saturates near the 500m limit, so 300m
+  # scales out before requests start queueing. Wins over the percentage target.
+  targetCPUAverageValue: 300m
+  # Percentage of requests.cpu. Used only when targetCPUAverageValue is empty.
+  targetCPUUtilizationPercentage: ""
+  # targetMemoryUtilizationPercentage: 80
+
+# PodDisruptionBudget. Rendered only when more than one replica is configured
+# (replicaCount, or autoscaling.minReplicas when autoscaling is enabled), so a
+# single replica never blocks node drains.
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# Spreads replicas across nodes. ScheduleAnyway keeps pods schedulable on
+# single-node clusters.
+topologySpread:
+  enabled: true
+  maxSkew: 1
+  topologyKey: kubernetes.io/hostname
+  whenUnsatisfiable: ScheduleAnyway
 
 # Service configuration
 service:
