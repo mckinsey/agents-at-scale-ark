@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.2.0-rc.2](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.2.0-rc.1...v0.2.0-rc.2) (2026-11-26)
+
+
+### Features
+
+* default to two replicas with PDB and topology spread ([#3952](https://github.com/mckinsey/agents-at-scale-ark/issues/3952)) ([00d2b00](https://github.com/mckinsey/agents-at-scale-ark/commit/00d2b00fa2870d0c5e50d672b5868ce4a748e5d7))
+* make postgres max open connections configurable ([#3983](https://github.com/mckinsey/agents-at-scale-ark/issues/3983)) ([d0c61e3](https://github.com/mckinsey/agents-at-scale-ark/commit/d0c61e30a706a13171d0a69be9a7276cad45fc88))
+
+
+### Bug Fixes
+
+* **apiserver:** support collection deletes and replace status on the PostgreSQL backend ([#4057](https://github.com/mckinsey/agents-at-scale-ark/issues/4057)) ([4fdd52a](https://github.com/mckinsey/agents-at-scale-ark/commit/4fdd52a473ccb73856116d448b53c8a6e26917d1))
+* **ark-cli:** stop ark-api port-forward before exit on failed approvals command ([#4017](https://github.com/mckinsey/agents-at-scale-ark/issues/4017)) ([8ac4b42](https://github.com/mckinsey/agents-at-scale-ark/commit/8ac4b420bb82d5631345b532ceb3e0099c4bb786))
+* bump axios to 1.21.1 in ark-sdk and ark-cli ([#4058](https://github.com/mckinsey/agents-at-scale-ark/issues/4058)) ([097228e](https://github.com/mckinsey/agents-at-scale-ark/commit/097228e125c043355b21b26abff2f353b1369067))
+* load full rows only for unseen resources during relist ([#4038](https://github.com/mckinsey/agents-at-scale-ark/issues/4038)) ([e69dc21](https://github.com/mckinsey/agents-at-scale-ark/commit/e69dc213647ec49ee7131288d8ab6ae76a6038f9))
+* scope graph deprecation notice to the strategy value ([#3717](https://github.com/mckinsey/agents-at-scale-ark/issues/3717)) ([9e98520](https://github.com/mckinsey/agents-at-scale-ark/commit/9e985202783983fd3e224b39730ed519af01b94c))
+* whitelist XRAY-1179009 ([#4077](https://github.com/mckinsey/agents-at-scale-ark/issues/4077)) ([12b3e7b](https://github.com/mckinsey/agents-at-scale-ark/commit/12b3e7be3cef6d39baa0342305c8a4b806596ebb))
+
+
+### Documentation
+
+* document apiserver replica and memory limits and fix benchmark numbers ([#3980](https://github.com/mckinsey/agents-at-scale-ark/issues/3980)) ([2c79528](https://github.com/mckinsey/agents-at-scale-ark/commit/2c795280cb8a132f01847972af26b7d6ef594a3c))
+
 ## [0.2.0-rc.1](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.2.0-rc...v0.2.0-rc.1) (2026-11-23)
 
 
