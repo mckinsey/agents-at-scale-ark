@@ -27,6 +27,7 @@ from ark_sdk.labels import (
     validate_tag,
     validate_updated_tags,
 )
+from ark_sdk.impersonation import encode_impersonation_header_value
 from ark_sdk.impersonation_patch import apply as _apply_impersonation_patch
 from ark_sdk.secret_scope import (
     SCOPE_LABEL,
@@ -225,9 +226,12 @@ def apply_impersonation_headers(api: ApiClient, impersonation: Optional['Imperso
     if impersonation:
         if not impersonation.username or not impersonation.username.strip():
             raise ValueError("Impersonation requires a non-empty username")
-        api.set_default_header("Impersonate-User", impersonation.username)
+        api.set_default_header("Impersonate-User", encode_impersonation_header_value(impersonation.username))
         if impersonation.groups:
-            api.set_default_header("Impersonate-Group", list(impersonation.groups))
+            api.set_default_header(
+                "Impersonate-Group",
+                [encode_impersonation_header_value(group) for group in impersonation.groups],
+            )
     return api
 
 
