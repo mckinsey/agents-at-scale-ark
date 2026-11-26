@@ -11,6 +11,7 @@ MODULES = [
     "src.ark_api.marketplace_install.helm",
     "src.ark_api.marketplace_install.job",
     "src.ark_api.marketplace_install.kube",
+    "src.ark_api.marketplace_install.lock",
     "src.ark_api.marketplace_install.logs",
     "src.ark_api.marketplace_install.preview",
     "src.ark_api.marketplace_install.preview_cache",

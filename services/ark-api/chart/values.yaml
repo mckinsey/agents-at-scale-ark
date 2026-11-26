@@ -105,6 +105,8 @@ app:
       value: "900"
     - name: MARKETPLACE_INSTALL_IMAGE_PULL_SECRETS
       value: ""
+    - name: MARKETPLACE_INSTALL_LOCK_STALE_SECONDS
+      value: "30"
     - name: API_KEY_RETENTION_SECONDS
       value: "7776000"
     - name: API_KEY_REAPER_INTERVAL_SECONDS
