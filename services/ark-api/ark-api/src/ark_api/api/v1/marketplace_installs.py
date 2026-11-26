@@ -63,12 +63,16 @@ async def get_marketplace_install_capability(
     return MarketplaceInstallCapability(enabled=reason is None, reason=reason)
 
 
-def _preview_timeout() -> float:
+def _seconds(name: str, default: float) -> float:
     try:
-        value = float(os.getenv(PREVIEW_TIMEOUT_ENV, ""))
+        value = float(os.getenv(name, ""))
     except ValueError:
-        return DEFAULT_PREVIEW_TIMEOUT_SECONDS
-    return value if value > 0 else DEFAULT_PREVIEW_TIMEOUT_SECONDS
+        return default
+    return value if value > 0 else default
+
+
+def _preview_timeout() -> float:
+    return _seconds(PREVIEW_TIMEOUT_ENV, DEFAULT_PREVIEW_TIMEOUT_SECONDS)
 
 
 async def _require_namespace_ready(namespace: str) -> None:
@@ -167,12 +171,16 @@ def _installer_api(namespace: str):
     return get_impersonating_api_client(ImpersonationConfig(username=installer_username(namespace), groups=[]))
 
 
-async def _current_record(namespace: str, resolved: "catalog.ResolvedItem") -> MarketplaceInstallRecord:
-    async with _installer_api(namespace) as api:
-        record = state.record(await state.load(api, namespace, resolved.release))
+async def _record_of(api, namespace: str, resolved: "catalog.ResolvedItem") -> MarketplaceInstallRecord:
+    record = state.record(await state.load(api, namespace, resolved.release))
     record.source = record.source or resolved.source
     record.itemName = record.itemName or resolved.item
     return record
+
+
+async def _current_record(namespace: str, resolved: "catalog.ResolvedItem") -> MarketplaceInstallRecord:
+    async with _installer_api(namespace) as api:
+        return await _record_of(api, namespace, resolved)
 
 
 async def _require_absent(namespace: str, resolved: "catalog.ResolvedItem") -> None:
