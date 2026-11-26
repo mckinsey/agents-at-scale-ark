@@ -36,12 +36,12 @@ The controller observes resources through the same K8s API path; it doesn't talk
 
 ## PostgreSQL requirements
 
-Each apiserver replica opens its own logical replication slot to drive its watch stream, so the database **must** allow logical replication and have a free slot and WAL sender per replica, plus one spare during a rolling update:
+Each apiserver replica opens its own logical replication slot to drive its watch stream, so the database **must** allow logical replication and have a free slot and WAL sender per replica, plus two spare. One covers a rolling update, where old and new replicas hold slots at the same time. The other covers a pod that died without closing its connection, whose slot stays active until Postgres notices (`wal_sender_timeout`, 60 s by default). If no slot is free, the replica keeps serving but its watches fall back to the ~120 second relist:
 
 ```
 wal_level             = logical
-max_replication_slots >= replicas + 1
-max_wal_senders       >= replicas + 1
+max_replication_slots >= replicas + 2
+max_wal_senders       >= replicas + 2
 ```
 
 ### Minimum version
@@ -100,7 +100,7 @@ SELECT slot_name, active,
 FROM pg_replication_slots WHERE slot_name LIKE 'ark\_cdc%';
 ```
 
-`retained` should stay small, and there should be one active slot per replica. A leftover `ark_cdc` row that is not active is the legacy slot and pins WAL until it is dropped; the apiserver does this itself once no older replica holds it, or run `SELECT pg_drop_replication_slot('ark_cdc');`. Setting `max_slot_wal_keep_size` caps the damage: Postgres invalidates the slot instead of filling the disk, and the replica opens a new slot on its next reconnect.
+`retained` should stay small, and there should be one active slot per replica. A leftover `ark_cdc` row that is not active is the legacy slot and pins WAL until it is dropped; the apiserver does this itself, checking every minute, once no older replica holds it. During a rolling update the previous leader keeps it active until its pod is gone. Or run `SELECT pg_drop_replication_slot('ark_cdc');`. Setting `max_slot_wal_keep_size` caps the damage: Postgres invalidates the slot instead of filling the disk, and the replica opens a new slot on its next reconnect.
 
 Upgrading an existing deployment creates any index the schema is missing on the next apiserver start. Each build holds a write lock on `resources` until it completes — under half a second for a table of 100k rows, proportionally longer for a larger one.
 
