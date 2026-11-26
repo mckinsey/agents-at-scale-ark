@@ -1349,7 +1349,8 @@ export interface paths {
         /** Get Marketplace Install */
         get: operations["get_marketplace_install_v1_namespaces__namespace__marketplace_installs__item__get"];
         put?: never;
-        post?: never;
+        /** Start Marketplace Install */
+        post: operations["start_marketplace_install_v1_namespaces__namespace__marketplace_installs__item__post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4360,6 +4361,13 @@ export interface components {
              * @enum {string}
              */
             state: "installable" | "installing" | "installed" | "failed" | "timed-out" | "platform-managed";
+        };
+        /** MarketplaceInstallRequest */
+        MarketplaceInstallRequest: {
+            /** Digest */
+            digest: string;
+            /** Source */
+            source: string;
         };
         /** MarketplaceInstallResource */
         MarketplaceInstallResource: {
@@ -8100,6 +8108,69 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_marketplace_install_v1_namespaces__namespace__marketplace_installs__item__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                namespace: string;
+                item: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarketplaceInstallRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketplaceInstallRecord"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketplaceInstallError"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketplaceInstallError"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketplaceInstallError"];
                 };
             };
         };
