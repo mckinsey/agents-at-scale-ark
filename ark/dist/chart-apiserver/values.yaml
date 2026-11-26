@@ -31,8 +31,8 @@ postgresql:
   # 65532 matches the image USER (distroless nonroot). If you set
   # containerSecurityContext.runAsGroup, fsGroup follows that value instead.
   sslFsGroup: 65532
-  # Size of the query connection pool, per replica. The WAL replication and LISTEN connections
-  # sit outside it, so budget (maxOpenConns + 2) x replicas against Postgres max_connections.
+  # Size of the query connection pool, per replica. The WAL replication connection
+  # sits outside it, so budget (maxOpenConns + 1) x replicas against Postgres max_connections.
   maxOpenConns: 40
 
 resources:

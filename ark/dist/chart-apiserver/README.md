@@ -76,30 +76,27 @@ Before wiring either mechanism the apiserver runs a `SelfSubjectAccessReview` fo
 
 `metrics.enabled=true` (default `false`) serves Prometheus metrics on `metrics.port` (default `8443`) and adds a `metrics` port to the Service (and to the NetworkPolicy when enabled). The endpoint exposes the Ark apiserver collectors (`ark_apiserver_storage_*`, `ark_apiserver_requests_*`, `ark_apiserver_admission_enforcement_active`), the watch broadcaster collectors (`ark_apiserver_watch_*`) and the PostgreSQL backend gauges:
 
-- `ark_apiserver_wal_consumer_active` — `1` on the replica running the WAL consumer; across a healthy deployment the sum is exactly `1`.
-- `ark_apiserver_wal_last_message_timestamp_seconds` — staleness means the consumer is wedged. `NaN` on replicas not running the consumer (including a leader that just lost the lease), so a `time() - ark_apiserver_wal_last_message_timestamp_seconds > 300` alert stays quiet on followers; if you scope it anyway, join on `ark_apiserver_wal_consumer_active == 1`.
-- `ark_apiserver_replication_slot_lag_bytes` — WAL pinned by the `ark_cdc` slot; a climbing value is the disk-filling condition described under "Replication slot lifecycle". Sampled every 30s on the leader; `NaN` elsewhere. The query reads `pg_replication_slots`, which works for the slot owner by default — a locked-down role needs `GRANT pg_monitor TO <role>`.
-- `ark_apiserver_notify_listener_connected` — `1` while the replica holds its `LISTEN ark_resource_change` connection. Every replica should read `1`; a `0` means that replica's watches have fallen back to the periodic relist. `ark_apiserver_notify_listener_reconnects_total` counts drops; `ark_apiserver_notify_received_total` counts nudges per kind.
+- `ark_apiserver_wal_consumer_active` — `1` while the replica streams WAL; across a healthy deployment the sum equals the replica count.
+- `ark_apiserver_wal_last_message_timestamp_seconds` — staleness means the stream is wedged. `NaN` on a replica that has not started streaming yet.
+- `ark_apiserver_replication_slot_lag_bytes` — WAL pinned by the replica's temporary slot; a climbing value is the disk-filling condition described under "Replication slot lifecycle". Sampled every 30s; `NaN` while the replica is not streaming. The query reads `pg_replication_slots`, which works for the slot owner by default — a locked-down role needs `GRANT pg_monitor TO <role>`.
 - `ark_apiserver_db_pool_*` — connection pool stats (`sql.DBStats`); `wait_count_total` rising means pool exhaustion.
 
 `metrics.secure=true` (default) serves HTTPS and requires a bearer token authorized via TokenReview/SubjectAccessReview; the RBAC is already covered by the `system:auth-delegator` binding. `metrics.serviceMonitor.enabled=true` renders a ServiceMonitor (requires the Prometheus Operator CRDs) scraping every `metrics.serviceMonitor.interval` (default `30s`).
 
 ### Replication slot lifecycle
 
-The apiserver creates a **persistent** logical replication slot named `ark_cdc` on the configured PostgreSQL database to drive its watch stream. The slot survives apiserver pod restarts, which is what lets watchers resume from the last confirmed WAL position rather than missing events from the restart gap.
+Every replica opens its own **temporary** logical replication slot, named `ark_cdc_<pod>_<random>`, to drive its watch stream. Postgres drops a temporary slot when the connection closes, so a stopped or crashed replica never leaves a slot behind and `helm uninstall` needs no manual cleanup. A replica that reconnects relists every kind, so no change is missed across the gap.
 
-Because the slot is persistent, **it is not removed by `helm uninstall`**. An orphaned slot will pin WAL retention on the postgres database indefinitely and can fill the disk. After uninstalling ark-apiserver, drop the slot manually:
+Earlier versions created a persistent slot named `ark_cdc`. The apiserver drops it on startup once no replica holds it. Until the last older replica is gone it stays active and is retried every minute. To drop it by hand:
 
 ```sql
 SELECT pg_drop_replication_slot('ark_cdc');
 ```
 
-If you redeploy the apiserver later, it detects the existing slot on startup and reuses it; if the slot was invalidated (`wal_status = 'lost'`, e.g. after `max_slot_wal_keep_size` was exceeded), it is dropped and recreated automatically.
-
 ### Multi-replica behaviour
 
 The chart defaults to two replicas, a PodDisruptionBudget (`minAvailable: 1`) and a `topologySpread` rule that prefers different nodes (`ScheduleAnyway`, so single-node clusters still schedule both pods). An unavailable aggregated apiserver degrades kube-apiserver discovery and garbage collection cluster-wide, so a single replica is a cluster-wide single point of failure. The PodDisruptionBudget is only rendered when `replicas` is greater than 1, so `replicas: 1` does not block `kubectl drain`.
-All replicas serve API traffic; only the leader (`Lease/ark-apiserver-leader`) runs the WAL consumer, since the replication slot admits a single connection (the slot's `active` flag is a backstop). Non-leader replicas do not touch the slot. Cross-replica watch delivery does not depend on the lease: every write emits a `pg_notify` after commit and every replica holds a `LISTEN` connection that wakes its watchers, so a watch served by any replica sees writes taken by any other typically well under a second; the periodic relist (~120s) remains as the backstop.
+All replicas serve API traffic and each one streams WAL through its own slot, so a watch served by any replica sees writes taken by any other typically well under a second. Writes do not call `pg_notify`. The periodic relist (~120s) remains as the backstop. No leader election is used.
 
 ### Required PostgreSQL configuration
 
@@ -107,8 +104,8 @@ The database must allow logical replication. Typical settings:
 
 ```
 wal_level = logical
-max_replication_slots >= 1
-max_wal_senders >= 1
+max_replication_slots >= replicas + 1
+max_wal_senders >= replicas + 1
 ```
 
-The `ark-storage-dev` Helm chart in this repo sets these for development; production deployments must verify them on the managed postgres service.
+The `ark-storage-dev` Helm chart in this repo sets these for development; production deployments must verify them on the managed postgres service. During a rolling update, old and new replicas hold slots at the same time, which is why the limits include one spare.

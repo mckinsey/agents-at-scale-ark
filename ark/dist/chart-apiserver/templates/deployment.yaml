@@ -48,7 +48,6 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args:
             - --role=apiserver
-            - --leader-elect
             - --metrics-bind-address={{ ternary (printf ":%d" (int .Values.metrics.port)) "0" .Values.metrics.enabled }}
             {{- if .Values.metrics.enabled }}
             - --metrics-secure={{ .Values.metrics.secure }}

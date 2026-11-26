@@ -6,14 +6,13 @@
 package postgresql
 
 import (
-	"context"
 	"fmt"
 	"testing"
 	"time"
 )
 
 // TestWALSlotAdvancesWhilePublicationIdle_Integration is the WAL-retention guard:
-// ark_cdc publishes only the resources table, but WAL is cluster-wide, so a consumer
+// the ark_cdc publication covers only the resources table, but WAL is cluster-wide, so a consumer
 // that acks only its own writes pins every segment produced by unrelated tables. The
 // slot must advance to the server's reported end position while ark itself is idle.
 func TestWALSlotAdvancesWhilePublicationIdle_Integration(t *testing.T) {
@@ -70,53 +69,13 @@ func TestWALSlotAdvancesWhilePublicationIdle_Integration(t *testing.T) {
 	}
 }
 
-// TestWALSlotResumesFromConfirmedPoint_Integration asserts a freshly started consumer
-// reports the slot's resume point instead of 0/0, so the very first status update
-// cannot look like a consumer that has processed nothing.
-func TestWALSlotResumesFromConfirmedPoint_Integration(t *testing.T) {
-	backend := newTestBackend(t)
-	defer backend.Close()
-
-	slotName := "ark_cdc_resume_test"
-	_, _ = backend.db.Exec("SELECT pg_drop_replication_slot($1)", slotName)
-	if _, err := backend.db.Exec(
-		"SELECT pg_create_logical_replication_slot($1, 'pgoutput')", slotName,
-	); err != nil {
-		t.Fatalf("create slot: %v", err)
-	}
-	defer func() { _, _ = backend.db.Exec("SELECT pg_drop_replication_slot($1)", slotName) }()
-
-	var confirmed string
-	if err := backend.db.QueryRow(
-		"SELECT confirmed_flush_lsn::text FROM pg_replication_slots WHERE slot_name = $1", slotName,
-	).Scan(&confirmed); err != nil {
-		t.Fatalf("read confirmed_flush_lsn: %v", err)
-	}
-
-	// The slot exists and is idle, so ensureReplicationSlot never needs the
-	// replication connection it would use to create one.
-	startLSN, resumeLSN, err := backend.ensureReplicationSlot(context.Background(), nil, slotName)
-	if err != nil {
-		t.Fatalf("ensureReplicationSlot: %v", err)
-	}
-	if startLSN != 0 {
-		t.Errorf("startLSN = %s, want 0/0 for an existing slot", startLSN)
-	}
-	if resumeLSN.String() != confirmed {
-		t.Errorf("resumeLSN = %s, want the slot's confirmed_flush_lsn %s", resumeLSN, confirmed)
-	}
-	if newWALStreamState(resumeLSN).ackLSN() != resumeLSN {
-		t.Error("fresh stream state does not ack the resume point")
-	}
-}
-
 func waitForSlot(t *testing.T, backend *PostgreSQLBackend) {
 	t.Helper()
 	deadline := time.Now().Add(30 * time.Second)
 	for {
 		var n int
 		if err := backend.db.QueryRow(
-			"SELECT count(*) FROM pg_replication_slots WHERE slot_name = $1 AND active", walSlotName,
+			"SELECT count(*) FROM pg_replication_slots WHERE slot_name = $1 AND active AND temporary", backend.currentSlotName(),
 		).Scan(&n); err != nil {
 			t.Fatalf("query pg_replication_slots: %v", err)
 		}
@@ -135,7 +94,7 @@ func slotPosition(t *testing.T, backend *PostgreSQLBackend) (confirmed, retained
 	if err := backend.db.QueryRow(`
 		SELECT confirmed_flush_lsn::text,
 		       pg_size_pretty(pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn))
-		FROM pg_replication_slots WHERE slot_name = $1`, walSlotName).Scan(&confirmed, &retained); err != nil {
+		FROM pg_replication_slots WHERE slot_name = $1`, backend.currentSlotName()).Scan(&confirmed, &retained); err != nil {
 		t.Fatalf("read slot position: %v", err)
 	}
 	return confirmed, retained

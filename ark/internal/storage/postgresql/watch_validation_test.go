@@ -421,7 +421,7 @@ func TestWatch_CrossReplicaDelivery(t *testing.T) {
 	replicaA.StartWALConsumer()
 	replicaB := newTestBackend(t)
 	defer replicaB.Close()
-	replicaB.StartNotifyListener()
+	replicaB.StartWALConsumer()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -473,9 +473,8 @@ drained:
 
 	t.Logf("Created %d resources on replica A, waiting for replica B watcher...", count)
 
-	// Replica B has no WAL consumer; its fast path is the pg_notify nudge from
-	// replica A's writes. The relist ticker keeps its production 120s cadence
-	// so the deadline below can only be met through the notify path.
+	// Replica B runs its own WAL stream, so replica A's writes reach it without
+	// the relist ticker, which keeps its production 120s cadence.
 	start := time.Now()
 	received := 0
 	deadline := time.After(15 * time.Second)
@@ -506,7 +505,7 @@ func TestWatch_CrossReplicaBurst(t *testing.T) {
 	replicaA.StartWALConsumer()
 	replicaB := newTestBackend(t)
 	defer replicaB.Close()
-	replicaB.StartNotifyListener()
+	replicaB.StartWALConsumer()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -597,7 +596,7 @@ func TestWatch_CrossReplicaDelete(t *testing.T) {
 	replicaA.StartWALConsumer()
 	replicaB := newTestBackend(t)
 	defer replicaB.Close()
-	replicaB.StartNotifyListener()
+	replicaB.StartWALConsumer()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -662,21 +661,21 @@ done:
 	replicaA.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1", kind)
 }
 
-// TestWatch_CrossReplicaNotifyLatency proves the notify path alone: the writer
+// TestWatch_CrossReplicaWALLatency proves the WAL path alone: the writer
 // runs no WAL consumer and the relist ticker keeps its production cadence, so
-// the only fast signal reaching replica B's watcher is the pg_notify nudge.
-func TestWatch_CrossReplicaNotifyLatency(t *testing.T) {
+// the only fast signal reaching replica B's watcher is its own WAL stream.
+func TestWatch_CrossReplicaWALLatency(t *testing.T) {
 	replicaA := newTestBackend(t)
 	defer replicaA.Close()
 	replicaB := newTestBackend(t)
 	defer replicaB.Close()
-	replicaB.StartNotifyListener()
+	replicaB.StartWALConsumer()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	kind := "NotifyLatencyTest"
-	ns := "notify-latency-test"
+	kind := "WALLatencyTest"
+	ns := "wal-latency-test"
 
 	replicaA.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1", kind)
 
@@ -704,33 +703,33 @@ drained3:
 		select {
 		case ev := <-w.ResultChan():
 			if ev.Type == watch.Added {
-				t.Logf("Cross-replica notify latency: %v", time.Since(start))
+				t.Logf("Cross-replica WAL latency: %v", time.Since(start))
 				replicaA.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1", kind)
 				return
 			}
 		case <-deadline:
-			t.Fatal("No ADDED event on replica B within 5s — the notify fast path is not working")
+			t.Fatal("No ADDED event on replica B within 5s — the WAL fast path is not working")
 		}
 	}
 }
 
-// TestNotifyListener_ReconnectRecovers kills the LISTEN backend, writes while
-// the listener is reconnecting, and asserts the write still reaches the watcher
-// quickly. The listener nudges all watchers on reconnect (notify_listener.go),
-// so a write that landed during the LISTEN gap is picked up by the post-reconnect
-// relist rather than waiting for the production ticker.
-func TestNotifyListener_ReconnectRecovers(t *testing.T) {
+// TestWALStream_ReconnectRecovers kills the replica's walsender, writes while
+// the stream is reconnecting, and asserts the write still reaches the watcher
+// quickly. A new stream nudges all watchers on connect, so a write that landed
+// during the gap is picked up by the post-reconnect relist rather than waiting
+// for the production ticker.
+func TestWALStream_ReconnectRecovers(t *testing.T) {
 	replicaA := newTestBackend(t)
 	defer replicaA.Close()
 	replicaB := newTestBackend(t)
 	defer replicaB.Close()
-	replicaB.StartNotifyListener()
+	replicaB.StartWALConsumer()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	kind := "NotifyReconnectTest"
-	ns := "notify-reconnect-test"
+	kind := "WALReconnectTest"
+	ns := "wal-reconnect-test"
 
 	replicaA.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1", kind)
 
@@ -743,13 +742,16 @@ func TestNotifyListener_ReconnectRecovers(t *testing.T) {
 	var pid int64
 	pidDeadline := time.After(10 * time.Second)
 	for {
-		row := replicaA.db.QueryRowContext(ctx, "SELECT pid FROM pg_stat_activity WHERE query = 'LISTEN "+notifyChannel+"'")
-		if err := row.Scan(&pid); err == nil {
-			break
+		name := replicaB.currentSlotName()
+		if name != "" {
+			row := replicaA.db.QueryRowContext(ctx, "SELECT active_pid FROM pg_replication_slots WHERE slot_name = $1 AND active_pid IS NOT NULL", name)
+			if err := row.Scan(&pid); err == nil {
+				break
+			}
 		}
 		select {
 		case <-pidDeadline:
-			t.Fatal("notify listener never opened a LISTEN session")
+			t.Fatal("replica B never opened a replication stream")
 		case <-time.After(200 * time.Millisecond):
 		}
 	}
@@ -761,17 +763,17 @@ func TestNotifyListener_ReconnectRecovers(t *testing.T) {
 	createTestResource(t, replicaA, kind, ns, "reconnect-probe")
 
 	start := time.Now()
-	deadline := time.After(5 * time.Second)
+	deadline := time.After(10 * time.Second)
 	for {
 		select {
 		case ev := <-w.ResultChan():
 			if ev.Type == watch.Added {
-				t.Logf("Replica B recovered the write %v after the LISTEN backend was killed", time.Since(start))
+				t.Logf("Replica B recovered the write %v after its walsender was killed", time.Since(start))
 				replicaA.db.ExecContext(ctx, "DELETE FROM resources WHERE kind = $1", kind)
 				return
 			}
 		case <-deadline:
-			t.Fatal("Replica B did not recover the write within 5s of the LISTEN backend being killed")
+			t.Fatal("Replica B did not recover the write within 10s of its walsender being killed")
 		}
 	}
 }

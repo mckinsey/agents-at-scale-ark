@@ -4,8 +4,12 @@ package postgresql
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"math"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/jackc/pglogrepl"
@@ -29,7 +33,7 @@ func (p *PostgreSQLBackend) startWALConsumer(ctx context.Context) {
 		default:
 		}
 
-		err := p.runWALConsumer(ctx, walSlotName)
+		err := p.runWALConsumer(ctx)
 		if ctx.Err() != nil {
 			return
 		}
@@ -44,7 +48,7 @@ func (p *PostgreSQLBackend) startWALConsumer(ctx context.Context) {
 	}
 }
 
-func (p *PostgreSQLBackend) runWALConsumer(ctx context.Context, slotName string) error {
+func (p *PostgreSQLBackend) runWALConsumer(ctx context.Context) error {
 	cfg, err := pgconn.ParseConfig(p.connStr)
 	if err != nil {
 		return fmt.Errorf("parse config: %w", err)
@@ -57,10 +61,15 @@ func (p *PostgreSQLBackend) runWALConsumer(ctx context.Context, slotName string)
 	}
 	defer func() { _ = conn.Close(ctx) }()
 
-	startLSN, resumeLSN, err := p.ensureReplicationSlot(ctx, conn, slotName)
+	hostname, _ := os.Hostname()
+	slotName := replicaSlotName(hostname)
+	startLSN, err := p.createTemporarySlot(ctx, conn, slotName)
 	if err != nil {
-		return fmt.Errorf("ensure slot: %w", err)
+		return err
 	}
+	p.slotName.Store(slotName)
+	defer p.slotName.Store("")
+	p.dropLegacySlot(ctx)
 
 	err = pglogrepl.StartReplication(ctx, conn, slotName, startLSN, pglogrepl.StartReplicationOptions{
 		PluginArgs: []string{
@@ -75,7 +84,7 @@ func (p *PostgreSQLBackend) runWALConsumer(ctx context.Context, slotName string)
 	klog.Infof("WAL consumer started from LSN %s", startLSN)
 	p.nudgeAllWatchers()
 
-	return p.streamWAL(ctx, conn, resumeLSN)
+	return p.streamWAL(ctx, conn, startLSN)
 }
 
 func (p *PostgreSQLBackend) streamWAL(ctx context.Context, conn *pgconn.PgConn, resumeLSN pglogrepl.LSN) error {
@@ -129,67 +138,66 @@ func (p *PostgreSQLBackend) receiveWALMessage(ctx context.Context, conn *pgconn.
 	return nil, fmt.Errorf("receive message: %w", err)
 }
 
-// ensureReplicationSlot guarantees a persistent logical replication slot named slotName
-// exists and returns the LSN to start replication from plus the slot's resume point,
-// which seeds the position the consumer acknowledges.
-//
-//   - If the slot doesn't exist: create it (Temporary: false) and return its consistent point.
-//   - If the slot exists and is invalidated (e.g. WAL was truncated past it): drop and recreate.
-//   - If the slot exists and is healthy: return LSN(0) as the start position, which signals
-//     the server to resume from the slot's confirmed_flush_lsn. This is what makes restarts
-//     lossless — every INSERT/UPDATE that committed while the consumer was down stays in the
-//     WAL until the slot's confirmed position advances past it.
-//
-// If the slot is currently active (held by another session), we return an error so the
-// caller's backoff loop retries; the active holder will eventually drop the connection.
-func (p *PostgreSQLBackend) ensureReplicationSlot(ctx context.Context, conn *pgconn.PgConn, slotName string) (pglogrepl.LSN, pglogrepl.LSN, error) {
-	var (
-		exists         bool
-		active         bool
-		walStatus      string
-		confirmedFlush string
-	)
-	err := p.db.QueryRowContext(ctx, `
-		SELECT true, active, COALESCE(wal_status, ''), COALESCE(confirmed_flush_lsn::text, '0/0')
-		FROM pg_replication_slots
-		WHERE slot_name = $1`, slotName).Scan(&exists, &active, &walStatus, &confirmedFlush)
-	if err != nil && err.Error() != "sql: no rows in result set" {
-		return 0, 0, fmt.Errorf("inspect replication slot: %w", err)
-	}
+const maxSlotNameLength = 63
 
-	// PG <17 reports invalidation via wal_status='lost'. PG17+ adds invalidation_reason
-	// but keeps wal_status, so this check works on both.
-	if exists && walStatus == "lost" {
-		klog.Warningf("Replication slot %s invalidated (wal_status=lost); dropping and recreating", slotName)
-		if _, dropErr := p.db.ExecContext(ctx, `SELECT pg_drop_replication_slot($1)`, slotName); dropErr != nil {
-			return 0, 0, fmt.Errorf("drop invalidated slot: %w", dropErr)
+func replicaSlotName(hostname string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(hostname) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('_')
 		}
-		exists = false
 	}
-
-	if exists {
-		if active {
-			return 0, 0, fmt.Errorf("replication slot %s is currently active in another session", slotName)
-		}
-		resumeLSN, err := pglogrepl.ParseLSN(confirmedFlush)
-		if err != nil {
-			return 0, 0, fmt.Errorf("parse confirmed_flush_lsn %q: %w", confirmedFlush, err)
-		}
-		klog.Infof("Reusing existing replication slot %s; resuming from confirmed_flush_lsn %s", slotName, resumeLSN)
-		return pglogrepl.LSN(0), resumeLSN, nil
+	suffix := make([]byte, 4)
+	_, _ = rand.Read(suffix)
+	tail := "_" + hex.EncodeToString(suffix)
+	prefix := walSlotName + "_"
+	host := b.String()
+	if room := maxSlotNameLength - len(prefix) - len(tail); len(host) > room {
+		host = host[:room]
 	}
+	return prefix + host + tail
+}
 
+func (p *PostgreSQLBackend) currentSlotName() string {
+	name, _ := p.slotName.Load().(string)
+	return name
+}
+
+// createTemporarySlot creates a replication slot that Postgres drops when the
+// connection closes, so a replica that dies never leaves a slot pinning WAL.
+// Notifications are only nudges and every new stream relists all kinds, so
+// nothing needs to survive a reconnect.
+func (p *PostgreSQLBackend) createTemporarySlot(ctx context.Context, conn *pgconn.PgConn, slotName string) (pglogrepl.LSN, error) {
 	res, err := pglogrepl.CreateReplicationSlot(ctx, conn, slotName, "pgoutput",
-		pglogrepl.CreateReplicationSlotOptions{Temporary: false})
+		pglogrepl.CreateReplicationSlotOptions{Temporary: true})
 	if err != nil {
-		return 0, 0, fmt.Errorf("create replication slot: %w", err)
+		return 0, fmt.Errorf("create replication slot: %w", err)
 	}
-	klog.Infof("Created persistent replication slot %s at %s", slotName, res.ConsistentPoint)
 	lsn, err := pglogrepl.ParseLSN(res.ConsistentPoint)
 	if err != nil {
-		return 0, 0, fmt.Errorf("parse LSN: %w", err)
+		return 0, fmt.Errorf("parse LSN: %w", err)
 	}
-	return lsn, lsn, nil
+	klog.Infof("Created temporary replication slot %s at %s", slotName, lsn)
+	return lsn, nil
+}
+
+// dropLegacySlot removes the persistent ark_cdc slot left by earlier versions.
+// With no consumer it would pin WAL until the disk fills. It is skipped while an
+// older replica still holds it active, and retried by the cleanup loop.
+func (p *PostgreSQLBackend) dropLegacySlot(ctx context.Context) {
+	res, err := p.db.ExecContext(ctx,
+		`SELECT pg_drop_replication_slot(slot_name) FROM pg_replication_slots WHERE slot_name = $1 AND NOT active`,
+		walSlotName)
+	if err != nil {
+		klog.Warningf("drop legacy replication slot %s: %v", walSlotName, err)
+		return
+	}
+	if n, _ := res.RowsAffected(); n > 0 {
+		klog.Infof("Dropped legacy replication slot %s", walSlotName)
+	}
 }
 
 func (p *PostgreSQLBackend) sendStandbyStatus(ctx context.Context, conn *pgconn.PgConn, lsn pglogrepl.LSN) error {
