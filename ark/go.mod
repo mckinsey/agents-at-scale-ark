@@ -15,7 +15,7 @@ require (
 	github.com/itchyny/gojq v0.12.19
 	github.com/jackc/pglogrepl v0.0.0-20251213150135-2e8d0df862c1
 	github.com/jackc/pgx/v5 v5.12.0
-	github.com/lib/pq v1.11.1
+	github.com/lib/pq v1.12.3
 	github.com/onsi/ginkgo/v2 v2.32.0
 	github.com/onsi/gomega v1.42.1
 	github.com/openai/openai-go v1.5.0
