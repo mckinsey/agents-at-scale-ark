@@ -5,6 +5,8 @@ package apiserver
 import (
 	"testing"
 
+	"k8s.io/apiserver/pkg/registry/rest"
+
 	"mckinsey.com/ark/internal/apiserver/registry"
 	"mckinsey.com/ark/internal/validation"
 )
@@ -23,6 +25,9 @@ func TestResourceStorage_WrapsEveryResourceAndItsStatus(t *testing.T) {
 			main, ok := got[res.Resource].(*AdmissionStorage)
 			if !ok {
 				t.Fatalf("%s: main storage is %T, want *AdmissionStorage", res.Resource, got[res.Resource])
+			}
+			if _, ok := got[res.Resource].(rest.CollectionDeleter); !ok {
+				t.Errorf("%s: main storage does not serve deletecollection", res.Resource)
 			}
 			if main.lookup != lookup {
 				t.Errorf("%s: admission storage lacks the ArkConfig lookup", res.Resource)
