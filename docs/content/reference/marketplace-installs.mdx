@@ -42,6 +42,7 @@ Installs need a user identity:
 | --- | --- | --- |
 | `GET` | `/api/v1/namespaces/{namespace}/marketplace-installs/capability` | Whether the current user can install in the namespace, and why not. |
 | `POST` | `/api/v1/namespaces/{namespace}/marketplace-installs/{item}/preview` | What installing an item would create, and whether anything blocks it. |
+| `POST` | `/api/v1/namespaces/{namespace}/marketplace-installs/{item}` | Start installing an item that was just previewed. |
 | `GET` | `/api/v1/namespaces/{namespace}/marketplace-installs` | The install state of every release in the namespace. |
 | `GET` | `/api/v1/namespaces/{namespace}/marketplace-installs/{item}?source=` | The install state of one item, with its events and log. |
 
@@ -134,6 +135,40 @@ The existence checks and dry runs run as the installer ServiceAccount. Objects i
 
 ark-api keeps the result in memory until `expiresAt`, keyed by namespace, source, item and digest. It stores only the identity of each object and the outcome, never the rendered manifest. The cache lives in the ark-api pod, so a restart clears it.
 
+### Install
+
+```json
+POST /api/v1/namespaces/team-a/marketplace-installs/phoenix
+{"source": "official", "digest": "sha256:…"}
+```
+
+`digest` is the one the preview returned. A request runs these steps within `MARKETPLACE_INSTALL_POST_TIMEOUT_SECONDS` (20 by default):
+
+1. The user check, and the installer ServiceAccount and admission policy checks, as for the preview.
+2. ark-api resolves the item from the catalogue again and reads its install state. An item that is already `installing` returns 202 with its record; any other state but `installable` returns `already-installed`.
+3. The preview must still be in memory for that namespace, source, item and digest, and its chart reference and release name must match the catalogue now. Otherwise the request fails with `preview-expired`, and the client has to run the preview again. A blocked preview fails with `preview-blocked`. Because the preview cache is not tied to a user, this is why step 1 runs again: a preview someone else made does not let you install.
+4. ark-api takes the install lock of the namespace, a Lease named `marketplace-install-lock` that it creates with its own ServiceAccount. Only one install runs per namespace: while another item's Job runs, or its Lease is younger than `MARKETPLACE_INSTALL_LOCK_STALE_SECONDS` and has no Job yet, the request fails with `another-install-active` and names that release.
+5. It deletes a completed install Job of the item whose release is gone, and checks that none of the previewed objects has appeared since the preview (`conflicts-changed`).
+6. It creates the install Job as the installer ServiceAccount and records a `MarketplaceInstallStarted` event on it.
+
+The response is 202 with the install record. When the time limit passes the response is 503 `busy`, which does not mean nothing started: the Job may have been created, and the install state shows it.
+
+The Job runs the ark-api image as the installer ServiceAccount, with a read-only root filesystem and a restricted security context:
+
+```bash
+timeout -k 10 --signal=TERM 660 helm install <release> <chartRef>@<digest> --namespace <namespace> --wait --timeout 600s --skip-crds [--plain-http] [--description installed-by=<user>]
+```
+
+`--plain-http` is added for registries listed in `MARKETPLACE_INSTALL_PLAIN_HTTP_REGISTRIES`, and `--description` names the signed-in user (not in open mode). The chart is installed by digest, so it is the one the preview rendered. Helm never runs `upgrade`, never takes ownership of existing objects and never gets values. When the outer `timeout` stops helm, the Job fails through its pod failure policy and the install is `timed-out`. Jobs are not deleted automatically, so their status and log stay available.
+
+The lock counts as free once the Job of the item that holds it has finished, or when its holder has no Job and the Lease is older than `MARKETPLACE_INSTALL_LOCK_STALE_SECONDS`. ark-api deletes it only when a request fails before creating the Job; after a lost connection it keeps it, because the Job may exist. The admission policy lets only ark-api's ServiceAccount create, change or delete that Lease. To release a lock that has no install Job before it goes stale, delete it as that ServiceAccount:
+
+```bash
+kubectl delete lease marketplace-install-lock -n <namespace> --as=system:serviceaccount:<ark-api-namespace>:ark-api-sa
+```
+
+Never remove the admission policy binding to do this: the same policy keeps everyone else from running workloads as the installer ServiceAccount.
+
 ### Install state
 
 ```http
@@ -190,6 +225,13 @@ These ark-api environment variables are set in `services/ark-api/chart/values.ya
 | `MARKETPLACE_INSTALL_PREVIEW_TIMEOUT_SECONDS` | `25` | Limit for a whole preview. |
 | `MARKETPLACE_INSTALL_PREVIEW_CACHE_SECONDS` | `600` | How long a preview stays valid. |
 | `MARKETPLACE_INSTALL_PREVIEW_CACHE_MAX_ENTRIES` | `256` | Previews kept in memory; the oldest goes first. |
+| `MARKETPLACE_INSTALL_POST_TIMEOUT_SECONDS` | `20` | Limit for an install request. |
+| `MARKETPLACE_INSTALL_HELM_TIMEOUT_SECONDS` | `600` | `--timeout` of `helm install --wait`. |
+| `MARKETPLACE_INSTALL_TOTAL_TIMEOUT_SECONDS` | `660` | Outer limit of the helm process in the Job; reaching it gives `timed-out`. |
+| `MARKETPLACE_INSTALL_JOB_DEADLINE_SECONDS` | `900` | `activeDeadlineSeconds` of the install Job, with room for pulling the image. |
+| `MARKETPLACE_INSTALL_LOCK_STALE_SECONDS` | `30` | Age after which a lock whose holder has no Job is taken over. |
+| `MARKETPLACE_INSTALL_IMAGE` | the ark-api image | Image of the install Job. The chart sets it to ark-api's own image and tag. |
+| `MARKETPLACE_INSTALL_IMAGE_PULL_SECRETS` | empty | Comma-separated pull Secrets for that image, in the tenant namespace. |
 
 ark-api needs network access to the allowed registries. The chart download is capped at 10 MiB and the rendered output at 2 MiB, 300 objects and 64 levels of nesting; the size of the download is checked once it has finished, so the timeout is what bounds a slow or oversized download.
 
@@ -216,5 +258,21 @@ The user check returns HTTP 403 with `code` set to `api-key-not-supported`, `imp
 | 502 | `catalog-unavailable` | The marketplace sources or the source's credential cannot be read, or the catalogue could not be fetched. |
 | 502 | `chart-unavailable` | `helm pull` failed. The message names the registry. |
 | 504 | `preview-timeout` | The preview did not finish in time. |
+
+The install request can also return:
+
+| Status | Code | Meaning |
+| --- | --- | --- |
+| 409 | `already-installed` | The item's release is installed, failed, timed out or managed by the platform team. |
+| 409 | `preview-expired` | No matching preview in memory, or the catalogue changed since the preview. |
+| 422 | `preview-blocked` | The preview found objects that block the install. |
+| 409 | `another-install-active` | Another item is being installed in the namespace. |
+| 409 | `conflicts-changed` | An object of the preview exists now, or could not be checked. |
+| 409 | `foreign-job` | A Job with the install Job's name exists and ark-api did not create it. |
+| 502 | `cluster-error` | A Kubernetes request of the install failed. The message names the status, never the response body. |
+| 503 | `busy` | The request ran out of time, or the item's previous install Job is still being deleted. |
+| 500 | `install-misconfigured` | ark-api has no image configured for install Jobs. |
+
+A request body that fails validation returns 422 with FastAPI's validation body, a list in `detail`, as for the other endpoints.
 
 The state requests return the user check errors, `namespace-not-enabled` and `policy-missing` as for the preview, and for a single record without an install Job the catalogue errors above.

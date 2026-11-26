@@ -139,7 +139,7 @@ The tenant Role lets users create Jobs and Deployments, and whoever creates a po
 
 A chart can still bind a Role that someone else created in the namespace, since the policy cannot tell it from one the chart created. The installer account also may not request service account tokens: a requested token is not bound to a pod and would skip the rules above.
 
-Only the ark-api service account can create, update or delete the `marketplace-install-lock` Lease; the namespace controller can also delete it when the namespace goes away. To release a stuck lock by hand, delete the policy bindings first.
+Only the ark-api service account can create, update or delete the `marketplace-install-lock` Lease; the namespace controller can also delete it when the namespace goes away. A lock left without an install Job is free after `MARKETPLACE_INSTALL_LOCK_STALE_SECONDS` (30 by default). To release it sooner, delete it as the ark-api service account with `kubectl delete lease marketplace-install-lock -n <namespace> --as=system:serviceaccount:<ark-api-namespace>:ark-api-sa`. Never remove the policy bindings to do this: they also keep everyone else from using the installer service account.
 
 A user in `installers` can install any catalogue item, and a chart can create any namespaced object, so treat installers as admins of the namespace. Objects a chart created stay after you remove the user from the list.
 
