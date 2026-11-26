@@ -107,6 +107,8 @@ app:
       value: ""
     - name: MARKETPLACE_INSTALL_LOCK_STALE_SECONDS
       value: "30"
+    - name: MARKETPLACE_INSTALL_POST_TIMEOUT_SECONDS
+      value: "20"
     - name: API_KEY_RETENTION_SECONDS
       value: "7776000"
     - name: API_KEY_REAPER_INTERVAL_SECONDS

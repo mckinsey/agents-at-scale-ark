@@ -49,6 +49,11 @@ class MarketplaceInstallPreviewRequest(BaseModel):
     source: str = Field(min_length=1, max_length=253, pattern=r"^[-._a-zA-Z0-9]+$")
 
 
+class MarketplaceInstallRequest(BaseModel):
+    source: str = Field(min_length=1, max_length=253, pattern=r"^[-._a-zA-Z0-9]+$")
+    digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+
+
 class MarketplaceInstallPreview(BaseModel):
     source: str
     itemName: str
