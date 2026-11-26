@@ -97,6 +97,14 @@ app:
       value: "600"
     - name: MARKETPLACE_INSTALL_PREVIEW_CACHE_MAX_ENTRIES
       value: "256"
+    - name: MARKETPLACE_INSTALL_HELM_TIMEOUT_SECONDS
+      value: "600"
+    - name: MARKETPLACE_INSTALL_TOTAL_TIMEOUT_SECONDS
+      value: "660"
+    - name: MARKETPLACE_INSTALL_JOB_DEADLINE_SECONDS
+      value: "900"
+    - name: MARKETPLACE_INSTALL_IMAGE_PULL_SECRETS
+      value: ""
     - name: API_KEY_RETENTION_SECONDS
       value: "7776000"
     - name: API_KEY_REAPER_INTERVAL_SECONDS
