@@ -221,6 +221,19 @@ describe('createApprovalsCommand', () => {
     };
   }
 
+  // The port-forward must be torn down before the process exits. process.exit
+  // terminates synchronously in production, so stopping the proxy after it (or
+  // relying on a `finally` that follows process.exit) leaks the forward and
+  // blocks every later ark-api command.
+  function expectStoppedBeforeExit() {
+    expect(mockStop).toHaveBeenCalled();
+    expect(process.exit).toHaveBeenCalled();
+    const stopOrder = mockStop.mock.invocationCallOrder[0];
+    const exitSpy = process.exit as unknown as ReturnType<typeof vi.fn>;
+    const exitOrder = exitSpy.mock.invocationCallOrder[0];
+    expect(stopOrder).toBeLessThan(exitOrder);
+  }
+
   it('lists pending approvals as text', async () => {
     const client = clientWith({
       listA2ATasks: vi
@@ -310,6 +323,7 @@ describe('createApprovalsCommand', () => {
     expect(output.error).toHaveBeenCalled();
     expect(process.exit).toHaveBeenCalledWith(ExitCodes.CliError);
     expect(mockStop).toHaveBeenCalled();
+    expectStoppedBeforeExit();
   });
 
   it('approves a pending tool call', async () => {
@@ -367,6 +381,51 @@ describe('createApprovalsCommand', () => {
 
     expect(output.error).toHaveBeenCalled();
     expect(process.exit).toHaveBeenCalledWith(ExitCodes.OperationError);
-    expect(mockStop).toHaveBeenCalled();
+    expectStoppedBeforeExit();
+  });
+
+  it.each([
+    {status: 404, exit: ExitCodes.OperationError, label: 'not found'},
+    {status: 409, exit: ExitCodes.OperationError, label: 'not awaiting'},
+    {status: 403, exit: ExitCodes.OperationError, label: 'forbidden'},
+  ])(
+    'stops the proxy before exit when approve fails with $label',
+    async ({status, exit}) => {
+      const client = clientWith({
+        submitApproval: vi
+          .fn()
+          .mockRejectedValue(new ArkApiHttpError('err', status)),
+      });
+      mockStart.mockResolvedValue(client);
+
+      const command = createApprovalsCommand({});
+      await command.parseAsync(['node', 'test', 'approve', 'x']);
+
+      expect(process.exit).toHaveBeenCalledWith(exit);
+      expectStoppedBeforeExit();
+    }
+  );
+
+  it('stops the proxy before exit when reject hits a network error', async () => {
+    const client = clientWith({
+      submitApproval: vi.fn().mockRejectedValue(new Error('network down')),
+    });
+    mockStart.mockResolvedValue(client);
+
+    const command = createApprovalsCommand({});
+    await command.parseAsync(['node', 'test', 'reject', 'x']);
+
+    expect(process.exit).toHaveBeenCalledWith(ExitCodes.CliError);
+    expectStoppedBeforeExit();
+  });
+
+  it('stops the proxy before exit when the proxy fails to start', async () => {
+    mockStart.mockRejectedValue(new Error('port-forward failed'));
+
+    const command = createApprovalsCommand({});
+    await command.parseAsync(['node', 'test', 'approve', 'x']);
+
+    expect(process.exit).toHaveBeenCalledWith(ExitCodes.CliError);
+    expectStoppedBeforeExit();
   });
 });

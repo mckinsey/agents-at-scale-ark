@@ -378,6 +378,24 @@ func TestBroadcaster_MarkSeen(t *testing.T) {
 	}
 }
 
+func TestBroadcaster_HasSeenDoesNotMark(t *testing.T) {
+	t.Parallel()
+	b := newKindBroadcaster(nil, "Agent")
+	if b.hasSeen("u1", 10) {
+		t.Error("hasSeen should be false for a new uid")
+	}
+	if b.hasSeen("u1", 10) {
+		t.Error("hasSeen must not record the uid")
+	}
+	b.markSeen("u1", 10)
+	if !b.hasSeen("u1", 10) || !b.hasSeen("u1", 9) {
+		t.Error("hasSeen should be true at or below the recorded rv")
+	}
+	if b.hasSeen("u1", 11) {
+		t.Error("hasSeen should be false above the recorded rv")
+	}
+}
+
 func TestBroadcaster_PruneSeen(t *testing.T) {
 	t.Parallel()
 	b := newKindBroadcaster(nil, "Agent")

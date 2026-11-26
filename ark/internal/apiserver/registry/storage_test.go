@@ -458,6 +458,21 @@ func TestGenericStorage_Delete_NotFound(t *testing.T) {
 	}
 }
 
+func TestGenericStorage_Delete_StorageFailureIsNotNotFound(t *testing.T) {
+	t.Parallel()
+	gs, backend := newTestStorage()
+	ctx := contextWithNamespace(testNS())
+	backend.err = errors.New("connection reset")
+
+	_, _, err := gs.Delete(ctx, testAgentName, nil, &metav1.DeleteOptions{})
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	if apierrors.IsNotFound(err) {
+		t.Errorf("storage failure reported as NotFound: %v", err)
+	}
+}
+
 func TestGenericStorage_Delete_WithValidation(t *testing.T) {
 	t.Parallel()
 	gs, backend := newTestStorage()
