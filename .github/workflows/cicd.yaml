@@ -60,113 +60,23 @@ jobs:
     uses: ./.github/workflows/sonar_scan.yaml
     secrets: inherit
 
-  # Security scan with JFrog Xray
-  jfrog-xray-scan:
+  # Security scan with Aikido
+  aikido-scan:
     runs-on: ubuntu-latest
-    env:
-      XRAY_WATCH_NAME: 'ark-20863-security-watch'
-      SCAN_JSON: "xray-scan-agents-at-scale-${{ github.run_number }}.json"
     steps:
       - uses: actions/checkout@v6
 
-      - name: Materialize embedded CRDs for Go scan
-        shell: bash
-        run: |
-          mkdir -p ark/internal/apiserver/crds
-          cp ark/config/crd/bases/*.yaml ark/internal/apiserver/crds/
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
+      - name: Detect new vulnerabilities
+        uses: AikidoSec/github-actions-workflow@v1.0.13
         with:
-          version: "0.11.21"
-
-      - name: Export uv lockfiles to requirements.txt for Xray
-        shell: bash
-        run: |
-          # jf audit only reads requirements.txt for Python; without this it
-          # resolves uv projects fresh from PyPI and misses the locked versions.
-          # --no-sources skips [tool.uv.sources] overrides (e.g. local ark-sdk
-          # wheels built later in the pipeline) so the export works at checkout.
-          # Failures fall back to jf audit's pre-existing pyproject.toml mode
-          # for that one project — no worse than today — so don't fail the job.
-          set +e
-          for dir in services/ark-api/ark-api \
-                     services/ark-mcp/ark-mcp \
-                     lib/ark-sdk \
-                     lib/ark-sdk/gen_sdk/overlay/python \
-                     templates/tool; do
-            if [ ! -f "$dir/uv.lock" ]; then
-              echo "Skipping $dir (no uv.lock)"
-              continue
-            fi
-            echo "Exporting $dir"
-            err=$( (cd "$dir" && uv export --format requirements-txt --no-hashes --no-dev --no-sources > requirements.txt) 2>&1 )
-            if [ $? -ne 0 ]; then
-              echo "::warning::uv export failed for $dir, jf audit will fall back to scanning pyproject.toml as pip: ${err//$'\n'/ | }"
-            fi
-          done
-          exit 0
-
-      - name: Run JFrog Xray scan
-        id: xray-scan
-        uses: ./.github/actions/jfrog-xray-scan
-        with:
-          github_repo: ${{ github.repository }}
-          build_name: 'agents-at-scale'
-          build_number: ${{ github.run_number }}
-          watch_name: ${{ env.XRAY_WATCH_NAME }}
-          jfrog_user: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME }}
-          jfrog_password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD }}
-          jfrog_url: ${{ vars.JFROG_PLATFORM_URL }}
-        
-      - name: Detect new violations
-        if: always()
-        shell: bash
-        run: |
-          WHITELIST=".github/actions/jfrog-xray-scan/tolerated_violations.txt"
-
-          NEW_VIOLATIONS=$(jq -r '.[].violations[]?.issue_id' "$SCAN_JSON" | sort -u)
-
-          FAIL=0
-
-          if [ -n "$NEW_VIOLATIONS" ]; then
-            echo "Violations found:"
-            echo "$NEW_VIOLATIONS"
-
-            echo "Checking violations against whitelist..."
-            FILTERED_VIOLATIONS=""
-            while read -r violation; do
-              if grep -q "$violation" "$WHITELIST"; then
-                echo "Whitelisted violation (skipping): $violation"
-              else
-                echo "Violation not whitelisted: $violation"
-                FILTERED_VIOLATIONS="${FILTERED_VIOLATIONS}${violation}"$'\n'
-                FAIL=1
-              fi
-            done <<< "$NEW_VIOLATIONS"
-            NEW_VIOLATIONS="$FILTERED_VIOLATIONS"
-
-            # Export only unwhitelisted violations for use in next step
-            if [ -n "$NEW_VIOLATIONS" ]; then
-              echo "NEW_VIOLATIONS<<EOF" >> $GITHUB_ENV
-              printf '%s' "$NEW_VIOLATIONS" >> $GITHUB_ENV
-              echo "EOF" >> $GITHUB_ENV
-            fi
-
-            if [ "$FAIL" -eq 1 ]; then
-              echo "❌ Failing due to unwhitelisted violations."
-              exit 1
-            fi
-          else
-            echo "No violations found."
-          fi
-
-      - name: Create GitHub issue for new CVE violations
-        if: always() && env.NEW_VIOLATIONS != ''
-        uses: ./.github/actions/create-cve-issues
-        with:
-          new_violations: ${{ env.NEW_VIOLATIONS }}
-          scan_json: ${{ env.SCAN_JSON }}  
+          secret-key: ${{ secrets.AIKIDO_SECRET_KEY }}
+          minimum-severity: 'CRITICAL'
+          fail-on-dependency-scan: true
+          fail-on-sast-scan: false
+          fail-on-iac-scan: false
+          fail-on-timeout: true
+          post-scan-status-comment: 'only_if_new_findings'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
   # Build and test Ark itself.
   build-and-test-ark:
@@ -469,7 +379,7 @@ jobs:
           prebuild: ${{ matrix.prebuild }}
           dockerfile: ${{ matrix.dockerfile || 'Dockerfile' }}
 
-  xray-container-scan:
+  aikido-container-scan:
     needs: [setup-container-cache-registry, build-containers]
     if: ${{ needs.setup-container-cache-registry.outputs.is-fork-pr == 'false' }}
     runs-on: ubuntu-24.04
@@ -496,13 +406,23 @@ jobs:
           username: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME || github.actor }}
           password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
 
-      - uses: ./.github/actions/jfrog-xray-container-scan
-        with:
-          image: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}/${{ matrix.image }}:${{ github.sha }}
-          image_name: ${{ matrix.image }}
-          jfrog_user: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_USERNAME }}
-          jfrog_password: ${{ secrets.DOCKER_CICD_CACHE_REGISTRY_PASSWORD }}
-          jfrog_url: ${{ vars.JFROG_PLATFORM_URL }}
+      - name: Aikido image scan
+        env:
+          IMAGE: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}/${{ matrix.image }}:${{ github.sha }}
+        run: |
+          docker pull "$IMAGE"
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            aikidosecurity/local-scanner \
+            image-scan "$IMAGE" \
+            --apikey ${{ secrets.AIKIDO_API_KEY }} \
+            --fail-on critical
+
+      - name: Cleanup local image
+        if: always()
+        env:
+          IMAGE: ${{ needs.setup-container-cache-registry.outputs.ci-cache-registry }}/${{ matrix.image }}:${{ github.sha }}
+        run: docker rmi "$IMAGE" 2>/dev/null || true
 
   build-libs:
     runs-on: ubuntu-24.04
@@ -1475,8 +1395,8 @@ jobs:
         e2e-ark-cli,
         e2e-tests-llm,
         e2e-tests-third-party-webhooks,
-        jfrog-xray-scan,
-        xray-container-scan,
+        aikido-scan,
+        aikido-container-scan,
         build-and-test-ark,
         build-and-test-services,
         integration-test-postgresql,

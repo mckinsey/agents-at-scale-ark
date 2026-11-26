@@ -88,17 +88,16 @@ Classify each failure into one of these categories and delegate accordingly:
 - API response format changes
 - Browser compatibility
 
-### Category: Security Scan Failures (JFrog Xray)
-**Indicators**: `jfrog-xray-scan` in job name
+### Category: Security Scan Failures (Aikido)
+**Indicators**: `aikido-scan` or `aikido-container-scan` in job name
 **Skill**: Use **vulnerability-fixer** skill
-**Action**: Download the scan artifact and parse it to map XRAY IDs to CVEs:
+**Action**: Read the failing job log to see which findings blocked the gate:
 
 ```bash
-gh run download <RUN_ID> --repo mckinsey/agents-at-scale-ark --name xray-scan-results-*  --dir /tmp/xray-scan
-jq -r '[.[].violations[]? | {issue_id, severity, cves: [.cves[]?.cve], components: [.components | to_entries[] | .value.impact_paths[][]?.component_id] | unique}] | unique_by(.issue_id)' /tmp/xray-scan/*.json
+gh run view <RUN_ID> --repo mckinsey/agents-at-scale-ark --log --job <JOB_ID>
 ```
 
-Cross-reference component IDs with Docker images in e2e tests to find interrelated failures.
+Findings, severity, and triage (ignore/snooze) are managed in the Aikido dashboard, not in-repo. The CI gate fails on new issues at or above the configured `minimum-severity`.
 
 Check ALL `package-lock.json` files for ALL resolved versions of a flagged package — transitive deps hide in nested `node_modules/`:
 ```bash
@@ -106,7 +105,7 @@ find . -name "package-lock.json" -exec grep -l "<package>" {} \;
 jq -r '.packages | to_entries[] | select(.key | contains("<package>")) | "\(.key)\t\(.value.version)"' <lockfile>
 ```
 
-Tolerated violations are in `.github/actions/jfrog-xray-scan/tolerated_violations.txt`.
+To stop a finding from blocking, either patch the dependency or triage it in the Aikido dashboard.
 
 ### Category: Dependabot / Dependency Issues
 **Indicators**: `dependabot` in branch name, dependency version conflicts
@@ -178,7 +177,7 @@ The build manager follows a specific workflow when fixing builds:
 
 ### Phase 1: Analyze in Detail
 - Review all failures from the current day to build a full picture
-- Identify interrelated failures (e.g., a CVE can fail both Xray scan AND cause pod startup failures)
+- Identify interrelated failures (e.g., a CVE can fail both the Aikido scan AND cause pod startup failures)
 - Determine which failures need an integrated fix (single PR) vs independent fixes
 
 ### Phase 2: Implement Fix
@@ -190,11 +189,12 @@ The build manager follows a specific workflow when fixing builds:
 - Push a **draft PR** so CI runs remotely
 - **In parallel**, run the same checks locally to get faster feedback:
 
-#### Local: JFrog Xray Scan
+#### Local: Aikido Image Scan
 ```bash
-jf audit --watches "ark-20863-security-watch" --format json
+docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+  aikidosecurity/local-scanner image-scan <image> --apikey "$AIKIDO_API_KEY" --fail-on critical
 ```
-Tolerated violations are in `.github/actions/jfrog-xray-scan/tolerated_violations.txt`. New violations need either a dependency patch or an entry with justification.
+Findings are triaged in the Aikido dashboard. New issues need either a dependency patch or triage in the dashboard.
 
 #### Local: Chainsaw E2E Tests
 ```bash
@@ -307,9 +307,9 @@ Some failures are infrastructure issues, not code problems. Identify and rerun:
 
 Do not investigate code for transient failures. Rerun and move on.
 
-## Local Xray Verification
+## Local Aikido Verification
 
-`jf audit` locally reads `node_modules/` on disk, not just lockfiles. Results will include stale installed versions unless you run `npm ci` in each directory first. CI builds fresh from lockfiles and is authoritative. Use local scans as supplementary only.
+The `aikido-scan` CI gate scans the PR via Aikido's connected GitHub App, so there is no exact local equivalent — check the Aikido dashboard for source/dependency findings. For container images, `aikidosecurity/local-scanner image-scan <image>` reproduces the `aikido-container-scan` job locally. CI is authoritative; use local scans as supplementary only.
 
 ## Local E2E Testing
 
