@@ -130,8 +130,7 @@ type Config struct {
 	// resources rather than needing list and watch across every namespace.
 	K8sClient client.Reader
 	// RestConfig points at the host kube-apiserver, where the policy objects live.
-	RestConfig        *clientrest.Config
-	WALLeaderElection bool
+	RestConfig *clientrest.Config
 	// AuditLogPath "-" writes JSON to stdout. AuditPolicyFile is mandatory when AuditEnabled.
 	AuditEnabled    bool
 	AuditPolicyFile string
@@ -210,7 +209,7 @@ func (s *Server) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to create PostgreSQL backend: %w", err)
 	}
 	close(s.backendReady)
-	s.backend.StartNotifyListener()
+	s.backend.StartWALConsumer()
 	klog.Infof("Using PostgreSQL storage backend: %s:%d/%s", cfg.Host, cfg.Port, cfg.Database)
 
 	secureServing := genericoptions.NewSecureServingOptions().WithLoopback()

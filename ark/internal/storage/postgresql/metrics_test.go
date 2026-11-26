@@ -19,9 +19,8 @@ import (
 	ctrlmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
-// A follower never runs the consumer, so its timestamp must read NaN rather
-// than 0: `time() - <timestamp> > 300` would otherwise fire on every replica
-// that is not the leader. First in the package's test order so it observes
+// A replica that has not streamed yet must read NaN rather than 0:
+// `time() - <timestamp> > 300` would otherwise fire on every starting replica. First in the package's test order so it observes
 // the init() value before any test drives the consumer.
 func TestLastMessageTimestampIsNaNWithoutConsumer(t *testing.T) {
 	if got := testutil.ToFloat64(walLastMessageTimestamp); !math.IsNaN(got) {
@@ -52,7 +51,6 @@ func TestMetricsGatheredByControllerRuntimeRegistry(t *testing.T) {
 	broadcasterEventsDropped.WithLabelValues("RegistryTest")
 	watcherRelistFailures.WithLabelValues("RegistryTest")
 	broadcasterActiveWatchers.WithLabelValues("RegistryTest")
-	notifyReceivedTotal.WithLabelValues("RegistryTest")
 	swapDBPoolStats(t, func() sql.DBStats { return sql.DBStats{} })
 
 	families, err := ctrlmetrics.Registry.Gather()
@@ -74,9 +72,6 @@ func TestMetricsGatheredByControllerRuntimeRegistry(t *testing.T) {
 		"ark_apiserver_wal_consumer_active",
 		"ark_apiserver_wal_last_message_timestamp_seconds",
 		"ark_apiserver_replication_slot_lag_bytes",
-		"ark_apiserver_notify_received_total",
-		"ark_apiserver_notify_listener_connected",
-		"ark_apiserver_notify_listener_reconnects_total",
 		"ark_apiserver_db_pool_max_open_connections",
 		"ark_apiserver_db_pool_open_connections",
 		"ark_apiserver_db_pool_in_use_connections",
@@ -241,22 +236,23 @@ func TestQuerySlotLag(t *testing.T) {
 	}
 	defer func() { _ = db.Close() }()
 	p := &PostgreSQLBackend{db: db}
+	p.slotName.Store("ark_cdc_test_1234")
 
-	mock.ExpectQuery("pg_wal_lsn_diff").WithArgs(walSlotName).
+	mock.ExpectQuery("pg_wal_lsn_diff").WithArgs("ark_cdc_test_1234").
 		WillReturnRows(sqlmock.NewRows([]string{"lag"}).AddRow(4096))
 	lag, err := p.querySlotLag(context.Background())
 	if err != nil || lag != 4096 {
 		t.Errorf("querySlotLag = %v, %v; want 4096, nil", lag, err)
 	}
 
-	mock.ExpectQuery("pg_wal_lsn_diff").WithArgs(walSlotName).
+	mock.ExpectQuery("pg_wal_lsn_diff").WithArgs("ark_cdc_test_1234").
 		WillReturnRows(sqlmock.NewRows([]string{"lag"}).AddRow(nil))
 	lag, err = p.querySlotLag(context.Background())
 	if err != nil || !math.IsNaN(lag) {
 		t.Errorf("querySlotLag on NULL confirmed_flush_lsn = %v, %v; want NaN, nil", lag, err)
 	}
 
-	mock.ExpectQuery("pg_wal_lsn_diff").WithArgs(walSlotName).
+	mock.ExpectQuery("pg_wal_lsn_diff").WithArgs("ark_cdc_test_1234").
 		WillReturnRows(sqlmock.NewRows([]string{"lag"}))
 	if _, err = p.querySlotLag(context.Background()); err == nil {
 		t.Error("querySlotLag with no slot row should error")

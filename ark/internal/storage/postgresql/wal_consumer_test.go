@@ -92,9 +92,9 @@ func TestPostgresWatcher_FirstSeenUID(t *testing.T) {
 	}
 }
 
-func TestSlotNameIsStable(t *testing.T) {
+func TestSlotNamePrefixIsStable(t *testing.T) {
 	if walSlotName != "ark_cdc" {
-		t.Errorf("slot name changed unexpectedly: got %q want %q (stability matters: existing deployments rely on this name to resume their WAL position across restarts)", walSlotName, "ark_cdc")
+		t.Errorf("slot name changed unexpectedly: got %q want %q (the cleanup and legacy-slot drop match on this name)", walSlotName, "ark_cdc")
 	}
 }
 

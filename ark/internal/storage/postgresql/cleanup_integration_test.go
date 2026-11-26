@@ -9,7 +9,6 @@ import (
 	"context"
 	"database/sql"
 	"testing"
-	"time"
 )
 
 func TestDropReplicationArtifacts_Integration(t *testing.T) {
@@ -44,14 +43,13 @@ func TestDropReplicationArtifacts_Integration(t *testing.T) {
 		t.Fatalf("Failed to create backend: %v", err)
 	}
 	defer func() { _ = backend.Close() }()
-	backend.StartWALConsumer()
 
-	deadline := time.Now().Add(15 * time.Second)
-	for slotCount() == 0 {
-		if time.Now().After(deadline) {
-			t.Fatal("replication slot was not created within 15s")
-		}
-		time.Sleep(200 * time.Millisecond)
+	_, _ = checker.ExecContext(ctx, "SELECT pg_drop_replication_slot($1) FROM pg_replication_slots WHERE slot_name = $1", walSlotName)
+	if _, err := checker.ExecContext(ctx, "SELECT pg_create_logical_replication_slot($1, 'pgoutput')", walSlotName); err != nil {
+		t.Fatalf("create legacy slot: %v", err)
+	}
+	if slotCount() == 0 {
+		t.Fatal("legacy slot was not created")
 	}
 	if publicationCount() == 0 {
 		t.Fatal("publication was not created")

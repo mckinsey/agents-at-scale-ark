@@ -6,7 +6,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/jackc/pglogrepl"
 	"github.com/jackc/pgx/v5/pgproto3"
 )
@@ -120,52 +119,5 @@ func TestNewWALStreamStateSeedsResumePoint(t *testing.T) {
 	}
 	if state.lastStatusUpdate.IsZero() {
 		t.Error("lastStatusUpdate not initialized")
-	}
-}
-
-func TestEnsureReplicationSlotExistingSlotResumePoint(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = db.Close() }()
-
-	mock.ExpectQuery("FROM pg_replication_slots").WithArgs(walSlotName).WillReturnRows(
-		sqlmock.NewRows([]string{"exists", "active", "wal_status", "confirmed_flush_lsn"}).
-			AddRow(true, false, "reserved", "0/1A2B3C"),
-	)
-
-	p := &PostgreSQLBackend{db: db, ctx: context.Background()}
-	startLSN, resumeLSN, err := p.ensureReplicationSlot(context.Background(), nil, walSlotName)
-	if err != nil {
-		t.Fatalf("ensureReplicationSlot: %v", err)
-	}
-
-	if startLSN != 0 {
-		t.Errorf("startLSN = %s, want 0/0 so the server resumes from confirmed_flush_lsn", startLSN)
-	}
-	if want := pglogrepl.LSN(0x1A2B3C); resumeLSN != want {
-		t.Errorf("resumeLSN = %s, want %s", resumeLSN, want)
-	}
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Error(err)
-	}
-}
-
-func TestEnsureReplicationSlotActiveElsewhere(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = db.Close() }()
-
-	mock.ExpectQuery("FROM pg_replication_slots").WithArgs(walSlotName).WillReturnRows(
-		sqlmock.NewRows([]string{"exists", "active", "wal_status", "confirmed_flush_lsn"}).
-			AddRow(true, true, "reserved", "0/1A2B3C"),
-	)
-
-	p := &PostgreSQLBackend{db: db, ctx: context.Background()}
-	if _, _, err := p.ensureReplicationSlot(context.Background(), nil, walSlotName); err == nil {
-		t.Fatal("expected an error when the slot is held by another session")
 	}
 }
