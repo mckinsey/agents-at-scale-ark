@@ -193,6 +193,34 @@ func New(cfg Config) *Server {
 	}
 }
 
+type walConsumer struct {
+	ready <-chan struct{}
+	start func()
+}
+
+func (w *walConsumer) Start(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return nil
+	case <-w.ready:
+	}
+	klog.Info("Storage backend ready; starting WAL consumer")
+	w.start()
+	<-ctx.Done()
+	return nil
+}
+
+func (w *walConsumer) NeedLeaderElection() bool {
+	return false
+}
+
+func (s *Server) WALConsumer() *walConsumer {
+	return &walConsumer{
+		ready: s.backendReady,
+		start: func() { s.backend.StartWALConsumer() },
+	}
+}
+
 func (s *Server) Start(ctx context.Context) error {
 	if s.config.AuthMode != AuthModeDelegated && s.config.AuthMode != AuthModeOff {
 		return fmt.Errorf("invalid auth mode %q: must be %q or %q", s.config.AuthMode, AuthModeDelegated, AuthModeOff)
@@ -209,7 +237,6 @@ func (s *Server) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to create PostgreSQL backend: %w", err)
 	}
 	close(s.backendReady)
-	s.backend.StartWALConsumer()
 	klog.Infof("Using PostgreSQL storage backend: %s:%d/%s", cfg.Host, cfg.Port, cfg.Database)
 
 	secureServing := genericoptions.NewSecureServingOptions().WithLoopback()
