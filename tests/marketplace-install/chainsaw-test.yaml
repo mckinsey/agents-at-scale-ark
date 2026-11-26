@@ -6,14 +6,19 @@ metadata:
     requires-images: "true"
 spec:
   description: >
-    #3973, #3974: marketplace installs through a real ark-api in AUTH_MODE=sso
+    #3972, #3973, #3974: marketplace installs through a real ark-api in AUTH_MODE=sso
     with impersonation, users from Dex, the real ark-tenant chart in two
     namespaces, and the fixture chart on an in-cluster registry. The
     capability is enabled for the listed installer on the real tenant chart.
     The preview reads the catalogue as the user and the cluster as the
     installer. The state of a release installed from the CLI is reported, the
     preview refuses it, and it becomes installable again after an uninstall.
-    A user of another namespace cannot read the state.
+    Installs run in a Job: an install reaches installed, a second POST is
+    accepted, another item waits on the lock, a restart of ark-api does not
+    stop the Job, the outer timeout gives timed-out, a failing hook gives
+    failed with its log, quota errors show up as events, and a catalogue
+    changed since the preview is refused. A user of another namespace cannot
+    read the state.
   timeouts:
     apply: 120s
     assert: 120s
@@ -91,11 +96,12 @@ spec:
           set -eu
           . ./helpers.sh
           kubectl -n "$NAMESPACE" create configmap catalog \
-            --from-literal=marketplace.json="$(catalog_json ok nosc)"
+            --from-literal=marketplace.json="$(catalog_json ok nosc slow fail)" \
+            --from-literal=alt.json="$(alt_catalog_json)"
           kubectl -n "$NAMESPACE" apply -f manifests/registry.yaml
           kubectl -n "$NAMESPACE" rollout status deploy/registry deploy/catalog --timeout=180s
           kubectl -n "$NAMESPACE" wait pod/mkt-curl --for=condition=Ready --timeout=180s
-          with_registry fixture/package.sh ok nosc
+          with_registry fixture/package.sh ok nosc slow fail
         env:
         - name: NAMESPACE
           value: ($namespace)
@@ -250,6 +256,178 @@ spec:
         - name: NAMESPACE
           value: ($namespace)
 
+  - name: install-and-reinstall
+    try:
+    - script:
+        timeout: 300s
+        content: |
+          set -eu
+          . ./helpers.sh
+          A=$(token "$ALICE")
+          D=$(preview_item "$A" "$TA" fixture-ok)
+          started=$(date +%s)
+          R=$(post_item "$A" "$TA" fixture-ok "$D")
+          elapsed=$(( $(date +%s) - started ))
+          expect_status "install fixture-ok" "$R" 202
+          [ "$elapsed" -lt 20 ] || { echo "FAIL: the POST took ${elapsed}s"; exit 1; }
+          expect_json "fixture-ok started" "$R" '[.state, .itemName, .installedBy, .digest]' "[\"installing\",\"fixture-ok\",\"$ALICE\",\"$D\"]"
+          UID1=$(kubectl -n "$TA" get job marketplace-install-fixture-ok -o jsonpath='{.metadata.uid}')
+          R=$(post_item "$A" "$TA" fixture-ok "$D")
+          expect_status "second POST" "$R" 202
+          UID2=$(kubectl -n "$TA" get job marketplace-install-fixture-ok -o jsonpath='{.metadata.uid}')
+          [ "$UID1" = "$UID2" ] || { echo "FAIL: the second POST replaced the Job"; exit 1; }
+          [ "$(kubectl -n "$TA" get jobs -l ark.mckinsey.com/marketplace-install -o name | wc -l | tr -d ' ')" = "1" ] || { echo "FAIL: more than one install Job"; exit 1; }
+          wait_state "$A" "$TA" fixture-ok installed 60
+          R=$(mkt "$A" GET "$TA" "/fixture-ok?source=fixtures")
+          expect_json "start event" "$R" '[.events[].reason] | index("MarketplaceInstallStarted") != null' true
+          expect_json "no log once installed" "$R" .log null
+          helm uninstall fixture-ok --namespace "$TA" --wait --timeout=120s
+          wait_state "$A" "$TA" fixture-ok installable 15
+          D=$(preview_item "$A" "$TA" fixture-ok)
+          R=$(post_item "$A" "$TA" fixture-ok "$D")
+          expect_status "reinstall fixture-ok" "$R" 202
+          wait_state "$A" "$TA" fixture-ok installed 60
+          remove_release "$TA" fixture-ok
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - script:
+        content: |
+          kubectl -n $NAMESPACE-ta get jobs,pods -o wide || true
+          kubectl -n $NAMESPACE logs -l app=ark-api --tail=100 || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: lock-restart-and-timeout
+    try:
+    - script:
+        timeout: 300s
+        content: |
+          set -eu
+          . ./helpers.sh
+          A=$(token "$ALICE")
+          D_OK=$(preview_item "$A" "$TA" fixture-ok)
+          D=$(preview_item "$A" "$TA" fixture-slow)
+          R=$(post_item "$A" "$TA" fixture-slow "$D")
+          expect_status "install fixture-slow" "$R" 202
+          R=$(post_item "$A" "$TA" fixture-ok "$D_OK")
+          expect_status "second item while the first runs" "$R" 409
+          expect_json "lock holder" "$R" '[.detail.code, (.detail.message | contains("fixture-slow"))]' '["another-install-active",true]'
+          kubectl -n "$NAMESPACE" rollout restart deploy/ark-api
+          kubectl -n "$NAMESPACE" rollout status deploy/ark-api --timeout=120s
+          wait_single_endpoint
+          A=$(token "$ALICE")
+          R=$(mkt "$A" GET "$TA" "/fixture-slow?source=fixtures")
+          expect_json "fixture-slow after the restart" "$R" .state '"installing"'
+          R=$(post_item "$A" "$TA" fixture-ok "$D_OK")
+          expect_status "preview from before the restart" "$R" 409
+          expect_json "cache gone" "$R" .detail.code '"preview-expired"'
+          wait_state "$A" "$TA" fixture-slow timed-out 60
+          kubectl -n "$TA" wait job/marketplace-install-fixture-slow --timeout=60s \
+            --for=jsonpath='{.status.conditions[?(@.type=="Failed")].reason}'=PodFailurePolicy
+          R=$(mkt "$A" GET "$TA" "/fixture-slow?source=fixtures")
+          expect_json "timed-out record" "$R" '[.failedStage, (.log != null)]' '["ready",true]'
+          remove_release "$TA" fixture-slow
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - script:
+        content: |
+          kubectl -n $NAMESPACE-ta get jobs,pods -o wide || true
+          kubectl -n $NAMESPACE logs -l app=ark-api --tail=100 || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: failed-hook-and-deleted-job
+    try:
+    - script:
+        timeout: 240s
+        content: |
+          set -eu
+          . ./helpers.sh
+          A=$(token "$ALICE")
+          D=$(preview_item "$A" "$TA" fixture-fail)
+          R=$(post_item "$A" "$TA" fixture-fail "$D")
+          expect_status "install fixture-fail" "$R" 202
+          wait_state "$A" "$TA" fixture-fail failed 60
+          R=$(mkt "$A" GET "$TA" "/fixture-fail?source=fixtures")
+          expect_json "failed record" "$R" '[.failedStage, (.log | test("pre-install"))]' '["apply",true]'
+          R=$(mkt "$A" POST "$TA" /fixture-fail/preview '{"source":"fixtures"}')
+          expect_json "preview of a failed item" "$R" '[.detail.code, .detail.record.state]' '["already-installed","failed"]'
+          kubectl -n "$TA" delete job marketplace-install-fixture-fail --cascade=background --wait=true --timeout=120s
+          R=$(mkt "$A" GET "$TA" "/fixture-fail?source=fixtures")
+          expect_json "release left without its Job" "$R" '[.state, .log]' '["failed",null]'
+          remove_release "$TA" fixture-fail
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - script:
+        content: |
+          kubectl -n $NAMESPACE-ta get jobs,pods -o wide || true
+          kubectl -n $NAMESPACE logs -l app=ark-api --tail=100 || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
+  - name: quota-and-changed-catalogue
+    try:
+    - script:
+        timeout: 300s
+        content: |
+          set -eu
+          . ./helpers.sh
+          A=$(token "$ALICE")
+          D=$(preview_item "$A" "$TA" fixture-ok)
+          set_source_url "$TA" alt.json
+          R=$(post_item "$A" "$TA" fixture-ok "$D")
+          expect_status "catalogue changed since the preview" "$R" 409
+          expect_json "changed catalogue" "$R" .detail.code '"preview-expired"'
+          set_source_url "$TA" marketplace.json
+          kubectl -n "$TA" create quota mkt-no-pods --hard=pods=0
+          D=$(preview_item "$A" "$TA" fixture-ok)
+          R=$(post_item "$A" "$TA" fixture-ok "$D")
+          expect_status "install under a zero quota" "$R" 202
+          wait_event "$A" "$TA" fixture-ok FailedCreate 30
+          wait_state "$A" "$TA" fixture-ok timed-out 75
+          kubectl -n "$TA" delete quota mkt-no-pods
+          remove_release "$TA" fixture-ok
+          kubectl -n "$TA" create -f - <<JOB
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            name: marketplace-install-fixture-ok
+            labels: {ark.mckinsey.com/marketplace-install: fixture-ok}
+          spec:
+            suspend: true
+            template:
+              spec:
+                restartPolicy: Never
+                containers: [{name: c, image: busybox:1.37}]
+          JOB
+          R=$(mkt "$A" GET "$TA" "/fixture-ok?source=fixtures")
+          expect_json "a Job with our name but another account" "$R" .state '"installable"'
+          D=$(preview_item "$A" "$TA" fixture-ok)
+          R=$(post_item "$A" "$TA" fixture-ok "$D")
+          expect_status "install over a foreign Job" "$R" 409
+          expect_json "foreign Job" "$R" .detail.code '"foreign-job"'
+          kubectl -n "$TA" delete job marketplace-install-fixture-ok --wait=true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+    catch:
+    - script:
+        content: |
+          kubectl -n $NAMESPACE-ta get jobs,pods,events -o wide || true
+          kubectl -n $NAMESPACE logs -l app=ark-api --tail=100 || true
+        env:
+        - name: NAMESPACE
+          value: ($namespace)
+
   - name: other-tenants-cannot-read
     try:
     - script:
@@ -263,6 +441,11 @@ spec:
           expect_json "bob lists TA" "$R" .detail.code '"not-permitted"'
           R=$(mkt "$B" GET "$TA" "/fixture-ok?source=fixtures")
           expect_status "bob reads an item of TA" "$R" 403
+          D=$(preview_item "$A" "$TA" fixture-ok)
+          R=$(post_item "$B" "$TA" fixture-ok "$D")
+          expect_status "bob installs with alice's preview" "$R" 403
+          expect_json "bob installs with alice's preview" "$R" .detail.code '"not-permitted"'
+          [ -z "$(kubectl -n "$TA" get jobs -l ark.mckinsey.com/marketplace-install -o name)" ] || { echo "FAIL: bob started a Job"; exit 1; }
           R=$(mkt "$A" GET "$TB" "")
           expect_status "alice lists TB" "$R" 403
           R=$(mkt "$B" GET "$TB" "")
