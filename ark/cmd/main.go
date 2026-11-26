@@ -608,6 +608,10 @@ func setupEmbeddedApiserver(mgr ctrl.Manager) {
 		setupLog.Error(err, "unable to add embedded apiserver to manager")
 		os.Exit(1)
 	}
+	if err := mgr.Add(server.WALConsumer()); err != nil {
+		setupLog.Error(err, "unable to add WAL consumer to manager")
+		os.Exit(1)
+	}
 	if err := mgr.AddReadyzCheck("apiserver-storage", server.Readyz); err != nil {
 		setupLog.Error(err, "unable to set up apiserver storage ready check")
 		os.Exit(1)
