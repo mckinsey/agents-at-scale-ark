@@ -18,11 +18,6 @@ class MarketplaceInstallCapability(BaseModel):
     reason: Optional[CapabilityReason] = None
 
 
-class MarketplaceInstallErrorDetail(BaseModel):
-    code: str
-    message: str
-
-
 InstallResourceState = Literal[
     "free",
     "conflict-release",
@@ -66,3 +61,46 @@ class MarketplaceInstallPreview(BaseModel):
     blocked: bool
     expiresAt: datetime
     resources: list[MarketplaceInstallResource]
+
+
+InstallRecordState = Literal["installable", "installing", "installed", "failed", "timed-out", "platform-managed"]
+InstallStage = Literal["resolve", "apply", "ready"]
+
+
+class MarketplaceInstallEvent(BaseModel):
+    type: str
+    reason: str
+    message: str
+    objectKind: str
+    objectName: str
+    count: int = 1
+    lastSeen: Optional[datetime] = None
+
+
+class MarketplaceInstallRecord(BaseModel):
+    source: Optional[str] = None
+    itemName: Optional[str] = None
+    release: str
+    chartVersion: Optional[str] = None
+    digest: Optional[str] = None
+    state: InstallRecordState
+    stage: Optional[InstallStage] = None
+    failedStage: Optional[InstallStage] = None
+    startedAt: Optional[datetime] = None
+    installedBy: Optional[str] = None
+    events: list[MarketplaceInstallEvent] = []
+    log: Optional[str] = None
+
+
+class MarketplaceInstallList(BaseModel):
+    items: list[MarketplaceInstallRecord]
+
+
+class MarketplaceInstallErrorDetail(BaseModel):
+    code: str
+    message: str
+    record: Optional[MarketplaceInstallRecord] = None
+
+
+class MarketplaceInstallError(BaseModel):
+    detail: MarketplaceInstallErrorDetail

@@ -42,6 +42,8 @@ Installs need a user identity:
 | --- | --- | --- |
 | `GET` | `/api/v1/namespaces/{namespace}/marketplace-installs/capability` | Whether the current user can install in the namespace, and why not. |
 | `POST` | `/api/v1/namespaces/{namespace}/marketplace-installs/{item}/preview` | What installing an item would create, and whether anything blocks it. |
+| `GET` | `/api/v1/namespaces/{namespace}/marketplace-installs` | The install state of every release in the namespace. |
+| `GET` | `/api/v1/namespaces/{namespace}/marketplace-installs/{item}?source=` | The install state of one item, with its events and log. |
 
 ### Capability
 
@@ -87,8 +89,9 @@ A preview runs these steps and stops at the first failure:
 2. The installer ServiceAccount and its admission policy must be in place, as for `namespace-not-enabled` and `policy-missing` in the capability.
 3. ark-api reads the source and its credential as the signed-in user, fetches the catalogue (always fresh, never from the items cache) and finds the item. In open mode it reads them with its own ServiceAccount, so previews only work in namespaces where that ServiceAccount can read the `marketplace-sources` ConfigMap and the sources' credential Secrets. Since the tenant chart refuses to enable installs in ark-api's own namespace, that takes extra RBAC in the tenant namespace.
 4. Installing is opt-in: the item must set `ark.installable: true` (a boolean), and an `ark.chartPath` that starts with an allowed registry prefix (see Configuration), followed by a single chart name. Items without `ark.installable: true` stay on the copy-the-command path. The release name is `ark.helmReleaseName`, or the item name when it is missing, and must be a valid Helm release name. `installArgs` and `ark.namespace` are ignored.
-5. ark-api runs `helm pull` for the latest chart version, which pins the digest, then `helm template --include-crds`. The chart must be downloadable without credentials.
-6. Every rendered object, hooks included, gets one verdict.
+5. If the item's release is already in the namespace, the preview stops with `already-installed` and returns the install record (see Install state): an item can only be previewed while it is `installable`.
+6. ark-api runs `helm pull` for the latest chart version, which pins the digest, then `helm template --include-crds`. The chart must be downloadable without credentials.
+7. Every rendered object, hooks included, gets one verdict.
 
 The whole preview must finish within `MARKETPLACE_INSTALL_PREVIEW_TIMEOUT_SECONDS` (25 by default), otherwise it fails with `preview-timeout` and helm is stopped. ark-api runs at most two helm processes at a time.
 
@@ -104,7 +107,7 @@ Each object gets the first verdict that applies. Every verdict except `free` blo
 | `reserved-secret` | A Secret with a name reserved for personal Secrets (`u-<16 hex>-…`) or an `ark.mckinsey.com/scope` label other than `shared`. |
 | `personal-secret-ref` | The object references a Secret with a reserved name, or an existing Secret labelled as personal, through `secretKeyRef`, any field ending in `secretRef` (such as `envFrom`, `tokenSecretRef` or a CSI `nodePublishSecretRef`), `secretName`, a projected volume or `imagePullSecrets`. |
 | `unverifiable` | The cluster has no single resource for the kind (not served, ambiguous, or a `List`), the object has no fixed name, the API server could not be reached, the installer ServiceAccount cannot read it, a referenced Secret could not be checked, or the API server rejected the dry run for a reason other than Pod Security. |
-| `conflict-release` | The object already exists and belongs to a Helm release, named in `ownedByRelease`. An item that is already installed shows its own release here. |
+| `conflict-release` | The object already exists and belongs to a Helm release, named in `ownedByRelease`. |
 | `conflict-unmanaged` | The object already exists and no Helm release owns it. |
 | `psa-violation` | A server-side dry run of the object reports a Pod Security warning or rejection for the namespace. |
 | `free` | The object does not exist yet and passed every check. |
@@ -131,6 +134,51 @@ The existence checks and dry runs run as the installer ServiceAccount. Objects i
 
 ark-api keeps the result in memory until `expiresAt`, keyed by namespace, source, item and digest. It stores only the identity of each object and the outcome, never the rendered manifest. The cache lives in the ark-api pod, so a restart clears it.
 
+### Install state
+
+```http
+GET /api/v1/namespaces/team-a/marketplace-installs
+GET /api/v1/namespaces/team-a/marketplace-installs/phoenix?source=official
+```
+
+ark-api stores no install state. Each request derives it from the install Job and the Secrets that Helm writes for every revision of a release, so a refresh, another tab or another user see the same state, and a release installed with the Helm CLI is reported too. Both requests need the read permission described in Who may install, and read the namespace as the installer ServiceAccount.
+
+The list returns one record per release that has an install Job or a Helm release Secret in the namespace, including releases that did not come from the marketplace, such as the `ark-tenant` chart itself. Records of releases without an install Job have no `source` or `itemName`; match them to catalogue items by `ark.helmReleaseName`. The list carries no events or logs, so it is cheap enough to poll.
+
+The single record looks up the install Job of that source and item first. Without one, it resolves the item from the catalogue to learn its release name, and returns the catalogue errors of the preview when that fails. It adds the Kubernetes events of the install Job, its pods and the ReplicaSets of the release's Deployments (at most 20, newest first), and for `installing`, `failed` and `timed-out` the last 100 lines (16 KiB at most) of the install log, with control characters removed and credentials redacted. The log is returned only to users who may `get` `pods/log` in the namespace.
+
+```json
+{
+  "source": "official",
+  "itemName": "phoenix",
+  "release": "phoenix",
+  "chartVersion": "0.1.12",
+  "digest": "sha256:…",
+  "state": "failed",
+  "stage": null,
+  "failedStage": "apply",
+  "startedAt": "2026-11-19T12:01:00Z",
+  "installedBy": "alice@example.com",
+  "events": [
+    {"type": "Warning", "reason": "BackOff", "message": "…", "objectKind": "Pod", "objectName": "…", "count": 3, "lastSeen": "2026-11-19T12:03:00Z"}
+  ],
+  "log": "Error: …"
+}
+```
+
+| State | Meaning |
+| --- | --- |
+| `installable` | No install Job and no release, or a completed Job whose release was uninstalled. |
+| `installing` | The install Job is running. `stage` is `resolve` before its pod runs and `apply` while helm runs, including while it waits for the chart's resources to become ready. `ready` appears only in the short window after Helm marks the release deployed and before the Job completes. |
+| `installed` | The release is deployed at revision 1. |
+| `failed` | The install Job failed, or the release failed without a Job. `failedStage` is `resolve` when no release was created, `apply` otherwise. |
+| `timed-out` | The install ran out of time: the outer timeout, the Job deadline, or a release that failed with a deadline error. `failedStage` is `ready`. |
+| `platform-managed` | The release was upgraded or rolled back (revision above 1), or is being uninstalled. The dashboard leaves it to the platform team. |
+
+`failed` and `timed-out` are final: the platform team cleans up before the item can be installed again.
+
+Treat events and release Secrets as untrusted input. Anyone who may create Secrets or events in the namespace can forge them, directly or through a workload running with a ServiceAccount that has those rights, such as an Argo Workflow, an agent tool or an installed chart; the Ark API itself offers no way to do so. A forged release Secret can only misreport state in its own namespace, and ark-api caps how much of a release payload it decompresses. Install Jobs and their pods are trusted only when they run as the installer ServiceAccount, which the admission policy reserves for ark-api, so both state requests also require the policy to be in place.
+
 ## Configuration
 
 These ark-api environment variables are set in `services/ark-api/chart/values.yaml`.
@@ -153,7 +201,7 @@ Install endpoints return errors in this shape:
 {"detail": {"code": "not-permitted", "message": "You are not permitted to install marketplace items in this namespace"}}
 ```
 
-The user check returns HTTP 403 with `code` set to `api-key-not-supported`, `impersonation-disabled` or `not-permitted`. The preview can also return:
+The user check returns HTTP 403 with `code` set to `api-key-not-supported`, `impersonation-disabled` or `not-permitted`. An error about an item that is already present also carries its install record in `detail.record`. The preview can also return:
 
 | Status | Code | Meaning |
 | --- | --- | --- |
@@ -161,9 +209,12 @@ The user check returns HTTP 403 with `code` set to `api-key-not-supported`, `imp
 | 404 | `item-not-found` | The source's catalogue has no item with that name. |
 | 409 | `namespace-not-enabled` | Installs are not enabled in the namespace. |
 | 409 | `policy-missing` | The admission policy that protects the installer ServiceAccount is missing. |
+| 409 | `already-installed` | The item's release is already installing, installed, failed, timed out or managed by the platform team. `detail.record` holds its state. |
 | 422 | `not-installable` | The item does not set `ark.installable: true`, has no chart, or has an invalid release name. |
 | 422 | `registry-not-allowed` | The item's chart is not on an allowed registry. |
 | 422 | `render-failed` | `helm template` failed or its output exceeded the limits. |
 | 502 | `catalog-unavailable` | The marketplace sources or the source's credential cannot be read, or the catalogue could not be fetched. |
 | 502 | `chart-unavailable` | `helm pull` failed. The message names the registry. |
 | 504 | `preview-timeout` | The preview did not finish in time. |
+
+The state requests return the user check errors, `namespace-not-enabled` and `policy-missing` as for the preview, and for a single record without an install Job the catalogue errors above.
