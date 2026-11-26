@@ -9,6 +9,7 @@ MODULES = [
     "src.ark_api.marketplace_install.checks",
     "src.ark_api.marketplace_install.events",
     "src.ark_api.marketplace_install.helm",
+    "src.ark_api.marketplace_install.install",
     "src.ark_api.marketplace_install.job",
     "src.ark_api.marketplace_install.kube",
     "src.ark_api.marketplace_install.lock",
