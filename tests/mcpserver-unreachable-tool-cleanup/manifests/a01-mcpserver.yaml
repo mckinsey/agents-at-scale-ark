@@ -1,0 +1,14 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: MCPServer
+metadata:
+  name: cleanup-mcp
+spec:
+  address:
+    valueFrom:
+      serviceRef:
+        name: mock-llm
+        port: http
+        path: /mcp
+  transport: http
+  timeout: 5s
+  pollInterval: 5s

@@ -1,0 +1,11 @@
+apiVersion: ark.mckinsey.com/v1alpha1
+kind: Agent
+metadata:
+  name: cleanup-agent
+spec:
+  prompt: You echo what the user says.
+  modelRef:
+    name: test-model-mock
+  tools:
+  - type: mcp
+    name: cleanup-mcp-echo
