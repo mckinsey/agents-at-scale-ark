@@ -33,9 +33,9 @@ type mockBackend struct {
 	requireErr        error
 	requiredRV        uint64
 	updateStatusCalls int
-	maxPage    int64
-	deleteErr  map[string]error
-	getErr     map[string]error
+	maxPage           int64
+	deleteErr         map[string]error
+	getErr            map[string]error
 }
 
 func newMockBackend() *mockBackend {

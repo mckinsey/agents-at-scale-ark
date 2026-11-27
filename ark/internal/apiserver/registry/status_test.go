@@ -259,6 +259,9 @@ func TestStatusStorage_Update_DryRunDoesNotPersist(t *testing.T) {
 	}
 	if backend.updateStatusCalls != 0 {
 		t.Errorf("expected UpdateStatus not to be called on dry-run, got %d calls", backend.updateStatusCalls)
+	}
+}
+
 func TestCopyStatusOnly_ClearsFieldsTheUpdateOmits(t *testing.T) {
 	t.Parallel()
 	src := &arkv1alpha1.MCPServer{}

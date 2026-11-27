@@ -316,6 +316,8 @@ func (s *GenericStorage) Update(ctx context.Context, name string, objInfo rest.U
 			if err != nil {
 				return nil, false, err
 			}
+			// This update is an upsert: propagate the dry-run strategy so a
+			// dry-run request does not persist via the create path.
 			created, err := s.Create(ctx, obj, createValidation, &metav1.CreateOptions{DryRun: dryRunStrategy})
 			return created, true, err
 		}
