@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.0-rc.4](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.2.0-rc.3...v0.2.0-rc.4) (2026-11-27)
+
+
+### Features
+
+* **ark:** nest Query traces under a caller's traceparent annotation and add session.id ([#4026](https://github.com/mckinsey/agents-at-scale-ark/issues/4026)) ([fa2cd80](https://github.com/mckinsey/agents-at-scale-ark/commit/fa2cd80ab0aa4d27959dfe669727fae32bc8ef0f))
+* MCP header overrides in the dashboard agent form and chat ([#4036](https://github.com/mckinsey/agents-at-scale-ark/issues/4036)) ([76ef7dc](https://github.com/mckinsey/agents-at-scale-ark/commit/76ef7dcfea49a2d6574e426bcb41cc3369f5f0f9))
+
+
+### Bug Fixes
+
+* apiserver write-ahead log lease loss ([#4064](https://github.com/mckinsey/agents-at-scale-ark/issues/4064)) ([1260f63](https://github.com/mckinsey/agents-at-scale-ark/commit/1260f63deac3bca178ba5c05258cb95e5ed2e6a0))
+
 ## [0.2.0-rc.3](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.2.0-rc.2...v0.2.0-rc.3) (2026-11-27)
 
 
