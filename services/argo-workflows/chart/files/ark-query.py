@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import subprocess
@@ -65,6 +66,18 @@ def parse_parameters():
 
     return parameters
 
+def hex_id(seed, length):
+    return hashlib.sha256(seed.encode()).hexdigest()[:length]
+
+def argo_annotations():
+    workflow_uid = os.environ.get("ARK_ARGO_WORKFLOW_UID", "")
+    node_id = os.environ.get("ARK_ARGO_NODE_ID", "")
+    if not workflow_uid or not node_id:
+        return {}
+    trace_id = hex_id("argo-workflow:" + workflow_uid, 32)
+    span_id = hex_id("argo-node:" + workflow_uid + ":" + node_id, 16)
+    return {"ark.mckinsey.com/traceparent": "00-" + trace_id + "-" + span_id + "-01"}
+
 def main(): # NOSONAR - main function of a script.
     write_file("query", "{}")
     create_file("response")
@@ -103,7 +116,8 @@ def main(): # NOSONAR - main function of a script.
             "name": query_name,
             "labels": {
                 "workflow": workflow
-            }
+            },
+            "annotations": argo_annotations(),
         },
         "spec": spec,
     }

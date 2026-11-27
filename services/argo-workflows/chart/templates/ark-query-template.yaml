@@ -87,6 +87,14 @@ data:
                 value: {{ "{{workflow.name}}" | quote }}
               - name: ARK_POD_NAME
                 value: {{ "{{pod.name}}" | quote }}
+              {{- if .Values.exporter.enabled }}
+              - name: ARK_ARGO_WORKFLOW_UID
+                value: {{ "{{workflow.uid}}" | quote }}
+              - name: ARK_ARGO_NODE_ID
+                valueFrom:
+                  fieldRef:
+                    fieldPath: metadata.annotations['workflows.argoproj.io/node-id']
+              {{- end }}
             source: |
 {{ .Files.Get "files/ark-query.py" | indent 14 }}
 ---

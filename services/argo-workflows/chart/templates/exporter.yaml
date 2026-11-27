@@ -1,0 +1,104 @@
+{{- if .Values.exporter.enabled }}
+{{- $namespaces := .Values.exporter.namespaces | default (list .Release.Namespace) }}
+{{- $name := printf "%s-exporter" .Release.Name }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+{{- range $namespaces }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $name }}
+  namespace: {{ . }}
+rules:
+  - apiGroups: ["argoproj.io"]
+    resources: ["workflows"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: [{{ $.Values.exporter.otelSecretName | quote }}]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $name }}
+  namespace: {{ . }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $name }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ $name }}
+    namespace: {{ $.Release.Namespace }}
+{{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: argo-workflows-exporter
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: argo-workflows-exporter
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: argo-workflows-exporter
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      serviceAccountName: {{ $name }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+      containers:
+        - name: exporter
+          image: "{{ .Values.exporter.image.repository }}:{{ .Values.exporter.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.exporter.image.pullPolicy }}
+          env:
+            - name: WATCH_NAMESPACES
+              value: {{ join "," $namespaces | quote }}
+            - name: ARK_API_URL
+              value: {{ .Values.exporter.arkApiUrl | default (printf "http://ark-api.%s.svc.cluster.local" .Release.Namespace) | quote }}
+            - name: OTEL_SECRET_NAME
+              value: {{ .Values.exporter.otelSecretName | quote }}
+            - name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+              value: {{ .Values.exporter.tracesEndpoint | quote }}
+            - name: POLL_INTERVAL_SECONDS
+              value: {{ .Values.exporter.pollIntervalSeconds | quote }}
+            - name: LOOKBACK_SECONDS
+              value: {{ .Values.exporter.lookbackSeconds | quote }}
+            - name: LOG_LINES
+              value: {{ .Values.exporter.logLines | quote }}
+            {{- with .Values.exporter.arkApiKeySecret }}
+            - name: ARK_API_PUBLIC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ . }}
+                  key: ARK_API_PUBLIC_KEY
+            - name: ARK_API_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ . }}
+                  key: ARK_API_SECRET_KEY
+            {{- end }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            {{- toYaml .Values.exporter.resources | nindent 12 }}
+{{- end }}
