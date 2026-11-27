@@ -130,28 +130,23 @@ func TestRunWALConsumer_FreesSlotWhenContextCancelled_Integration(t *testing.T) 
 	}
 	defer checker.Close()
 
-	slotActive := func() bool {
+	temporarySlotCount := func() int {
 		var n int
 		if err := checker.QueryRow(
-			"SELECT count(*) FROM pg_replication_slots WHERE slot_name = $1 AND active", walSlotName,
+			"SELECT count(*) FROM pg_replication_slots WHERE slot_name LIKE $1 AND temporary", walSlotName+"\\_%",
 		).Scan(&n); err != nil {
 			t.Fatalf("query pg_replication_slots: %v", err)
 		}
-		return n == 1
+		return n
 	}
-
-	_, _ = checker.Exec("SELECT pg_terminate_backend(active_pid) FROM pg_replication_slots WHERE slot_name = $1 AND active_pid IS NOT NULL", walSlotName)
-	_, _ = checker.Exec("SELECT pg_drop_replication_slot(slot_name) FROM pg_replication_slots WHERE slot_name = $1", walSlotName)
-	defer func() {
-		_, _ = checker.Exec("SELECT pg_terminate_backend(active_pid) FROM pg_replication_slots WHERE slot_name = $1 AND active_pid IS NOT NULL", walSlotName)
-		_, _ = checker.Exec("SELECT pg_drop_replication_slot(slot_name) FROM pg_replication_slots WHERE slot_name = $1", walSlotName)
-	}()
 
 	backend, err := New(cfg, &integrationMockConverter{})
 	if err != nil {
 		t.Fatalf("Failed to create backend: %v", err)
 	}
 	defer backend.Close()
+
+	before := temporarySlotCount()
 
 	for round := range 2 {
 		runCtx, stop := context.WithCancel(context.Background())
@@ -162,10 +157,10 @@ func TestRunWALConsumer_FreesSlotWhenContextCancelled_Integration(t *testing.T) 
 		}()
 
 		deadline := time.Now().Add(15 * time.Second)
-		for !slotActive() {
+		for temporarySlotCount() != before+1 {
 			if time.Now().After(deadline) {
 				stop()
-				t.Fatalf("round %d: replication slot not active within 15s", round)
+				t.Fatalf("round %d: replication slot not created within 15s", round)
 			}
 			time.Sleep(100 * time.Millisecond)
 		}
@@ -178,9 +173,9 @@ func TestRunWALConsumer_FreesSlotWhenContextCancelled_Integration(t *testing.T) 
 		}
 
 		deadline = time.Now().Add(10 * time.Second)
-		for slotActive() {
+		for temporarySlotCount() != before {
 			if time.Now().After(deadline) {
-				t.Fatalf("round %d: replication slot still active 10s after cancelling the run context", round)
+				t.Fatalf("round %d: replication slot still present 10s after cancelling the run context", round)
 			}
 			time.Sleep(100 * time.Millisecond)
 		}
