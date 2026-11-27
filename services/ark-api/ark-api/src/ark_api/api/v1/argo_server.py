@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 ARGO_SERVER_URL_ENV = "ARGO_SERVER_URL"
 ARGO_SERVER_TOKEN_FILE_ENV = "ARGO_SERVER_TOKEN_FILE"
 ARGO_SERVER_TIMEOUT_SECONDS = 10.0
+ARGO_SERVER_AUTH_STATUSES = (401, 403)
 
 WORKFLOW_NAME_FILTER_PATTERN = re.compile(r"[a-z0-9.-]+")
 
@@ -154,6 +155,20 @@ async def list_workflows(
     return _workflow_list(items, next_offset, remaining)
 
 
+class ArgoServerAuthError(Exception):
+    def __init__(self, status_code: int):
+        super().__init__(
+            f"Argo Server rejected ark-api's request (HTTP {status_code}). "
+            "If Argo Server requires login, set the ark-api chart value argoServer.tokenFile."
+        )
+        self.status_code = status_code
+
+
+def _raise_on_auth_error(error: httpx.HTTPStatusError) -> None:
+    if error.response.status_code in ARGO_SERVER_AUTH_STATUSES:
+        raise ArgoServerAuthError(error.response.status_code) from error
+
+
 def _started_at(workflow: dict) -> str:
     return (workflow.get("status") or {}).get("startedAt") or ""
 
@@ -174,6 +189,10 @@ async def find_archived_workflow_uid(
             response = await http_client.get(url, params=params, headers=_auth_headers())
         response.raise_for_status()
         body = response.json()
+    except httpx.HTTPStatusError as e:
+        _raise_on_auth_error(e)
+        logger.warning(f"Argo Server archived workflow lookup failed for {workflow_name}: {e}")
+        return None
     except (httpx.HTTPError, ValueError) as e:
         logger.warning(f"Argo Server archived workflow lookup failed for {workflow_name}: {e}")
         return None
@@ -199,7 +218,8 @@ async def get_workflow_log(
     pod-log API, which only sees logs the kubelet still retains on the node.
 
     Returns the raw log text, or None when Argo Server has no archived log for
-    the node (so the caller can degrade to the "pod deleted" message).
+    the node (so the caller can degrade to the "pod deleted" message). Raises
+    ArgoServerAuthError when Argo Server rejects ark-api's credentials.
     """
     artifact = f"{container}-logs"
     if archived_uid:
@@ -216,6 +236,7 @@ async def get_workflow_log(
             response = await http_client.get(url, headers=_auth_headers())
         response.raise_for_status()
     except httpx.HTTPStatusError as e:
+        _raise_on_auth_error(e)
         # A 404 just means nothing was archived for this node — the normal case
         # for workflows that ran before archiveLogs was enabled. Don't shout.
         if e.response.status_code == 404:

@@ -706,6 +706,8 @@ async def get_workflow_logs(
                 if e.status == 403:
                     return PlainTextResponse(content="Forbidden", status_code=403)
                 raise
+            except HTTPException as e:
+                return PlainTextResponse(content=str(e.detail), status_code=e.status_code)
             if archived:
                 return PlainTextResponse(content=_tail(archived, tail_lines))
             return PlainTextResponse(
@@ -728,6 +730,8 @@ async def get_workflow_logs(
                 if e.status == 403:
                     return PlainTextResponse(content="Forbidden", status_code=403)
                 raise
+            except HTTPException as e:
+                return PlainTextResponse(content=str(e.detail), status_code=e.status_code)
             if archived:
                 return PlainTextResponse(content=_tail(archived, tail_lines))
             return PlainTextResponse(content=POD_DELETED_MESSAGE, status_code=404)
@@ -1287,7 +1291,8 @@ async def _fetch_archived_log(
     is the same data the live pod-log read returns, so we require the same
     permission — ``get`` on ``pods/log`` in the namespace — evaluated under the
     caller's impersonated identity. Raises ``ApiException(403)`` on denial so the
-    usual forbidden response (and ``IMPERSONATION_FALLBACK``) applies. Returns
+    usual forbidden response (and ``IMPERSONATION_FALLBACK``) applies. Raises
+    ``HTTPException(502)`` when Argo Server rejects ark-api's credentials. Returns
     None when ``ARGO_SERVER_URL`` is unset or Argo Server has no archive.
     """
     base_url = argo_server.get_argo_server_url()
@@ -1297,14 +1302,18 @@ async def _fetch_archived_log(
         impersonation, namespace, "", "pods", "get", subresource="log"
     ):
         raise ApiException(status=403, reason="Forbidden")
-    archived_uid = None
-    if workflow_deleted:
-        archived_uid = await argo_server.find_archived_workflow_uid(base_url, namespace, workflow_name)
-        if not archived_uid:
-            return None
-    return await argo_server.get_workflow_log(
-        base_url, namespace, workflow_name, node_id, container=container or "main", archived_uid=archived_uid
-    )
+    try:
+        archived_uid = None
+        if workflow_deleted:
+            archived_uid = await argo_server.find_archived_workflow_uid(base_url, namespace, workflow_name)
+            if not archived_uid:
+                return None
+        return await argo_server.get_workflow_log(
+            base_url, namespace, workflow_name, node_id, container=container or "main", archived_uid=archived_uid
+        )
+    except argo_server.ArgoServerAuthError as e:
+        logger.error(str(e))
+        raise HTTPException(status_code=502, detail=str(e)) from e
 
 
 def _tail(text: str, tail_lines: Optional[int]) -> str:

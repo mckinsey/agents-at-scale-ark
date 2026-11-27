@@ -91,6 +91,20 @@ class TestGetWorkflowLog(unittest.IsolatedAsyncioTestCase):
 
         self.assertIsNone(out)
 
+    async def test_raises_when_argo_server_rejects_credentials(self):
+        for status in (401, 403):
+            with self.subTest(status=status):
+                def handler(request, status=status):
+                    return httpx.Response(status, text="denied")
+
+                with (
+                    patch("ark_api.api.v1.argo_server.httpx.AsyncClient", argo_client_factory(handler)),
+                    self.assertRaises(argo_server.ArgoServerAuthError) as ctx,
+                ):
+                    await argo_server.get_workflow_log(ARGO_URL, "default", "wf", "wf-1")
+
+                self.assertEqual(ctx.exception.status_code, status)
+                self.assertIn("argoServer.tokenFile", str(ctx.exception))
 
     async def test_archived_uid_reads_through_the_workflow_archive(self):
         captured = {}
@@ -166,6 +180,16 @@ class TestFindArchivedWorkflowUid(unittest.IsolatedAsyncioTestCase):
 
         with patch("ark_api.api.v1.argo_server.httpx.AsyncClient", argo_client_factory(handler)):
             self.assertIsNone(await argo_server.find_archived_workflow_uid(ARGO_URL, "default", "wf"))
+
+    async def test_raises_when_argo_server_rejects_credentials(self):
+        def handler(request):
+            return httpx.Response(401, text="denied")
+
+        with (
+            patch("ark_api.api.v1.argo_server.httpx.AsyncClient", argo_client_factory(handler)),
+            self.assertRaises(argo_server.ArgoServerAuthError),
+        ):
+            await argo_server.find_archived_workflow_uid(ARGO_URL, "default", "wf")
 
 
 def deleted_workflow_handler(calls, archived_uid="uid-1", text="archived\n"):
@@ -408,6 +432,51 @@ class TestArchivedLogRoutes(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.json()["content"], "l1\nl2")
         self.assertIn("/artifact-files/default/archived-workflows/uid-1/wf-123/outputs/main-logs", calls)
+
+
+    @patch("ark_api.api.v1.resources.CoreV1Api")
+    @patch("ark_api.api.v1.resources._resolve_workflow_pod_name", new_callable=AsyncMock)
+    @patch("ark_api.api.v1.resources.create_dynamic_client")
+    @patch("ark_api.api.v1.resources.client.AuthorizationV1Api")
+    def test_log_argo_server_auth_error_returns_502(self, mock_auth, mock_dyn, mock_resolve, mock_core, _ctx, _api):
+        mock_auth.return_value = access_review(True)
+        mock_resolve.side_effect = HTTPException(status_code=404, detail="gone")
+        mock_core.return_value = Mock()
+        self._workflow_dynamic_client(mock_dyn, workflow_node())
+        calls = []
+        with patch("ark_api.api.v1.argo_server.httpx.AsyncClient", argo_client_factory(archive_handler(calls, "denied", 401))):
+            r = self.client.get(WF_LOG_PATH)
+        self.assertEqual(r.status_code, 502)
+        self.assertIn("argoServer.tokenFile", r.text)
+        self.assertNotIn("archiveLogs", r.text)
+
+    @patch("ark_api.api.v1.resources.CoreV1Api")
+    @patch("ark_api.api.v1.resources._resolve_workflow_pod_name", new_callable=AsyncMock)
+    @patch("ark_api.api.v1.resources.create_dynamic_client")
+    @patch("ark_api.api.v1.resources.client.AuthorizationV1Api")
+    def test_log_workflow_deleted_argo_server_auth_error_returns_502(self, mock_auth, mock_dyn, mock_resolve, mock_core, _ctx, _api):
+        mock_auth.return_value = access_review(True)
+        mock_resolve.side_effect = HTTPException(status_code=404, detail="gone")
+        mock_core.return_value = Mock()
+        self._deleted_workflow_dynamic_client(mock_dyn)
+        calls = []
+        with patch("ark_api.api.v1.argo_server.httpx.AsyncClient", argo_client_factory(archive_handler(calls, "denied", 403))):
+            r = self.client.get(WF_LOG_PATH)
+        self.assertEqual(r.status_code, 502)
+        self.assertIn("argoServer.tokenFile", r.text)
+
+    @patch("ark_api.api.v1.resources._resolve_workflow_pod_name", new_callable=AsyncMock)
+    @patch("ark_api.api.v1.resources.create_dynamic_client")
+    @patch("ark_api.api.v1.resources.client.AuthorizationV1Api")
+    def test_window_argo_server_auth_error_returns_502(self, mock_auth, mock_dyn, mock_resolve, _ctx, _api):
+        mock_auth.return_value = access_review(True)
+        mock_resolve.side_effect = HTTPException(status_code=404, detail="gone")
+        self._workflow_dynamic_client(mock_dyn, workflow_node())
+        calls = []
+        with patch("ark_api.api.v1.argo_server.httpx.AsyncClient", argo_client_factory(archive_handler(calls, "denied", 401))):
+            r = self.client.get(WF_WINDOW_PATH)
+        self.assertEqual(r.status_code, 502)
+        self.assertIn("argoServer.tokenFile", r.json()["detail"])
 
 
 if __name__ == "__main__":
