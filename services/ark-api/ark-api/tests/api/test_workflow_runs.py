@@ -195,5 +195,65 @@ class TestGetWorkflowRun(unittest.TestCase):
         self.assertEqual(r.status_code, 404)
 
 
+    @patch("ark_api.api.v1.workflow_runs.CoreV1Api")
+    @patch("ark_api.api.v1.workflow_runs.create_dynamic_client")
+    def test_reads_compressed_node_status(self, mock_dyn, mock_core, _api):
+        from ark_api.api.v1.workflow_lifecycle import compress_node_status
+
+        self._dynamic_client(mock_dyn, compress_node_status(workflow()))
+        self._core(mock_core, [pod()], log_text="x\n")
+
+        body = self.client.get(RUN_PATH).json()
+
+        self.assertEqual([n["id"] for n in body["nodes"]], ["wf", "wf-123"])
+        self.assertEqual(body["trace_id"], "4bf92f3577b34da6a3ce929d0e0e4736")
+
+    @patch("ark_api.api.v1.workflow_runs.CoreV1Api")
+    @patch("ark_api.api.v1.workflow_runs.create_dynamic_client")
+    def test_offloaded_node_status_returns_conflict(self, mock_dyn, mock_core, _api):
+        offloaded = workflow()
+        offloaded["status"].pop("nodes")
+        offloaded["status"]["offloadNodeStatusVersion"] = "fnv:123"
+        self._dynamic_client(mock_dyn, offloaded)
+        self._core(mock_core, [])
+
+        r = self.client.get(RUN_PATH)
+
+        self.assertEqual(r.status_code, 409)
+        self.assertIn("offloaded", r.json()["detail"])
+
+    @patch("ark_api.api.v1.workflow_runs.CoreV1Api")
+    @patch("ark_api.api.v1.workflow_runs.create_dynamic_client")
+    def test_redacts_credentials_in_node_names(self, mock_dyn, mock_core, _api):
+        run = workflow()
+        step = run["status"]["nodes"]["wf-123"]
+        step["name"] = "wf[0].ask(0:api_key:opaque123,user:bob)"
+        step["displayName"] = "ask(0:api_key:opaque123,user:bob)"
+        self._dynamic_client(mock_dyn, run)
+        self._core(mock_core, [pod()], log_text="x\n")
+
+        node = self.client.get(RUN_PATH).json()["nodes"][1]
+
+        self.assertEqual(node["name"], "wf[0].ask(0:api_key:[REDACTED],user:bob)")
+        self.assertEqual(node["display_name"], "ask(0:api_key:[REDACTED],user:bob)")
+
+    @patch("ark_api.api.v1.workflow_runs.CoreV1Api")
+    @patch("ark_api.api.v1.workflow_runs.create_dynamic_client")
+    def test_redacts_parameters_whose_name_contains_a_credential_word(self, mock_dyn, mock_core, _api):
+        sensitive = ["openai_api_key", "db_password", "GITHUB_TOKEN", "slack-token", "access-token", "secret_key", "openaiApiKey"]
+        run = workflow()
+        run["status"]["nodes"]["wf-123"]["inputs"] = {"parameters": (
+            [{"name": name, "value": "opaque123"} for name in sensitive]
+            + [{"name": "max_tokens", "value": "500"}, {"name": "tokenizer", "value": "cl100k"}]
+        )}
+        self._dynamic_client(mock_dyn, run)
+        self._core(mock_core, [pod()], log_text="x\n")
+
+        inputs = {p["name"]: p["value"] for p in self.client.get(RUN_PATH).json()["nodes"][1]["inputs"]}
+
+        self.assertEqual({name: inputs[name] for name in sensitive}, dict.fromkeys(sensitive, "[REDACTED]"))
+        self.assertEqual((inputs["max_tokens"], inputs["tokenizer"]), ("500", "cl100k"))
+
+
 if __name__ == "__main__":
     unittest.main()

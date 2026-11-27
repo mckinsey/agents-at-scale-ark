@@ -1,18 +1,24 @@
 import logging
+import re
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from kubernetes_asyncio.client import CoreV1Api
 from kubernetes_asyncio.client.rest import ApiException
 from ark_sdk.impersonation import ImpersonationConfig
 
 from ...auth.dependencies import get_impersonation_config
 from ...models.workflow_runs import WorkflowRun, WorkflowRunLog, WorkflowRunNode, WorkflowRunParameter
-from ...services.sensitive_data_filter import redact
+from ...services.sensitive_data_filter import REDACTED, SENSITIVE_KEYS, redact
 from .client_utils import create_dynamic_client, get_impersonating_api_client
 from .exceptions import handle_k8s_errors
 from .resources import WORKFLOW_POD_LABEL
-from .workflow_lifecycle import WORKFLOW_API_VERSION, WORKFLOW_KIND
+from .workflow_lifecycle import (
+    WORKFLOW_API_VERSION,
+    WORKFLOW_KIND,
+    LifecyclePreconditionError,
+    expand_node_status,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +32,9 @@ MAX_LOG_LINES = 1000
 LIVE_LOG_TAIL_LINES = 5000
 LOG_CONTAINER = "main"
 ARGO_EXECUTOR_LOG_MARKER = " argo=true"
+SENSITIVE_NAME_WORDS = frozenset(key.replace("-", "_") for key in SENSITIVE_KEYS)
+CAMEL_CASE_BOUNDARY = re.compile(r"([a-z0-9])([A-Z])")
+NAME_SEPARATORS = re.compile(r"[-.\s]+")
 
 
 @router.get(
@@ -51,6 +60,10 @@ async def get_workflow_run(
         dynamic_client = await create_dynamic_client(api)
         workflow_resource = await dynamic_client.resources.get(api_version=WORKFLOW_API_VERSION, kind=WORKFLOW_KIND)
         workflow = (await workflow_resource.get(name=workflow_name, namespace=namespace)).to_dict()
+        try:
+            workflow, _ = expand_node_status(workflow)
+        except LifecyclePreconditionError as e:
+            raise HTTPException(status_code=409, detail=str(e)) from e
 
         core_v1 = CoreV1Api(api)
         pods = await core_v1.list_namespaced_pod(
@@ -123,8 +136,8 @@ def _workflow_run_node(node_id: str, node: dict, pod, log: Optional[WorkflowRunL
     outputs = node.get("outputs") or {}
     return WorkflowRunNode(
         id=node_id,
-        name=node.get("name", ""),
-        display_name=node.get("displayName"),
+        name=_redacted(node.get("name", "")),
+        display_name=_redacted(node.get("displayName")),
         template_name=node.get("templateName") or (node.get("templateRef") or {}).get("template"),
         type=node.get("type", ""),
         phase=node.get("phase"),
@@ -148,8 +161,16 @@ def _parameters(section: Optional[dict]) -> list:
     for parameter in (section or {}).get("parameters") or []:
         name = parameter.get("name", "")
         value = parameter.get("value")
-        parameters.append(WorkflowRunParameter(name=name, value=redact({name: value})[name]))
+        if value is not None and _is_sensitive_name(name):
+            value = REDACTED
+        parameters.append(WorkflowRunParameter(name=name, value=redact(value)))
     return parameters
+
+
+def _is_sensitive_name(name: str) -> bool:
+    words = NAME_SEPARATORS.sub("_", CAMEL_CASE_BOUNDARY.sub(r"\1_\2", name)).lower()
+    padded = f"_{words}_"
+    return any(f"_{word}_" in padded for word in SENSITIVE_NAME_WORDS)
 
 
 def _redacted(value: Optional[str]) -> Optional[str]:
