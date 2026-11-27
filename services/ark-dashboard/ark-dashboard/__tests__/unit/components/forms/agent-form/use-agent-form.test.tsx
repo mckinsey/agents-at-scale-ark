@@ -9,7 +9,11 @@ import { AgentFormMode } from '@/components/forms/agent-form/types';
 import { useAgentForm } from '@/components/forms/agent-form/use-agent-form';
 import { toast } from '@/components/ui/sonner';
 import type { AgentTool } from '@/lib/services';
-import { agentsService, executionEnginesService } from '@/lib/services';
+import {
+  agentsService,
+  executionEnginesService,
+  toolsService,
+} from '@/lib/services';
 
 const OUTPUT_SCHEMA_KEY =
   'executor-openai-responses.ark.mckinsey.com/output-schema';
@@ -425,5 +429,63 @@ describe('useAgentForm tool approvals', () => {
         ],
       }),
     );
+  });
+
+  it('reports a Tool-CR gated tool as enforced and effectively required', async () => {
+    mockAgentWithTools([{ type: 'http', name: 'gated' }]);
+    vi.mocked(toolsService.getAll).mockResolvedValue([
+      {
+        id: 'gated',
+        name: 'gated',
+        type: 'http',
+        approval: { required: true, timeout: '5m' },
+      },
+    ]);
+    const { result } = await renderLoadedForm();
+
+    // Agent spec carries no approval, but the Tool CR gates it.
+    expect(result.current.actions.getToolApproval('gated')).toBeUndefined();
+    expect(result.current.actions.isToolApprovalEnforced('gated')).toBe(true);
+    expect(result.current.actions.getEffectiveToolApproval('gated')).toEqual({
+      required: true,
+      timeout: '5m',
+    });
+  });
+
+  it('merges an agent timeout override over the Tool-CR approval', async () => {
+    mockAgentWithTools([
+      { type: 'http', name: 'gated', approval: { timeout: '10m' } },
+    ]);
+    vi.mocked(toolsService.getAll).mockResolvedValue([
+      {
+        id: 'gated',
+        name: 'gated',
+        type: 'http',
+        approval: { required: true, timeout: '5m', onTimeout: 'reject' },
+      },
+    ]);
+    const { result } = await renderLoadedForm();
+
+    expect(result.current.actions.isToolApprovalEnforced('gated')).toBe(true);
+    expect(result.current.actions.getEffectiveToolApproval('gated')).toEqual({
+      required: true,
+      timeout: '10m',
+      onTimeout: 'reject',
+    });
+  });
+
+  it('is not enforced when only the agent sets approval', async () => {
+    mockAgentWithTools([
+      { type: 'custom', name: 'write', approval: { required: true } },
+    ]);
+    vi.mocked(toolsService.getAll).mockResolvedValue([
+      { id: 'write', name: 'write', type: 'custom' },
+    ]);
+    const { result } = await renderLoadedForm();
+
+    expect(result.current.actions.isToolApprovalEnforced('write')).toBe(false);
+    expect(result.current.actions.getEffectiveToolApproval('write')).toEqual({
+      required: true,
+    });
   });
 });

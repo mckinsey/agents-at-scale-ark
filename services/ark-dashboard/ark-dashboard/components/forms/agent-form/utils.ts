@@ -1,8 +1,55 @@
 'use client';
 
 import type { Parameter } from '@/components/ui/parameter-editor';
-import type { AgentHeader, AgentOverride } from '@/lib/services';
+import type {
+  AgentHeader,
+  AgentOverride,
+  ToolApprovalConfig,
+} from '@/lib/services';
 import { generateUUID } from '@/lib/utils/uuid';
+
+type ArgumentMatch = NonNullable<ToolApprovalConfig['argumentMatches']>[number];
+
+function mergeArgumentMatches(
+  fromTool: ToolApprovalConfig,
+  fromAgent: ToolApprovalConfig,
+): ArgumentMatch[] | undefined {
+  // A side that is required with no matchers wants every call held, so it wins
+  // and the merged config carries no matchers. Otherwise the matchers union, so
+  // an agent cannot narrow away a gate the Tool declares.
+  if (fromTool.required && (fromTool.argumentMatches?.length ?? 0) === 0) {
+    return undefined;
+  }
+  if (fromAgent.required && (fromAgent.argumentMatches?.length ?? 0) === 0) {
+    return undefined;
+  }
+  const merged = [
+    ...(fromTool.argumentMatches ?? []),
+    ...(fromAgent.argumentMatches ?? []),
+  ];
+  return merged.length > 0 ? merged : undefined;
+}
+
+/**
+ * Resolve the effective approval for a tool, mirroring the controller's
+ * mergeApprovalConfig: Required is unioned so an agent cannot drop a gate the
+ * Tool declares, Timeout/OnTimeout come from the agent when set otherwise the
+ * Tool, and ArgumentMatches union.
+ */
+export function mergeToolApproval(
+  fromTool: ToolApprovalConfig | null | undefined,
+  fromAgent: ToolApprovalConfig | null | undefined,
+): ToolApprovalConfig | undefined {
+  if (!fromTool) return fromAgent ?? undefined;
+  if (!fromAgent) return fromTool;
+  return {
+    ...fromTool,
+    required: Boolean(fromTool.required) || Boolean(fromAgent.required),
+    timeout: fromAgent.timeout ?? fromTool.timeout,
+    onTimeout: fromAgent.onTimeout ? fromAgent.onTimeout : fromTool.onTimeout,
+    argumentMatches: mergeArgumentMatches(fromTool, fromAgent),
+  };
+}
 
 interface AgentParameterInput {
   name: string;
