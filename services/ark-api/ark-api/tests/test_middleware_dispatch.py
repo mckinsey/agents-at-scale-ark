@@ -217,6 +217,43 @@ class TestMiddlewareDispatchImpersonationHeaders(unittest.IsolatedAsyncioTestCas
         "OIDC_APPLICATION_ID": "app",
         "IMPERSONATION_ENABLED": "true",
         "IMPERSONATION_USERNAME_CLAIM": "email",
+        "IMPERSONATION_GROUPS_CLAIM": "groups",
+    })
+    @patch("ark_api.auth.middleware.APIKeyService")
+    @patch("ark_api.auth.middleware.TokenValidator")
+    async def test_empty_username_returns_401_without_calling_route(self, mock_validator_cls, mock_api_key_svc):
+        import json
+
+        from ark_api.auth.middleware import AuthMiddleware
+
+        for claims in [
+            {"email": ""},
+            {"email": "   "},
+            {"email": "\t"},
+            {"email": "", "groups": ["team-a"]},
+        ]:
+            with self.subTest(claims=claims):
+                mock_validator = MagicMock()
+                mock_validator.validate_token.return_value = {**claims, "sub": "123"}
+                mock_validator_cls.return_value = mock_validator
+
+                middleware = AuthMiddleware(MagicMock())
+                call_next = AsyncMock()
+
+                request = _make_request(headers={"authorization": "Bearer valid-token"})
+                response = await middleware.dispatch(request, call_next)
+
+                self.assertEqual(response.status_code, 401)
+                self.assertIn("empty", json.loads(response.body)["detail"].lower())
+                call_next.assert_not_called()
+                self.assertFalse(hasattr(request.state, "user_identity"))
+
+    @patch.dict(os.environ, {
+        "AUTH_MODE": "sso",
+        "OIDC_ISSUER_URL": "http://issuer",
+        "OIDC_APPLICATION_ID": "app",
+        "IMPERSONATION_ENABLED": "true",
+        "IMPERSONATION_USERNAME_CLAIM": "email",
     })
     @patch("ark_api.auth.middleware._extract_user_identity", side_effect=RuntimeError("boom"))
     @patch("ark_api.auth.middleware.APIKeyService")

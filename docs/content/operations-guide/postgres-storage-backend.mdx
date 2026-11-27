@@ -72,7 +72,11 @@ In addition to its regular query pool, the apiserver holds two session-scoped co
 - **`LISTEN` is session state and fails silently behind a transaction-mode pooler.** The `LISTEN` command succeeds, but the server backend it registered on is handed to the next client at the end of the transaction, so notifications are never delivered: `ark_apiserver_notify_listener_connected` reads `1` while watches on that replica silently fall back to the ~120s relist.
 - Managed poolers (RDS Proxy, Cloud SQL connectors) have the same constraints — replication slots and `LISTEN` both require a session-scoped connection.
 
-The apiserver already pools its own query connections (`MaxOpenConns` defaults to 40); the replication and `LISTEN` connections are held outside that pool, so budget `MaxOpenConns + 2` per replica against `max_connections`. An external transaction-pooling layer in front of the query path is optional and must not carry either of the two session connections.
+The apiserver already pools its own query connections. The pool holds up to 40 connections per replica by default; set `postgresql.maxOpenConns` in the chart (`ARK_POSTGRES_MAX_OPEN_CONNS` in the container) to change it. The replication and `LISTEN` connections are held outside that pool, so budget `maxOpenConns + 2` per replica against `max_connections`. This is an upper bound: the leader holds the pool, a `LISTEN` and the replication connection, and every other replica holds the pool and a `LISTEN`, so the real ceiling is `maxOpenConns × replicas + replicas + 1`.
+
+Pick a size between about 20 and 40. Below 20, creates slow down and update tail latency grows (at 5, creates dropped to half and update p99 reached 2.2 s). Above 40, writes do not get faster: commits queue on the Postgres NOTIFY lock, so a larger pool only adds waiting connections. Lower the pool only to fit `max_connections`. The chart accepts integers from 1 to 262143 and rejects anything else at render time.
+
+An external transaction-pooling layer in front of the query path is optional and must not carry either of the two session connections.
 
 ## Schema and replication slot
 
@@ -488,17 +492,10 @@ The aggregated apiserver enforces the same access control as the rest of the clu
 
 ## Availability and multi-replica behaviour
 
-The chart defaults to a single replica. Understand what that means before running it in production: when the aggregated apiserver is unavailable, the `ark.mckinsey.com` APIService goes unavailable, which degrades kube-apiserver API discovery and the garbage-collection and namespace controllers **cluster-wide** — a standard Kubernetes aggregation-layer failure mode, not something specific to Ark. A single replica is therefore a cluster-wide single point of failure during pod restarts, node drains, and crashes.
-
-For production, run two replicas and enable the disruption budget:
-
-```bash
---set replicas=2 --set podDisruptionBudget.enabled=true
-```
-
+The chart defaults to two replicas, a PodDisruptionBudget (`minAvailable: 1`) and a `topologySpread` rule that prefers different nodes. When the aggregated apiserver is unavailable, the `ark.mckinsey.com` APIService goes unavailable, which degrades kube-apiserver API discovery and the garbage-collection and namespace controllers **cluster-wide** — a standard Kubernetes aggregation-layer failure mode, not something specific to Ark. A single replica is a cluster-wide single point of failure during pod restarts, node drains, and crashes, so do not lower `replicas` to 1 in production.
 How multiple replicas behave:
 
-- **API serving is active-active.** Every replica serves reads and writes directly against Postgres; the Service load-balances across them. Killing any one pod leaves the APIService available.
+- **API serving is active-active.** Every replica serves reads and writes directly against Postgres. Requests reach more than one replica only if kube-apiserver spreads them; see [Scalability](/reference/scalability#replicas). Killing any one pod leaves the APIService available.
 - **The WAL stream is single-consumer by design.** Only the replica holding the `ark-apiserver-leader` lease runs the WAL consumer (the logical replication slot admits one connection; the slot's `active` flag is a backstop even without the lease). Non-leader replicas do not touch the slot.
 - **Cross-replica watch delivery is `pg_notify`-driven.** Every write emits a `pg_notify` on the `ark_resource_change` channel after commit, and every replica holds a `LISTEN` connection that wakes its watchers immediately — typically well under a second, regardless of which replica took the write. The notification carries only the resource kind; watchers are refreshed from the `resources` table, so a dropped notification delays delivery instead of losing it. The periodic relist (~120 seconds) remains as the backstop.
 - **Failover:** if the leader dies, a surviving replica acquires the lease (roughly the 15s lease duration) and starts the WAL consumer; the slot position is persistent, so no events are lost across the handover.

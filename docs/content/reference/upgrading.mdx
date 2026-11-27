@@ -267,6 +267,15 @@ kubectl get queries -A -o jsonpath='{range .items[?(@.spec.memory.namespace)]}{.
 
 References within the same namespace, including an explicit `namespace` equal to the object's own, are unchanged.
 
+### Aggregated Apiserver Defaults to Two Replicas
+
+The `ark-apiserver` chart now runs two replicas, a `PodDisruptionBudget` (`minAvailable: 1`) and a `topologySpread` rule (`ScheduleAnyway` on `kubernetes.io/hostname`). Requests per pod go from `10m`/`128Mi` to `100m`/`256Mi` and limits from `500m`/`256Mi` to `1`/`1Gi`, so the total request goes from `10m`/`128Mi` to `200m`/`512Mi`. Check that the cluster has the capacity before upgrading.
+
+- Releases that set `replicas: 1` keep one pod and get no `PodDisruptionBudget`.
+- `helm upgrade --reuse-values` skips the `PodDisruptionBudget` and the spread rule, because reused values do not include the new keys. Pass `--reset-then-reuse-values` to pick them up.
+- On a single-node cluster both pods land on the same node. `kubectl drain` never finishes there, because the replacement pod stays `Pending` on the cordoned node. Drain with `--disable-eviction`.
+- With `topologySpread.whenUnsatisfiable=DoNotSchedule`, `nodeTaintsPolicy: Honor` keeps tainted nodes, such as control planes, from counting as empty domains and blocking a rollout.
+
 ### Memory API Accepts the CRD Spec
 
 `POST /v1/memories` and `PUT /v1/memories/{name}` now take the fields of the [Memory](/reference/resources/memory) resource. The old body had `description` and `config`, which the Memory CRD does not have, so every create answered `500` and every update was silently dropped.
@@ -589,7 +598,7 @@ The `graph` team strategy is deprecated and has been merged into `sequential`.
 On create or update, you will see a deprecation warning.
 
 <Callout type="warning">
-`strategy: graph` will be removed in v1.0.0. Update your team manifests to use `sequential`.
+The `graph` strategy value will be removed in v1.0.0. Update your team manifests to use `sequential`, or `selector` with `spec.graph` to keep edge constraints. A `selector` team also requires `spec.selector.agent` and `spec.maxTurns`.
 </Callout>
 
 **Migration:**

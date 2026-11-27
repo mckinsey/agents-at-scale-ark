@@ -85,3 +85,17 @@ XRAY-1170984 - GHSA-g36m-r6gw-cj73 (anyio PathLike command run through the shell
 - Not reachable in Ark: no Ark code calls anyio.run_process() or anyio.open_process(). The only dependency that calls open_process() is mcp's stdio client, which passes an argument list ([command, *args]), not a single PathLike, so it never takes the shell branch. watchfiles starts processes with its own multiprocessing/subprocess code, not anyio's.
 - Affects ark-api, ark-mcp, ark-sdk and the Python samples/templates transitively via fastapi, starlette, httpx, sse-starlette, mcp and watchfiles.
 - Remove this entry once anyio publishes a patched release and the lockfiles are bumped to it.
+
+XRAY-1172638 - CVE-2026-133949 (pip bundles certifi with compromised eMudhra certificates)
+- pip before 26.2.2 ships a certifi bundle that trusts compromised eMudhra intermediate certificates.
+- Not shipped by Ark: no uv.lock, requirements.txt or pyproject.toml pins pip, and the ark-api and ark-mcp images ship pip 26.1.1, not 25.1.1.
+- The source scan reports pip 25.1.1 as a direct dependency of mcp, uvloop, authlib, httptools and ark-sdk-builder, which none of them have. It most likely comes from the virtualenv that jf audit creates on the CI runner.
+- Remove this entry once the runner's Python bundles pip 26.2.2 or later, or once the scan's virtualenv upgrades pip.
+
+XRAY-1179009 - GHSA-xwxv-2q49-qr35 (lestrrat-go/jwx/v2 <= 2.1.7, claim injection via flattened JWS)
+- jwx v2's jwt.Parse verifies the signature over the protected/payload fields of a flattened JWS JSON token, then builds the returned token from the unsigned top-level envelope members, letting a holder of any single genuinely signed token wrap it and inject arbitrary claims (sub/iss/aud) and drop exp. CWE-347, High.
+- No fix available: the advisory marks all of v2 (<= 2.1.7) affected with no patched v2 release; 2.1.7 is the latest v2. The fix only exists in jwx v3/v4, which is a different Go module path (github.com/lestrrat-go/jwx/v3), so it cannot be pulled in via a go.mod replace while the importer still requires /v2.
+- Transitive-only and not under Ark's control: jwx/v2 v2.1.4 is an indirect dependency (ark/go.mod), pulled solely by trpc.group/trpc-go/trpc-a2a-go (the A2A library). trpc-a2a-go v0.2.5 is the latest release and even its main branch still requires jwx v2, so there is no upstream version to upgrade to.
+- NOT REACHABLE in Ark: the vulnerable package is github.com/lestrrat-go/jwx/v2/jwt. trpc-a2a-go imports only github.com/lestrrat-go/jwx/v2/jwk (jwk.ParseKey in auth/push_notification.go) and never imports the jwt subpackage; its own JWT verification uses golang-jwt/jwt. Ark's only JWT code (internal/mcp/clientcreds.go) also uses golang-jwt/jwt/v5, not jwx.
+- Verified with govulncheck ./... on the ark module: jwx is reported as a vulnerability "in modules you require, but your code doesn't appear to call" — no reachable call trace.
+- Remove this entry once trpc-a2a-go migrates to jwx v3/v4 and ark/go.mod no longer requires github.com/lestrrat-go/jwx/v2.

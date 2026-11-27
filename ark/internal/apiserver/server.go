@@ -122,6 +122,8 @@ type Config struct {
 	AuthMode        string
 	TLSCertFile     string
 	TLSKeyFile      string
+
+	PostgresMaxOpenConns int
 	// K8sClient reads Secrets and ConfigMaps for valueFrom parameter resolution. It is the
 	// uncached reader, so a Get hits the host apiserver directly instead of populating a
 	// cluster-wide informer. That keeps the apiserver ServiceAccount at get-only on those
@@ -151,6 +153,21 @@ type Config struct {
 	// either alone. A cluster that mandates Kyverno on Ark resources but does not use CEL policy
 	// needs strict webhooks with CEL off, which one shared flag cannot express.
 	ThirdPartyWebhooksRequired bool
+}
+
+func (c Config) postgresConfig() postgresql.Config {
+	return postgresql.Config{
+		Host:         c.PostgresHost,
+		Port:         c.PostgresPort,
+		Database:     c.PostgresDB,
+		User:         c.PostgresUser,
+		Password:     c.PostgresPass,
+		SSLMode:      c.PostgresSSL,
+		SSLRootCert:  c.PostgresSSLRoot,
+		SSLCert:      c.PostgresSSLCert,
+		SSLKey:       c.PostgresSSLKey,
+		MaxOpenConns: c.PostgresMaxOpenConns,
+	}
 }
 
 const readyzPingTimeout = 2 * time.Second
@@ -217,17 +234,7 @@ func (s *Server) Start(ctx context.Context) error {
 	converter := NewRegistryTypeConverter()
 	var err error
 
-	cfg := postgresql.Config{
-		Host:        s.config.PostgresHost,
-		Port:        s.config.PostgresPort,
-		Database:    s.config.PostgresDB,
-		User:        s.config.PostgresUser,
-		Password:    s.config.PostgresPass,
-		SSLMode:     s.config.PostgresSSL,
-		SSLRootCert: s.config.PostgresSSLRoot,
-		SSLCert:     s.config.PostgresSSLCert,
-		SSLKey:      s.config.PostgresSSLKey,
-	}
+	cfg := s.config.postgresConfig()
 	s.backend, err = postgresql.New(cfg, converter)
 	if err != nil {
 		return fmt.Errorf("failed to create PostgreSQL backend: %w", err)

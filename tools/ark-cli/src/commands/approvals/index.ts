@@ -130,6 +130,7 @@ async function runList(options: ApprovalsCommandOptions): Promise<void> {
     undefined,
     config.services?.reusePortForwards ?? false
   );
+  let exitCode: number | undefined;
   try {
     const client = await proxy.start();
     const approvals = await listApprovals(client, options.namespace);
@@ -139,9 +140,12 @@ async function runList(options: ApprovalsCommandOptions): Promise<void> {
       'listing approvals:',
       error instanceof Error ? error.message : error
     );
-    process.exit(ExitCodes.CliError);
+    exitCode = ExitCodes.CliError;
   } finally {
     proxy.stop();
+  }
+  if (exitCode !== undefined) {
+    process.exit(exitCode);
   }
 }
 
@@ -155,19 +159,23 @@ async function runDecision(
     undefined,
     config.services?.reusePortForwards ?? false
   );
+  let exitCode: number | undefined;
   try {
     const client = await proxy.start();
     await client.submitApproval(name, decision, options.namespace);
     output.success(`approval '${name}' ${decision}`);
   } catch (error) {
-    const {message, exitCode} = mapApprovalError(error, name);
+    const {message, exitCode: code} = mapApprovalError(error, name);
     output.error(
       `${decision === 'approved' ? 'approving' : 'rejecting'}:`,
       message
     );
-    process.exit(exitCode);
+    exitCode = code;
   } finally {
     proxy.stop();
+  }
+  if (exitCode !== undefined) {
+    process.exit(exitCode);
   }
 }
 
