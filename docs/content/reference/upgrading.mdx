@@ -276,6 +276,14 @@ The `ark-apiserver` chart now runs two replicas, a `PodDisruptionBudget` (`minAv
 - On a single-node cluster both pods land on the same node. `kubectl drain` never finishes there, because the replacement pod stays `Pending` on the cordoned node. Drain with `--disable-eviction`.
 - With `topologySpread.whenUnsatisfiable=DoNotSchedule`, `nodeTaintsPolicy: Honor` keeps tainted nodes, such as control planes, from counting as empty domains and blocking a rollout.
 
+### Aggregated Apiserver Needs One Replication Slot per Replica
+
+Every `ark-apiserver` replica now opens its own temporary logical replication slot, and the `pg_notify` listener and the leader Lease for the WAL consumer are gone. Before upgrading, raise `max_replication_slots` and `max_wal_senders` to at least replicas + 2. With one slot, only one replica gets it, and the others serve watches from the 120 second relist until a slot is free. The only signs are an error log every 30 seconds and the slot-lag metric reporting `NaN`.
+
+- The `ark_apiserver_notify_*` metrics are removed. Alerts and dashboards built on them stop working.
+- During the rollout, watches served by old pods fall back to the relist.
+- Slot creation waits for open write transactions on the whole PostgreSQL instance. See [PostgreSQL requirements](/operations-guide/postgres-storage-backend#postgresql-requirements) and the [chart README](https://github.com/mckinsey/agents-at-scale-ark/blob/main/ark/dist/chart-apiserver/README.md).
+
 ### Memory API Accepts the CRD Spec
 
 `POST /v1/memories` and `PUT /v1/memories/{name}` now take the fields of the [Memory](/reference/resources/memory) resource. The old body had `description` and `config`, which the Memory CRD does not have, so every create answered `500` and every update was silently dropped.

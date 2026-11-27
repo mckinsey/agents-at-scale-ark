@@ -18,6 +18,8 @@ import (
 	"k8s.io/klog/v2"
 )
 
+const walSlotCreateSlowThreshold = 5 * time.Second
+
 func (p *PostgreSQLBackend) startWALConsumer(ctx context.Context) {
 	walConsumerActive.Set(1)
 	defer walConsumerActive.Set(0)
@@ -171,8 +173,13 @@ func (p *PostgreSQLBackend) currentSlotName() string {
 // Notifications are only nudges and every new stream relists all kinds, so
 // nothing needs to survive a reconnect.
 func (p *PostgreSQLBackend) createTemporarySlot(ctx context.Context, conn *pgconn.PgConn, slotName string) (pglogrepl.LSN, error) {
+	started := time.Now()
+	slowLog := time.AfterFunc(walSlotCreateSlowThreshold, func() {
+		klog.Warningf("Replication slot creation is slow: %s still waiting after %v for open transactions on the PostgreSQL instance", slotName, walSlotCreateSlowThreshold)
+	})
 	res, err := pglogrepl.CreateReplicationSlot(ctx, conn, slotName, "pgoutput",
 		pglogrepl.CreateReplicationSlotOptions{Temporary: true})
+	slowLog.Stop()
 	if err != nil {
 		return 0, fmt.Errorf("create replication slot: %w", err)
 	}
@@ -180,7 +187,7 @@ func (p *PostgreSQLBackend) createTemporarySlot(ctx context.Context, conn *pgcon
 	if err != nil {
 		return 0, fmt.Errorf("parse LSN: %w", err)
 	}
-	klog.Infof("Created temporary replication slot %s at %s", slotName, lsn)
+	klog.Infof("Created temporary replication slot %s at %s in %v", slotName, lsn, time.Since(started).Round(time.Millisecond))
 	return lsn, nil
 }
 

@@ -325,6 +325,15 @@ func TestWALStream_NoFreeSlotFallsBackToRelistThenRecovers_Integration(t *testin
 	if err != nil {
 		t.Fatalf("parse max_replication_slots %q: %v", maxSlotsText, err)
 	}
+	waitUntil(t, 15*time.Second, "temporary replica slots from earlier tests to be released", func() bool {
+		var n int
+		if err := checker.QueryRow(
+			"SELECT count(*) FROM pg_replication_slots WHERE slot_name LIKE $1", walSlotName+"\\_%",
+		).Scan(&n); err != nil {
+			t.Fatalf("count replica slots: %v", err)
+		}
+		return n == 0
+	})
 	var used int
 	if err := checker.QueryRow("SELECT count(*) FROM pg_replication_slots").Scan(&used); err != nil {
 		t.Fatalf("count slots: %v", err)
