@@ -16,6 +16,12 @@ app:
       value: "registry.__NAMESPACE__.svc.cluster.local:5000"
     - name: MARKETPLACE_INSTALL_PREVIEW_TIMEOUT_SECONDS
       value: "25"
+    - name: MARKETPLACE_INSTALL_HELM_TIMEOUT_SECONDS
+      value: "120"
+    - name: MARKETPLACE_INSTALL_TOTAL_TIMEOUT_SECONDS
+      value: "40"
+    - name: MARKETPLACE_INSTALL_JOB_DEADLINE_SECONDS
+      value: "90"
 
 impersonation:
   enabled: true

@@ -37,6 +37,8 @@ spec:
           ports:
             - containerPort: {{ .Values.service.targetPort }}
           env:
+            - name: MARKETPLACE_INSTALL_IMAGE
+              value: "{{ .Values.app.image.repository }}:{{ .Values.app.image.tag | default .Chart.AppVersion }}"
             {{- range .Values.app.env }}
             - name: {{ .name }}
               {{- if .value }}

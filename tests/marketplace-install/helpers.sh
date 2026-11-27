@@ -29,7 +29,8 @@ token() {
 
 mkt() {
   bearer=$1 method=$2 ns=$3 path=$4 body=${5:-}
-  set -- -s -w '\n%{http_code}' -X "$method" "$ARK_API/namespaces/$ns/marketplace-installs$path" \
+  set -- -s --connect-timeout 5 --max-time 60 -w '\n%{http_code}' \
+    -X "$method" "$ARK_API/namespaces/$ns/marketplace-installs$path" \
     -H 'Content-Type: application/json' -H "Authorization: Bearer $bearer"
   if [ -n "$body" ]; then
     set -- "$@" -d "$body"
@@ -56,12 +57,82 @@ expect_json() {
   [ "$got" = "$4" ] || { echo "FAIL: $1 expected $4"; body_of "$2"; exit 1; }
 }
 
+digest_of() {
+  body_of "$1" | jq -r .digest
+}
+
+preview_item() {
+  R=$(mkt "$1" POST "$2" "/$3/preview" '{"source":"fixtures"}')
+  expect_status "preview $3" "$R" 200 >&2
+  digest_of "$R"
+}
+
+post_item() {
+  mkt "$1" POST "$2" "/$3" "{\"source\":\"fixtures\",\"digest\":\"$4\"}"
+}
+
+wait_state() {
+  for _ in $(seq 1 "$5"); do
+    R=$(mkt "$1" GET "$2" "/$3?source=fixtures")
+    S=$(body_of "$R" | jq -r .state)
+    if [ "$S" = "$4" ]; then
+      echo "$3 -> $4"
+      return 0
+    fi
+    sleep 2
+  done
+  echo "FAIL: $3 stayed $S, expected $4"
+  body_of "$R"
+  exit 1
+}
+
+wait_event() {
+  for _ in $(seq 1 "$5"); do
+    R=$(mkt "$1" GET "$2" "/$3?source=fixtures")
+    if body_of "$R" | jq -e --arg r "$4" '[.events[].reason] | index($r) != null' >/dev/null; then
+      echo "$3 has event $4"
+      return 0
+    fi
+    sleep 2
+  done
+  echo "FAIL: $3 has no event $4"
+  body_of "$R"
+  exit 1
+}
+
+set_source_url() {
+  url="http://catalog.$NAMESPACE.svc.cluster.local:8080/$2"
+  kubectl -n "$1" patch configmap marketplace-sources --type merge \
+    -p "$(jq -nc --arg u "$url" '{data: {fixtures: ({url: $u, displayName: "Fixtures"} | tojson)}}')"
+}
+
+wait_single_endpoint() {
+  for _ in $(seq 1 60); do
+    n=$(kubectl -n "$NAMESPACE" get endpointslices -l kubernetes.io/service-name=ark-api \
+      -o jsonpath='{range .items[*].endpoints[*]}{.addresses[0]}{"\n"}{end}' | grep -c . || true)
+    [ "$n" = "1" ] && return 0
+    sleep 1
+  done
+  echo "FAIL: ark-api still has $n endpoints"
+  exit 1
+}
+
+remove_release() {
+  helm uninstall "$2" --namespace "$1" --wait --timeout=120s >/dev/null 2>&1 || true
+  kubectl -n "$1" delete job "marketplace-install-$2" --cascade=background --ignore-not-found --wait=true --timeout=120s
+  kubectl -n "$1" --as "system:serviceaccount:$NAMESPACE:ark-api-sa" delete lease marketplace-install-lock --ignore-not-found
+}
+
 catalog_json() {
   items=""
   for v in "$@"; do
     items="$items${items:+,}{\"name\":\"fixture-$v\",\"ark\":{\"chartPath\":\"oci://$REGISTRY/charts/fixture-$v\",\"helmReleaseName\":\"fixture-$v\",\"installable\":true}}"
   done
   printf '{"items":[%s]}' "$items"
+}
+
+alt_catalog_json() {
+  printf '{"items":[{"name":"fixture-ok","ark":{"chartPath":"oci://%s/charts/fixture-fail","helmReleaseName":"fixture-ok","installable":true}}]}' "$REGISTRY"
 }
 
 wait_enforced() {
