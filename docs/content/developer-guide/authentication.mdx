@@ -323,7 +323,9 @@ API keys in ARK are **namespace-scoped** for multi-tenant security:
 - Service accounts only have permissions within their deployment namespace
 - True tenant isolation: Tenant A cannot access Tenant B's API keys
 
-This design ensures that in multi-tenant deployments, each tenant's API keys remain private and isolated from other tenants. When you create an API key, it is stored in the current namespace context (or the namespace you specify explicitly).
+This design ensures that in multi-tenant deployments, each tenant's API keys remain private and isolated from other tenants. When you create an API key, it is stored in the current namespace context, or in the namespace you specify with the `namespace` query parameter.
+
+The `namespace` parameter is honoured on all three API key routes, consistent with every other ark-api resource route. Isolation is enforced by Kubernetes RBAC, not the parameter: ark-api reads and writes keys using its own service account, so a request targeting a namespace where that service account has no `secrets` access is rejected with `403`. Omitting the parameter preserves the previous behaviour and resolves to the current context namespace.
 
 ### Creating API Keys
 
@@ -344,9 +346,14 @@ curl -X POST http://localhost:8000/v1/api-keys \
     "name": "My Service Key",
     "expires_at": "2024-12-31T23:59:59Z"
   }'
+
+# Create in a specific namespace
+curl -X POST "http://localhost:8000/v1/api-keys?namespace=team-a" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "My Service Key"}'
 ```
 
-**Note:** The API key will be stored in the current namespace only. You must authenticate against the ARK API instance in the same namespace where the API key was created.
+**Note:** The key is stored in the namespace you created it in (the context namespace when `namespace` is omitted). Authenticate against the same ark-api, passing the same `namespace` on your requests so ark-api looks the key up in the namespace it lives in — a lookup in the wrong namespace fails with `401`.
 
 **Note:** When impersonation is enabled (`AUTH_MODE=hybrid` or `sso`), creating an API key requires the same permission your identity would need to create a Secret directly in the namespace. This is checked with a `SelfSubjectAccessReview` against the requesting user, the same mechanism used elsewhere in the API.
 
@@ -396,10 +403,15 @@ API keys use HTTP Basic Authentication where:
 
 ### API Key Management
 
+All three routes accept an optional `namespace` query parameter and default to the current context namespace when it is omitted.
+
 #### List API Keys
 ```bash
 # List in current namespace
 GET /v1/api-keys
+
+# List in a specific namespace
+GET /v1/api-keys?namespace=team-a
 ```
 
 The list response includes `last_used_at`. Ark updates this timestamp after successful API-key authentication, so operators can monitor for unexpected use of issued keys.
@@ -408,7 +420,7 @@ When impersonation is enabled, listing and revoking API keys is scoped to the ke
 
 #### Create API Key
 ```bash
-# Create in current namespace
+# Create in current namespace (or add ?namespace=team-a)
 POST /v1/api-keys
 Content-Type: application/json
 
@@ -420,7 +432,7 @@ Content-Type: application/json
 
 #### Revoke API Key
 ```bash
-# Revoke in current namespace
+# Revoke in current namespace (or add ?namespace=team-a)
 DELETE /v1/api-keys/{public_key}
 ```
 
@@ -437,6 +449,7 @@ DELETE /v1/api-keys/{public_key}
 - **Creation Authorization**: With impersonation enabled, creating an API key requires the same permission as creating a Secret in the namespace, and listing/revoking keys is scoped to their creator
 - **Legacy Key Rejection**: In `hybrid` mode with impersonation enabled, keys with no recorded creator (minted before this authorization check existed) are rejected at authentication — see the breaking-change note above
 - **Per-Namespace Storage**: API keys are stored as Kubernetes secrets in their respective namespaces for true tenant isolation
+- **Namespace Parameter**: The `namespace` query parameter on the create/list/revoke routes selects the namespace (defaulting to the current context), and authentication resolves the key in the request's namespace. The parameter cannot cross tenant boundaries on its own — ark-api acts through its own service account, so RBAC still confines it to namespaces that account can access
 
 ### Revoked and Expired Key Retention
 

@@ -67,12 +67,14 @@ def _parse_utc_timestamp(value: Any) -> Optional[datetime]:
 class APIKeyService:
     """Service for managing API keys stored as Kubernetes secrets."""
     
-    def __init__(self):
+    def __init__(self, namespace: Optional[str] = None):
         """Initialize API key service.
-        
-        API keys are always stored in the current context namespace for security.
+
+        Args:
+            namespace: Namespace to read and write API keys in. Defaults to the
+                current context namespace when not supplied.
         """
-        self.namespace = get_context()["namespace"]
+        self.namespace = namespace or get_context()["namespace"]
     
     def _generate_key_pair(self) -> Tuple[str, str]:
         """Generate a public/secret key pair.

@@ -3,7 +3,7 @@
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from kubernetes_asyncio import client
 
 from ark_sdk.impersonation import ImpersonationConfig
@@ -23,6 +23,8 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api-keys", tags=["api-keys"])
 
+NAMESPACE_QUERY = Query(None, description="Namespace for this request (defaults to current context)")
+
 
 async def _can_create_secrets(owner: UserIdentity, namespace: str) -> bool:
     impersonation = ImpersonationConfig(username=owner.username, groups=owner.groups)
@@ -41,11 +43,12 @@ async def _can_create_secrets(owner: UserIdentity, namespace: str) -> bool:
 
 async def authorize_api_key_creation(
     owner: Optional[UserIdentity] = Depends(require_api_key_owner),
+    namespace: Optional[str] = NAMESPACE_QUERY,
 ) -> Optional[UserIdentity]:
     if owner is None:
         return None
 
-    namespace = get_context()["namespace"]
+    namespace = namespace or get_context()["namespace"]
     try:
         allowed = await _can_create_secrets(owner, namespace)
     except Exception:
@@ -61,19 +64,22 @@ async def authorize_api_key_creation(
 async def create_api_key(
     body: APIKeyCreateRequest,
     owner: Optional[UserIdentity] = Depends(authorize_api_key_creation),
+    namespace: Optional[str] = NAMESPACE_QUERY,
 ) -> APIKeyCreateResponse:
     """
     Create a new API key for service-to-service authentication.
-    API keys are namespace-scoped for tenant isolation and stored in the current namespace.
+    API keys are namespace-scoped for tenant isolation and stored in the
+    supplied namespace, or the current context namespace when omitted.
 
     Args:
         body: API key creation request
+        namespace: Namespace to store the key in (defaults to current context)
 
     Returns:
         APIKeyCreateResponse: The created API key with secret (only shown once)
     """
     try:
-        api_key_service = APIKeyService()
+        api_key_service = APIKeyService(namespace=namespace)
         result = await api_key_service.create_api_key(
             body, created_by=owner.username if owner else None
         )
@@ -81,6 +87,17 @@ async def create_api_key(
         logger.info(f"Created API key '{body.name}' with public key {result.public_key} in namespace {api_key_service.namespace}")
         return result
 
+    except client.rest.ApiException as e:
+        logger.error(f"Error creating API key in namespace {api_key_service.namespace}: {e}")
+        if e.status == status.HTTP_403_FORBIDDEN:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Not authorized to create API keys in namespace {api_key_service.namespace}"
+            )
+        raise HTTPException(
+            status_code=e.status or status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create API key: {e.reason or str(e)}"
+        )
     except Exception as e:
         logger.error(f"Error creating API key: {e}")
         raise HTTPException(
@@ -92,16 +109,20 @@ async def create_api_key(
 @router.get("", response_model=APIKeyListResponse)
 async def list_api_keys(
     owner: Optional[UserIdentity] = Depends(require_api_key_owner),
+    namespace: Optional[str] = NAMESPACE_QUERY,
 ) -> APIKeyListResponse:
     """
-    List all active API keys in the current namespace (without secret keys).
+    List all active API keys in the namespace (without secret keys).
     API keys are namespace-scoped for tenant isolation.
 
+    Args:
+        namespace: Namespace to list keys from (defaults to current context)
+
     Returns:
-        APIKeyListResponse: List of API keys in the current namespace
+        APIKeyListResponse: List of API keys in the namespace
     """
     try:
-        api_key_service = APIKeyService()
+        api_key_service = APIKeyService(namespace=namespace)
         result = await api_key_service.list_api_keys(
             created_by=owner.username if owner else None
         )
@@ -120,16 +141,18 @@ async def list_api_keys(
 async def delete_api_key(
     public_key: str,
     owner: Optional[UserIdentity] = Depends(require_api_key_owner),
+    namespace: Optional[str] = NAMESPACE_QUERY,
 ):
     """
-    Soft delete an API key in the current namespace by marking it as inactive.
+    Soft delete an API key in the namespace by marking it as inactive.
     API keys are namespace-scoped for tenant isolation.
 
     Args:
         public_key: The public key of the API key to delete
+        namespace: Namespace the key lives in (defaults to current context)
     """
     try:
-        api_key_service = APIKeyService()
+        api_key_service = APIKeyService(namespace=namespace)
 
         success = await api_key_service.delete_api_key(
             public_key, created_by=owner.username if owner else None

@@ -32,6 +32,19 @@ class TestAPIKeyService(unittest.TestCase):
         mock_get_context.return_value = {"namespace": "test-namespace", "cluster": "test"}
         self.service = APIKeyService()
     
+    @patch('ark_api.services.api_keys.get_context')
+    def test_explicit_namespace_overrides_context(self, mock_get_context):
+        mock_get_context.return_value = {"namespace": "ark-api", "cluster": "test"}
+        service = APIKeyService(namespace="tenant-b")
+        self.assertEqual(service.namespace, "tenant-b")
+        mock_get_context.assert_not_called()
+
+    @patch('ark_api.services.api_keys.get_context')
+    def test_defaults_to_context_namespace(self, mock_get_context):
+        mock_get_context.return_value = {"namespace": "ark-api", "cluster": "test"}
+        self.assertEqual(APIKeyService().namespace, "ark-api")
+        self.assertEqual(APIKeyService(namespace=None).namespace, "ark-api")
+
     def test_generate_key_pair(self):
         """Test API key pair generation."""
         public_key, secret_key = self.service._generate_key_pair()
