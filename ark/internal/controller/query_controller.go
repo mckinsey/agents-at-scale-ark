@@ -36,6 +36,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"go.opentelemetry.io/otel/baggage"
+	"go.opentelemetry.io/otel/propagation"
 	"trpc.group/trpc-go/trpc-a2a-go/protocol"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
@@ -566,20 +567,7 @@ func (r *QueryReconciler) executeQueryAsync(opCtx context.Context, obj arkv1alph
 
 	opCtx = r.initializeQueryExecutionContext(opCtx, &obj)
 
-	sessionId := obj.Spec.SessionId
-	if sessionId == "" {
-		sessionId = string(obj.UID)
-	}
-
-	opCtx, dispatchSpan := r.Telemetry.Tracer().Start(
-		opCtx, fmt.Sprintf("query.%s.dispatch", obj.Name),
-		telemetry.WithSpanKind(telemetry.SpanKindChain),
-		telemetry.WithAttributes(
-			telemetry.String(telemetry.AttrQueryName, obj.Name),
-			telemetry.String(telemetry.AttrQueryNamespace, obj.Namespace),
-			telemetry.String(telemetry.AttrSessionID, sessionId),
-		),
-	)
+	opCtx, dispatchSpan := startDispatchSpan(opCtx, r.Telemetry.Tracer(), &obj)
 	defer dispatchSpan.End()
 
 	impersonatedClient, err := r.getClientForQuery(obj)
@@ -1716,6 +1704,7 @@ func (r *QueryReconciler) clearOperationCacheForResumption(ctx context.Context, 
 
 // initializeQueryExecutionContext sets up the execution context with tracing and baggage
 func (r *QueryReconciler) initializeQueryExecutionContext(ctx context.Context, obj *arkv1alpha1.Query) context.Context {
+	ctx = withParentTraceFromAnnotations(ctx, obj)
 	ctx = r.Eventing.QueryRecorder().InitializeQueryContext(ctx, obj)
 	ctx = r.Eventing.QueryRecorder().StartTokenCollection(ctx)
 	ctx = r.Eventing.QueryRecorder().Start(ctx, "QueryExecution", fmt.Sprintf("Executing query %s", obj.Name), nil)
@@ -1733,6 +1722,36 @@ func (r *QueryReconciler) initializeQueryExecutionContext(ctx context.Context, o
 	}
 
 	return ctx
+}
+
+func startDispatchSpan(ctx context.Context, tracer telemetry.Tracer, obj *arkv1alpha1.Query) (context.Context, telemetry.Span) {
+	sessionId := obj.Spec.SessionId
+	if sessionId == "" {
+		sessionId = string(obj.UID)
+	}
+
+	return tracer.Start(
+		ctx, fmt.Sprintf("query.%s.dispatch", obj.Name),
+		telemetry.WithSpanKind(telemetry.SpanKindChain),
+		telemetry.WithAttributes(
+			telemetry.String(telemetry.AttrQueryName, obj.Name),
+			telemetry.String(telemetry.AttrQueryNamespace, obj.Namespace),
+			telemetry.String(telemetry.AttrSessionID, sessionId),
+			telemetry.String(telemetry.AttrStandardSessionID, sessionId),
+		),
+	)
+}
+
+func withParentTraceFromAnnotations(ctx context.Context, obj *arkv1alpha1.Query) context.Context {
+	traceParent := obj.Annotations[annotations.TraceParent]
+	if traceParent == "" {
+		return ctx
+	}
+	carrier := propagation.MapCarrier{"traceparent": traceParent}
+	if traceState := obj.Annotations[annotations.TraceState]; traceState != "" {
+		carrier["tracestate"] = traceState
+	}
+	return propagation.TraceContext{}.Extract(ctx, carrier)
 }
 
 // handleQueryDispatch resolves target and address, sends the query, and processes the response

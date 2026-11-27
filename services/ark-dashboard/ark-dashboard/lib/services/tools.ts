@@ -1,6 +1,7 @@
 import { trackEvent } from '@/lib/analytics/singleton';
 import { apiClient } from '@/lib/api/client';
 import { fetchAllPages } from '@/lib/api/pagination';
+import type { ToolApprovalConfig } from '@/lib/services/agents';
 
 // Tool interface for UI compatibility
 export interface Tool {
@@ -10,6 +11,8 @@ export interface Tool {
   description?: string;
   annotations?: Record<string, string>;
   labels?: unknown;
+  // Approval declared on the Tool CR itself, applied to every agent that uses it.
+  approval?: ToolApprovalConfig | null;
 }
 
 // Tool detail response with schema

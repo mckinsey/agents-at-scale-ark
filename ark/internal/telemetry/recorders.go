@@ -169,7 +169,8 @@ const (
 	AttrLangfuseType     = "type"
 
 	// Session tracking
-	AttrSessionID = "ark.session.id"
+	AttrSessionID         = "ark.session.id"
+	AttrStandardSessionID = "session.id"
 
 	// Conversation tracking
 	AttrConversationID = "conversation.id"

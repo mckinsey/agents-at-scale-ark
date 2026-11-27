@@ -4,6 +4,7 @@ import {
   agentParametersChanged,
   buildAgentOverrides,
   getModelOverrideHeaders,
+  mergeToolApproval,
 } from '@/components/forms/agent-form/utils';
 import type { Parameter } from '@/components/ui/parameter-editor';
 
@@ -96,6 +97,71 @@ describe('agent model header overrides', () => {
     expect(buildAgentOverrides(existing, [])).toEqual([
       existing[2],
       existing[3],
+    ]);
+  });
+});
+
+describe('mergeToolApproval', () => {
+  it('returns the agent config when the tool has none', () => {
+    expect(mergeToolApproval(undefined, { required: true })).toEqual({
+      required: true,
+    });
+  });
+
+  it('returns the tool config when the agent has none', () => {
+    expect(mergeToolApproval({ required: true }, undefined)).toEqual({
+      required: true,
+    });
+  });
+
+  it('returns undefined when neither side sets approval', () => {
+    expect(mergeToolApproval(undefined, undefined)).toBeUndefined();
+  });
+
+  it('unions required so an agent cannot drop a tool gate', () => {
+    expect(
+      mergeToolApproval({ required: true }, { required: false })?.required,
+    ).toBe(true);
+  });
+
+  it('prefers the agent timeout and onTimeout over the tool', () => {
+    const merged = mergeToolApproval(
+      { required: true, timeout: '5m', onTimeout: 'reject' },
+      { required: false, timeout: '10m', onTimeout: 'proceed' },
+    );
+    expect(merged).toMatchObject({ timeout: '10m', onTimeout: 'proceed' });
+  });
+
+  it('falls back to the tool timeout and onTimeout when the agent omits them', () => {
+    const merged = mergeToolApproval(
+      { required: true, timeout: '5m', onTimeout: 'reject' },
+      { required: true },
+    );
+    expect(merged).toMatchObject({ timeout: '5m', onTimeout: 'reject' });
+  });
+
+  it('drops matchers when a required side gates every call', () => {
+    const merged = mergeToolApproval(
+      { required: true },
+      { required: true, argumentMatches: [{ argument: 'path', pattern: '/x' }] },
+    );
+    expect(merged?.argumentMatches).toBeUndefined();
+  });
+
+  it('unions matchers when both sides narrow by argument', () => {
+    const merged = mergeToolApproval(
+      {
+        required: true,
+        argumentMatches: [{ argument: 'path', pattern: '/a' }],
+      },
+      {
+        required: true,
+        argumentMatches: [{ argument: 'path', pattern: '/b' }],
+      },
+    );
+    expect(merged?.argumentMatches).toEqual([
+      { argument: 'path', pattern: '/a' },
+      { argument: 'path', pattern: '/b' },
     ]);
   });
 });
