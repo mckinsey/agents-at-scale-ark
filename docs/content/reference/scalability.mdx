@@ -30,7 +30,17 @@ The two knobs are independent and both effective at the defaults. `maxConcurrent
 
 ### API and dashboard
 
-The API and dashboard are stateless and can be scaled horizontally by increasing replica counts in their Helm values.
+The API holds no state that matters across requests (MCP OAuth flows live in Secrets, and the marketplace cache and A2A registry rebuild on their own), so any replica can serve any request. On Kind, with 300 chats polling once a second, one replica served p50 1.9 s and three replicas served p50 17 ms.
+
+The `ark-api` chart runs one replica by default. `replicaCount` sets a fixed number of replicas; `autoscaling.enabled` replaces it with a HorizontalPodAutoscaler that scales on an absolute per-pod CPU target (`autoscaling.targetCPUAverageValue`, default `300m`), below the `500m` limit where a pod saturates at about 180 to 200 requests per second. With more than one replica, the chart adds a PodDisruptionBudget (`minAvailable: 1`, disable with `podDisruptionBudget.enabled: false`). Replicas are spread across nodes with a soft `topologySpreadConstraints` rule (`topologySpread`), so single-node clusters still schedule every pod. The default memory limit is `1Gi`: the Query list loads every Query in the namespace into memory, so concurrent loads of a namespace with many large Queries can exceed it. Raise `app.resources.limits.memory` for such namespaces.
+
+Before scaling it out:
+
+- The HPA needs [metrics-server](https://github.com/kubernetes-sigs/metrics-server). When `autoscaling.enabled` is on, the Deployment omits `replicas` and `autoscaling.minReplicas` (default `2`) sets the floor.
+- `extraPVCs` creates `ReadWriteOnce` volumes. Mounting one keeps every replica on the node that holds the volume.
+- Each tenant namespace runs its own `ark-api`, and an idle pod takes about 280 Mi of memory, so the replica count multiplies with the number of tenants.
+
+The dashboard chart runs a single replica.
 
 ### Broker
 
@@ -123,7 +133,7 @@ For production planning, consider:
 
 ### Cluster-level capacity
 
-The `ark-apiserver` chart ships a PodDisruptionBudget (`minAvailable: 1`) and two replicas by default. Other Ark components ship no PodDisruptionBudget by default. Production deployments should add PDBs for the controller and API to ensure availability during node maintenance. See the [Kubernetes PDB documentation](https://kubernetes.io/docs/tasks/run-application/configure-pdb/) for guidance.
+The `ark-apiserver` chart ships a PodDisruptionBudget (`minAvailable: 1`) and two replicas by default. The `ark-api` chart adds one when it runs more than one replica. Other Ark components ship no PodDisruptionBudget by default. Production deployments should add a PDB for the controller to ensure availability during node maintenance. See the [Kubernetes PDB documentation](https://kubernetes.io/docs/tasks/run-application/configure-pdb/) for guidance.
 
 Node capacity should account for executor workloads, which are typically the most resource-intensive components. LLM-backed executors may require significant memory for request/response buffering, especially with long-context models.
 
@@ -131,7 +141,7 @@ Node capacity should account for executor workloads, which are typically the mos
 
 1. **Start with defaults** — Deploy with the default Helm values: one replica per service, except the `ark-apiserver`, which runs two.
 2. **Monitor under load** — Use Prometheus metrics and pod resource usage to identify bottlenecks.
-3. **Scale horizontally** — Increase replica counts for the API, dashboard, and executors as needed.
+3. **Scale horizontally** — Increase replica counts for the API and executors as needed.
 4. **Tune the controller** — Increase CPU and memory limits based on observed reconciliation load.
 5. **Consider PostgreSQL** — Switch from etcd to PostgreSQL if resource volume or query history exceeds etcd's practical limits.
 6. **Add autoscaling** — Configure HPA for executors and stateless services based on CPU or custom metrics.
