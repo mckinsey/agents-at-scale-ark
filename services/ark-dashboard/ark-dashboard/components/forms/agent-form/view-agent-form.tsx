@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/field';
 import { Form, FormField } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import { McpHeaderOverridesEditor } from '@/components/ui/mcp-header-overrides-editor';
 import { ParameterEditor } from '@/components/ui/parameter-editor';
 import {
   Select,
@@ -84,6 +85,10 @@ export function ViewAgentForm({
     selectedTools,
     parameters,
     headerRows,
+    mcpHeaders,
+    mcpServerNames,
+    mcpHeaderNames,
+    mcpServerIssueFor,
     isExperimentalExecutionEngineEnabled,
     hasChanges,
   } = state;
@@ -343,6 +348,20 @@ export function ViewAgentForm({
                     description="JSON schema the response must follow."
                   />
                 )}
+              />
+            )}
+
+            {!isA2A && (
+              <McpHeaderOverridesEditor
+                rows={mcpHeaders.rows}
+                errors={mcpHeaders.errors}
+                serverNames={mcpServerNames}
+                headerNamesByServer={mcpHeaderNames}
+                serverIssueFor={mcpServerIssueFor}
+                disabled={isDisabled}
+                onAddRow={mcpHeaders.addRow}
+                onUpdateRow={mcpHeaders.updateRow}
+                onRemoveRow={mcpHeaders.removeRow}
               />
             )}
 

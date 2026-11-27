@@ -15,6 +15,16 @@ import { lastConversationIdAtom } from '@/atoms/internal-states';
 import { useChatSession } from '@/lib/hooks/use-chat-session';
 import { BrokerUnavailableError } from '@/lib/services/chat';
 
+vi.mock('@/lib/hooks/use-query-mcp-headers', () => ({
+  useQueryMcpHeaders: () => ({
+    visible: false,
+    rows: [],
+    errors: {},
+    hasErrors: false,
+    toApiOverrides: () => mockToApiOverrides(),
+  }),
+}));
+
 vi.mock('@/providers/NamespaceProvider', () => ({
   useNamespace: () => ({
     namespace: 'default',
@@ -42,6 +52,7 @@ const mockCancelQuery = vi.fn();
 const mockGetByName = vi.fn();
 const mockTeamGetByName = vi.fn();
 const mockEngineGetByName = vi.fn();
+const mockToApiOverrides = vi.fn();
 const mockResolveMemoryNotice = vi.fn();
 
 vi.mock('@/lib/services/agents', () => ({
@@ -162,6 +173,7 @@ describe('useChatSession', () => {
     mockGetByName.mockResolvedValue({ parameters: [] });
     mockTeamGetByName.mockResolvedValue({ members: [] });
     mockEngineGetByName.mockResolvedValue(null);
+    mockToApiOverrides.mockReturnValue(undefined);
     sessionStorage.clear();
 
     mockStartStreamChatResponse.mockImplementation((...args: unknown[]) => {
@@ -204,6 +216,45 @@ describe('useChatSession', () => {
       expect(second.result.current.sessionId).toMatch(/^chat-code-reviewer-/);
       expect(first.result.current.sessionId).not.toEqual(
         second.result.current.sessionId,
+      );
+    });
+  });
+
+  describe('MCP header overrides', () => {
+    it('sends the chat rows as query overrides', async () => {
+      const overrides = [
+        {
+          resourceType: 'mcpserver',
+          labelSelector: {
+            matchLabels: { 'ark.mckinsey.com/name': 'github' },
+          },
+          headers: [{ name: 'Authorization', value: { value: 'token' } }],
+        },
+      ];
+      mockToApiOverrides.mockReturnValue(overrides);
+      mockStreamChatResponse.mockReturnValue(
+        asyncIterableFrom([
+          createContentChunk('Hi'),
+          createStopChunk(),
+          createArkFinalChunk({}),
+        ]),
+      );
+
+      const { result } = renderHook(
+        () => useChatSession({ name: 'test-agent', type: 'agent' }),
+        { wrapper },
+      );
+
+      await act(async () => {
+        await result.current.sendMessage('Hello');
+      });
+
+      expect(mockStartStreamChatResponse).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        expect.objectContaining({ overrides }),
       );
     });
   });

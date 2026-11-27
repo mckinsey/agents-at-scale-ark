@@ -6,6 +6,7 @@ import type {
   AgentOverride,
   ToolApprovalConfig,
 } from '@/lib/services';
+import { isMcpOverride } from '@/lib/utils/mcp-header-overrides';
 import { generateUUID } from '@/lib/utils/uuid';
 
 type ArgumentMatch = NonNullable<ToolApprovalConfig['argumentMatches']>[number];
@@ -212,15 +213,16 @@ export function getModelOverrideHeaders(
 export function buildAgentOverrides(
   existing: AgentOverride[] | null | undefined,
   modelHeaders: AgentHeader[],
+  mcpOverrides?: AgentOverride[],
 ): AgentOverride[] {
   const preserved = (existing ?? []).filter(
-    override => !isEditableModelOverride(override),
+    override =>
+      !isEditableModelOverride(override) &&
+      !(mcpOverrides && isMcpOverride(override)),
   );
-  if (modelHeaders.length === 0) {
-    return preserved;
-  }
-  return [
-    { resourceType: MODEL_OVERRIDE_RESOURCE_TYPE, headers: modelHeaders },
-    ...preserved,
-  ];
+  const modelOverrides: AgentOverride[] =
+    modelHeaders.length > 0
+      ? [{ resourceType: MODEL_OVERRIDE_RESOURCE_TYPE, headers: modelHeaders }]
+      : [];
+  return [...modelOverrides, ...(mcpOverrides ?? []), ...preserved];
 }

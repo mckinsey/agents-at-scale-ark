@@ -10,6 +10,16 @@ import { EmbeddedChatPanel } from '@/components/chat/embedded-chat-panel';
 import { buildChatKey } from '@/lib/hooks/use-chat-session';
 import { chatService } from '@/lib/services/chat';
 
+vi.mock('@/lib/hooks/use-query-mcp-headers', () => ({
+  useQueryMcpHeaders: () => ({
+    visible: false,
+    rows: [],
+    errors: {},
+    hasErrors: false,
+    toApiOverrides: () => undefined,
+  }),
+}));
+
 vi.mock('@/providers/NamespaceProvider', () => ({
   useNamespace: () => ({
     namespace: 'default',

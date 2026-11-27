@@ -9,6 +9,7 @@ import { MemoryChatNotice } from '@/components/chat/memory-chat-notice';
 import { OutputSchemaField } from '@/components/common/output-schema-field';
 import { Autorenew, Build, Code, Info, Send, Stop } from '@/components/icons';
 import { Button } from '@/components/ui/button';
+import { ChatMcpHeaderFields } from '@/components/ui/chat-mcp-header-fields';
 import { ChatParameterFields } from '@/components/ui/chat-parameter-fields';
 import { IconShell } from '@/components/ui/icon-shell';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -80,6 +81,7 @@ export function ChatPanel({
     outputSchemaOverride,
     setOutputSchemaOverride,
     isOutputSchemaOverrideValid,
+    mcpHeaders,
   } = useChatSession({ name, type });
 
   const [currentMessage, setCurrentMessage] = useState('');
@@ -177,6 +179,25 @@ export function ChatPanel({
         {memoryNotice && (
           <div className="px-4 pt-4">
             <MemoryChatNotice notice={memoryNotice} />
+          </div>
+        )}
+        {mcpHeaders.visible && (
+          <div className="px-4 pt-4">
+            <ChatMcpHeaderFields
+              rows={mcpHeaders.rows}
+              nameOptionsFor={mcpHeaders.nameOptionsFor}
+              namesForServer={mcpHeaders.namesForServer}
+              serverIssueFor={mcpHeaders.serverIssueFor}
+              canAddRow={mcpHeaders.canAddRow}
+              errors={mcpHeaders.errors}
+              serverNames={mcpHeaders.serverNames}
+              effectiveCount={mcpHeaders.effectiveCount}
+              hasErrors={mcpHeaders.hasErrors}
+              onAddRow={mcpHeaders.addRow}
+              onUpdateRow={mcpHeaders.updateRow}
+              onRemoveRow={mcpHeaders.removeRow}
+              disabled={isProcessing}
+            />
           </div>
         )}
         {hasParameters && (
@@ -397,6 +418,7 @@ export function ChatPanel({
                   disabled={
                     !currentMessage.trim() ||
                     missingParameters.length > 0 ||
+                    mcpHeaders.hasErrors ||
                     isOutputSchemaOverrideInvalid
                   }
                   variant="ghost"

@@ -4117,6 +4117,11 @@ export interface components {
             } | null;
             authorization?: components["schemas"]["MCPServerAuthorization"] | null;
             available?: components["schemas"]["AvailabilityStatus"] | null;
+            /**
+             * Header Names
+             * @default []
+             */
+            header_names: string[];
             /** Labels */
             labels?: {
                 [key: string]: string;
@@ -5090,6 +5095,11 @@ export interface components {
             /** Id */
             id: string;
             /**
+             * Keys
+             * @default []
+             */
+            keys: string[];
+            /**
              * Labels
              * @default []
              */
@@ -5101,6 +5111,8 @@ export interface components {
              * @enum {string}
              */
             scope: "shared" | "personal";
+            /** Type */
+            type?: string | null;
         };
         /**
          * SecretUpdateRequest

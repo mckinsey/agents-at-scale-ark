@@ -102,7 +102,7 @@ overrides:
 
 ### MCP Server Overrides
 
-Override headers for MCP server requests:
+Override headers for MCP server requests. Without a `labelSelector`, the override applies to every MCP server the agent calls. To target one server, see [Select an MCP Server by Name](#select-an-mcp-server-by-name):
 
 ```yaml
 overrides:
@@ -112,6 +112,24 @@ overrides:
           value: "engineering-team"
     resourceType: mcpserver
 ```
+
+An MCP server override replaces the header of the same name in the server's `spec.headers`. A Query override replaces the same header set on the Agent. See [Header precedence](/reference/resources/mcpserver#header-precedence).
+
+### Duplicate Header Names
+
+Header names are case-insensitive, so `X-Token` and `x-token` are the same header. The webhook and `ark-api` reject an Agent that repeats a header name in:
+
+- `model` overrides without a `labelSelector`, checked as one list
+- `mcpserver` overrides that reach the same server: the overrides that select it with `ark.mckinsey.com/name`, together with the overrides without a `labelSelector`
+- `mcpserver` overrides with any other `labelSelector`, checked as one list per selector
+
+The same name on two different servers is allowed. Query overrides are not checked.
+
+### Override Order
+
+When two `mcpserver` overrides send the same header to one server, the later override in `spec.overrides` wins. The checks above allow this only when one of the overrides uses a `labelSelector` other than `ark.mckinsey.com/name`.
+
+Saving an agent from the dashboard rewrites its `mcpserver` overrides in this order: the override without a `labelSelector`, then one override per server sorted by server name, then the overrides with any other `labelSelector`. If a selector override and a per-server override set the same header, a save from the dashboard can change which value the server gets. To keep the order, edit the Agent YAML instead.
 
 ## Label Selectors
 
@@ -153,7 +171,7 @@ overrides:
         ark.mckinsey.com/name: github
 ```
 
-The **MCP credentials** block of the dashboard chat builds one such override per MCP server from the rows you add, and sends it with every agent or team query in the namespace. A header that references a [personal Secret](/user-guide/secrets#personal-secrets) is accepted only in a Query `mcpserver` override whose selector is exactly this one: `matchLabels` with `ark.mckinsey.com/name` and nothing else. The header goes to whatever the selected MCPServer points at when the query runs, so anyone who can change that server's `address` receives it.
+The **MCP header overrides** panel on the dashboard agent pages saves this selector for a row on one server, and the panel in agent chats sends it with the chat's queries. A header that references a [personal Secret](/user-guide/secrets#personal-secrets) is accepted only in a Query `mcpserver` override whose selector is exactly this one: `matchLabels` with `ark.mckinsey.com/name` and nothing else. The header goes to whatever the selected MCPServer points at when the query runs, so anyone who can change that server's `address` receives it.
 
 MCPServers created before the upgrade get the label the next time they are updated; the controller does not update them by itself. A server whose name is longer than 63 characters gets no name label and cannot be selected this way. See [Upgrading](/reference/upgrading#mcpservers-get-a-name-label).
 

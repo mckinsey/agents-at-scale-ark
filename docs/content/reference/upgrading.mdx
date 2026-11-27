@@ -93,6 +93,59 @@ ark import ark-export.yaml --upsert
 
 Exports created by older Ark CLI versions may contain stale `metadata.resourceVersion` and `status` fields. Regenerate or clean those files before importing them with `--upsert`.
 
+## Unreleased
+
+### Duplicate MCP Header Names Rejected on Agents
+
+The admission webhook and `ark-api` now reject an Agent whose `mcpserver` overrides send the same header name twice to one MCP server. Names are compared case-insensitively, after trimming whitespace, so `Authorization` and `authorization` count as the same header.
+
+| Overrides | Checked as one list |
+|-----------|---------------------|
+| No `labelSelector` | All of them together |
+| `labelSelector` exactly `matchLabels: {ark.mckinsey.com/name: <server>}` | Per server, together with the overrides without a `labelSelector`, because those reach every server |
+| Any other `labelSelector` | Per selector |
+
+So an Agent can no longer set a header for all MCP servers and the same header for one of them. The same name on two different servers is allowed. Query overrides are not checked.
+
+Since v0.1.72, Models and Agent `model` overrides without a `labelSelector` are checked the same way.
+
+The check runs on every create and update. Existing Agents with duplicates keep working, but any later change to them is rejected until the duplicates are removed, including label or annotation edits, `kubectl apply` and `ark import --upsert`. The error names the server and the header, for example `spec.overrides (mcpserver, ark.mckinsey.com/name=github): duplicate header name: authorization`. `ark-api` returns `422` for agent create and update requests.
+
+**Migration:**
+- Find Agents with duplicate MCP header names:
+
+```bash
+kubectl get agents -A -o json | jq -r '
+  def norm: ascii_downcase | gsub("^\\s+|\\s+$"; "");
+  def nsel: ((.labelSelector.matchLabels // {}) | length) + ((.labelSelector.matchExpressions // []) | length);
+  def scope: if (.labelSelector.matchExpressions // []) == [] and ((.labelSelector.matchLabels // {}) | keys) == ["ark.mckinsey.com/name"]
+    then "ark.mckinsey.com/name=\(.labelSelector.matchLabels["ark.mckinsey.com/name"])"
+    else (.labelSelector | tostring) end;
+  .items[] | . as $a
+  | [(.spec.overrides // [])[] | select(.resourceType == "mcpserver")] as $mcp
+  | [$mcp[] | select(nsel == 0) | (.headers // [])[].name | norm] as $all
+  | ([{scope: "all servers", names: $all}]
+     + ([$mcp[] | select(nsel > 0) | {scope: scope, names: [(.headers // [])[].name | norm]}]
+        | group_by(.scope)
+        | map({scope: .[0].scope, names: (map(.names) | add)})
+        | map(if (.scope | startswith("ark.mckinsey.com/name=")) then .names += $all else . end)))[]
+  | .scope as $s | .names | group_by(.)[] | select(length > 1)
+  | "\($a.metadata.namespace)/\($a.metadata.name) (mcpserver, \($s)): \(.[0])"'
+```
+
+- Keep one entry per header name and server in each listed Agent. To send a different value to one server, remove the header from the overrides without a `labelSelector` and set it per server instead. Update the source manifests too, so later applies and imports are not rejected.
+
+### MCP Header Overrides in the Dashboard
+
+- The agent create and edit pages have an **MCP header overrides** panel. A row for one server saves as an `mcpserver` override with `matchLabels: {ark.mckinsey.com/name: <server>}`; a row for **All MCP servers** saves without a selector. Overrides the panel cannot edit, such as ConfigMap values or other selectors, are kept unchanged on save.
+- Agent chats have an **MCP header overrides** panel above the message box. Its rows apply to the queries that chat sends, as Query `mcpserver` overrides, and win over the agent's own headers. Rows for one server can use your personal Secrets.
+- The agent pages offer only the header names a server lists in `spec.headers`, so a server without `spec.headers` cannot get overrides there. The chat also offers the header names the agent already overrides. In both, MCPServers that an override cannot select by name are shown but cannot be picked.
+
+### MCP Server List Returns Header Names, Secret List Returns Keys
+
+- `GET /v1/mcp-servers` items include `header_names`: the names from `spec.headers`, without values.
+- `GET /v1/secrets` items include `type` and `keys`, the names of the keys in the Secret's data, sorted. Values are never returned.
+
 ## v0.2.0
 
 ### Secrets Created by Ark Carry Ownership Labels
@@ -194,7 +247,7 @@ Every MCPServer carries the label `ark.mckinsey.com/name` set to its own name. A
 - MCPServers created before the upgrade get the label the next time they are updated; the controller does not update them by itself. Until then an override that selects their name matches nothing: a Query whose override carries a personal Secret fails, and any other runs without those headers. To label every server in a namespace at once, touch them with `kubectl annotate mcpservers --all -n <namespace> ark.mckinsey.com/relabel="$(date +%s)" --overwrite`.
 - Other labels are not checked, so any server can carry a label such as `team: a` that an override selects on. That is why an override with a personal Secret is limited to the name label.
 - `GET /v1/mcp-servers` returns each server's `labels`, like the detail route already did.
-- Agent and team chats in the dashboard show an **MCP credentials** block when the namespace has MCPServers. Each row names an MCP server, a header (default `Authorization`), a Secret and a key (default `token`), and every query the chat sends carries them as an `mcpserver` override that selects the server by `ark.mckinsey.com/name`. Only servers whose label matches their own name can be picked, and not when a server left over from before the upgrade carries the same label value. The chat does not send while a row points at a server that cannot be picked or no longer exists, is incomplete, repeats a header for the same server, or while the server list cannot be loaded. Rows are kept in the browser's local storage per user and namespace, as names only. A value that does not look like a Secret name, header or key is never saved there. When the Secret is in the list, the key is `token` and cannot be changed; while the list is still loading, a row with another key waits. The header, the key and a Secret name typed by hand are saved when you leave the field; a Secret picked from the list is saved at once. A header or key that looks like a token, such as one starting with `ghp_` or `sk-` or a long run of letters and digits, and a Secret name that looks like a UUID or a long run of letters and digits, block sending and are never saved, and older rows that hold one are cleaned on load. With single sign-on the Secret list also shows your personal Secrets, marked **Personal**.
+- The dashboard chat does not send personal Secrets in this release. Send them in a Query override through the API, as shown in [User authorised MCP servers](/tutorials/user-authorised-mcp-servers).
 
 ### Impersonated Identities and Group Claims
 

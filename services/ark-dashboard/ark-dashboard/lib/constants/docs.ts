@@ -16,6 +16,7 @@ export const DOCS_URLS = {
   models: `${ARK_DOCS}/user-guide/models/`,
   observability: `${ARK_DOCS}/developer-guide/observability/`,
   queries: `${ARK_DOCS}/user-guide/queries/`,
+  secretLabels: `${ARK_DOCS}/user-guide/secrets/#create-a-secret-with-kubectl`,
   teams: `${ARK_DOCS}/user-guide/teams/`,
   tools: `${ARK_DOCS}/user-guide/tools/`,
 } as const;

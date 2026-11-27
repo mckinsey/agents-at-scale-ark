@@ -15,6 +15,16 @@ import { buildChatKey, useChatSession } from './use-chat-session';
 
 const namespaceState = vi.hoisted(() => ({ namespace: 'default' }));
 
+vi.mock('@/lib/hooks/use-query-mcp-headers', () => ({
+  useQueryMcpHeaders: () => ({
+    visible: false,
+    rows: [],
+    errors: {},
+    hasErrors: false,
+    toApiOverrides: () => undefined,
+  }),
+}));
+
 vi.mock('@/providers/NamespaceProvider', () => ({
   useNamespace: () => ({
     namespace: namespaceState.namespace,

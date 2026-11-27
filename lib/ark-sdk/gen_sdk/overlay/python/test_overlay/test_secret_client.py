@@ -68,12 +68,16 @@ class TestSecretClient(unittest.IsolatedAsyncioTestCase):
         mock_secret1.metadata.uid = "uuid-1234-5678"
         mock_secret1.metadata.annotations = {}
         mock_secret1.metadata.labels = {}
+        mock_secret1.type = "Opaque"
+        mock_secret1.data = {"user": "dXNlcg==", "token": "dG9rZW4="}
 
         mock_secret2 = Mock()
         mock_secret2.metadata.name = "app-config"
         mock_secret2.metadata.uid = "uuid-abcd-efgh"
         mock_secret2.metadata.annotations = {}
         mock_secret2.metadata.labels = {}
+        mock_secret2.type = "kubernetes.io/tls"
+        mock_secret2.data = None
         
         # Mock the API response
         mock_api_instance = mock_v1_api.return_value
@@ -91,10 +95,14 @@ class TestSecretClient(unittest.IsolatedAsyncioTestCase):
         # Check first secret
         self.assertEqual(result["items"][0]["name"], "my-secret")
         self.assertEqual(result["items"][0]["id"], "uuid-1234-5678")
+        self.assertEqual(result["items"][0]["type"], "Opaque")
+        self.assertEqual(result["items"][0]["keys"], ["token", "user"])
         
         # Check second secret
         self.assertEqual(result["items"][1]["name"], "app-config")
         self.assertEqual(result["items"][1]["id"], "uuid-abcd-efgh")
+        self.assertEqual(result["items"][1]["type"], "kubernetes.io/tls")
+        self.assertEqual(result["items"][1]["keys"], [])
         
         # Verify namespace parameter was passed correctly
         mock_api_instance.list_namespaced_secret.assert_called_once_with(
@@ -114,6 +122,8 @@ class TestSecretClient(unittest.IsolatedAsyncioTestCase):
         mock_secret.metadata.uid = "uuid-12345"
         mock_secret.metadata.annotations = NON_ARK_ANNOTATIONS
         mock_secret.metadata.labels = {}
+        mock_secret.type = "Opaque"
+        mock_secret.data = {}
 
         mock_api_instance = mock_v1_api.return_value
         mock_response = Mock()
@@ -857,11 +867,15 @@ class TestSecretClientScope(unittest.IsolatedAsyncioTestCase):
         shared.metadata.uid = "uuid-shared"
         shared.metadata.labels = dict(SYSTEM_LABELS)
         shared.metadata.annotations = {}
+        shared.type = "Opaque"
+        shared.data = {}
         personal = Mock()
         personal.metadata.name = "u-ff8d9819fc0e12bf-github"
         personal.metadata.uid = "uuid-personal"
         personal.metadata.labels = dict(ALICE_LABELS)
         personal.metadata.annotations = {}
+        personal.type = "Opaque"
+        personal.data = {}
         self.v1.list_namespaced_secret = AsyncMock(return_value=Mock(items=[shared, personal]))
 
         result = await SecretClient(namespace="ns", scope=SecretScope.for_user(ALICE)).list_secrets()
