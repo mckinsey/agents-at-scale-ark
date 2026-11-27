@@ -42,7 +42,7 @@ func TestHandleWALMessageKeepaliveTracksServerWALEnd(t *testing.T) {
 	state := newWALStreamState(0)
 
 	msg := &pgproto3.CopyData{Data: encodePrimaryKeepalive(0x1A2B3C, false)}
-	if err := backend.handleWALMessage(nil, msg, state); err != nil {
+	if err := backend.handleWALMessage(context.Background(), nil, msg, state); err != nil {
 		t.Fatalf("handleWALMessage: %v", err)
 	}
 
@@ -63,7 +63,7 @@ func TestHandleWALMessageXLogDataIgnoresServerWALEnd(t *testing.T) {
 
 	walData := encodeInsertMessage(7, makeTuple("Agent", "default", "a"))
 	msg := &pgproto3.CopyData{Data: encodeXLogDataWithEnd(0x100, 0xF0000, walData)}
-	if err := backend.handleWALMessage(nil, msg, state); err != nil {
+	if err := backend.handleWALMessage(context.Background(), nil, msg, state); err != nil {
 		t.Fatalf("handleWALMessage: %v", err)
 	}
 
@@ -87,7 +87,7 @@ func TestHandleWALMessageDecodesBeforeKeepaliveAck(t *testing.T) {
 
 	walData := encodeInsertMessage(1, makeTuple("Agent", "default", "a"))
 	writeEnd := pglogrepl.LSN(0x200 + len(walData))
-	if err := backend.handleWALMessage(nil, &pgproto3.CopyData{Data: encodeXLogDataWithEnd(0x200, 0, walData)}, state); err != nil {
+	if err := backend.handleWALMessage(context.Background(), nil, &pgproto3.CopyData{Data: encodeXLogDataWithEnd(0x200, 0, walData)}, state); err != nil {
 		t.Fatalf("handleWALMessage xlog: %v", err)
 	}
 
@@ -101,7 +101,7 @@ func TestHandleWALMessageDecodesBeforeKeepaliveAck(t *testing.T) {
 	}
 
 	keepalive := &pgproto3.CopyData{Data: encodePrimaryKeepalive(uint64(writeEnd)+0x1000, false)}
-	if err := backend.handleWALMessage(nil, keepalive, state); err != nil {
+	if err := backend.handleWALMessage(context.Background(), nil, keepalive, state); err != nil {
 		t.Fatalf("handleWALMessage keepalive: %v", err)
 	}
 	if state.ackLSN() < writeEnd {
@@ -136,7 +136,7 @@ func TestEnsureReplicationSlotExistingSlotResumePoint(t *testing.T) {
 	)
 
 	p := &PostgreSQLBackend{db: db, ctx: context.Background()}
-	startLSN, resumeLSN, err := p.ensureReplicationSlot(nil, walSlotName)
+	startLSN, resumeLSN, err := p.ensureReplicationSlot(context.Background(), nil, walSlotName)
 	if err != nil {
 		t.Fatalf("ensureReplicationSlot: %v", err)
 	}
@@ -165,7 +165,7 @@ func TestEnsureReplicationSlotActiveElsewhere(t *testing.T) {
 	)
 
 	p := &PostgreSQLBackend{db: db, ctx: context.Background()}
-	if _, _, err := p.ensureReplicationSlot(nil, walSlotName); err == nil {
+	if _, _, err := p.ensureReplicationSlot(context.Background(), nil, walSlotName); err == nil {
 		t.Fatal("expected an error when the slot is held by another session")
 	}
 }

@@ -156,7 +156,7 @@ func main() {
 
 	switch result.role {
 	case RoleAPIServer:
-		setupEmbeddedApiserver(mgr)
+		setupEmbeddedApiserver(mgr, result.enableLeaderElection)
 	case RoleController:
 		ctx := context.Background()
 		restConfig := ctrl.GetConfigOrDie()
@@ -243,7 +243,7 @@ func setupManager(cfg config) (ctrl.Manager, *certwatcher.CertWatcher, *certwatc
 		Metrics:                metricsServerOptions,
 		WebhookServer:          webhookServer,
 		HealthProbeBindAddress: cfg.probeAddr,
-		LeaderElection:         cfg.enableLeaderElection,
+		LeaderElection:         cfg.enableLeaderElection && cfg.role != RoleAPIServer,
 		LeaderElectionID:       leaderElectionID(cfg.role),
 		EventBroadcaster: record.NewBroadcasterWithCorrelatorOptions(record.CorrelatorOptions{
 			BurstSize: 100,
@@ -588,7 +588,7 @@ func apiserverConfigFromEnv() (apiserver.Config, error) {
 	return cfg, nil
 }
 
-func setupEmbeddedApiserver(mgr ctrl.Manager) {
+func setupEmbeddedApiserver(mgr ctrl.Manager, leaderElect bool) {
 	backend := os.Getenv("ARK_STORAGE_BACKEND")
 	if backend != "postgresql" {
 		setupLog.Error(fmt.Errorf("--role=apiserver requires ARK_STORAGE_BACKEND=postgresql (got %q)", backend), "invalid configuration")
@@ -602,13 +602,19 @@ func setupEmbeddedApiserver(mgr ctrl.Manager) {
 	}
 	cfg.K8sClient = mgr.GetAPIReader()
 	cfg.RestConfig = mgr.GetConfig()
+	cfg.WALLeaderElection = leaderElect
 
 	server := apiserver.New(cfg)
 	if err := mgr.Add(server); err != nil {
 		setupLog.Error(err, "unable to add embedded apiserver to manager")
 		os.Exit(1)
 	}
-	if err := mgr.Add(server.WALConsumer()); err != nil {
+	walConsumer, err := server.WALConsumer()
+	if err != nil {
+		setupLog.Error(err, "unable to set up WAL consumer")
+		os.Exit(1)
+	}
+	if err := mgr.Add(walConsumer); err != nil {
 		setupLog.Error(err, "unable to add WAL consumer to manager")
 		os.Exit(1)
 	}

@@ -99,6 +99,8 @@ export function ViewAgentForm({
     handleDeleteTool,
     isToolSelected,
     getToolApproval,
+    getEffectiveToolApproval,
+    isToolApprovalEnforced,
     setToolApproval,
     isOutputSchemaSupported,
     onSubmit,
@@ -326,6 +328,8 @@ export function ViewAgentForm({
                 <ToolApprovalsSection
                   selectedTools={selectedTools}
                   getToolApproval={getToolApproval}
+                  getEffectiveToolApproval={getEffectiveToolApproval}
+                  isToolApprovalEnforced={isToolApprovalEnforced}
                   onApprovalChange={setToolApproval}
                   disabled={isDisabled}
                 />

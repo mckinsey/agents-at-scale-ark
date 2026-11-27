@@ -5375,6 +5375,10 @@ export interface components {
             annotations?: {
                 [key: string]: string;
             } | null;
+            /** Approval */
+            approval?: {
+                [key: string]: unknown;
+            } | null;
             /** Description */
             description?: string | null;
             /** Labels */

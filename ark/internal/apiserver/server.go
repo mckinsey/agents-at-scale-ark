@@ -130,7 +130,8 @@ type Config struct {
 	// resources rather than needing list and watch across every namespace.
 	K8sClient client.Reader
 	// RestConfig points at the host kube-apiserver, where the policy objects live.
-	RestConfig *clientrest.Config
+	RestConfig        *clientrest.Config
+	WALLeaderElection bool
 	// AuditLogPath "-" writes JSON to stdout. AuditPolicyFile is mandatory when AuditEnabled.
 	AuditEnabled    bool
 	AuditPolicyFile string
@@ -190,37 +191,6 @@ func New(cfg Config) *Server {
 		config:       cfg,
 		backendReady: make(chan struct{}),
 		stopCh:       make(chan struct{}),
-	}
-}
-
-// walConsumer starts the backend's WAL consumer once this replica holds the
-// leader lease. The replication slot is single-consumer: without this gate,
-// extra replicas error-loop trying to acquire the slot.
-type walConsumer struct {
-	ready <-chan struct{}
-	start func()
-}
-
-func (w *walConsumer) Start(ctx context.Context) error {
-	select {
-	case <-ctx.Done():
-		return nil
-	case <-w.ready:
-	}
-	klog.Info("Leader lease acquired; starting WAL consumer")
-	w.start()
-	<-ctx.Done()
-	return nil
-}
-
-func (w *walConsumer) NeedLeaderElection() bool {
-	return true
-}
-
-func (s *Server) WALConsumer() *walConsumer {
-	return &walConsumer{
-		ready: s.backendReady,
-		start: func() { s.backend.StartWALConsumer() },
 	}
 }
 

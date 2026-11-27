@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.0-rc.3](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.2.0-rc.2...v0.2.0-rc.3) (2026-11-27)
+
+
+### Bug Fixes
+
+* **ark-dashboard:** show Tool-enforced approvals in the agent editor ([#4019](https://github.com/mckinsey/agents-at-scale-ark/issues/4019)) ([26fef71](https://github.com/mckinsey/agents-at-scale-ark/commit/26fef710cf0ce406b5fb373feaa6d2b7d174ed1d))
+* bump @babel/generator to 7.29.15 (XRAY-1179071) ([#4081](https://github.com/mckinsey/agents-at-scale-ark/issues/4081)) ([eaa7f52](https://github.com/mckinsey/agents-at-scale-ark/commit/eaa7f52071a8f41d049a25c62564c8081fc54dcd))
+
 ## [0.2.0-rc.2](https://github.com/mckinsey/agents-at-scale-ark/compare/v0.2.0-rc.1...v0.2.0-rc.2) (2026-11-26)
 
 

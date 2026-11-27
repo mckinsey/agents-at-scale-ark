@@ -68,6 +68,8 @@ export function CreateAgentForm({
     handleToolToggle,
     isToolSelected,
     getToolApproval,
+    getEffectiveToolApproval,
+    isToolApprovalEnforced,
     setToolApproval,
     onSubmit,
     onInvalid,
@@ -221,6 +223,8 @@ export function CreateAgentForm({
             <ToolApprovalsSection
               selectedTools={selectedTools}
               getToolApproval={getToolApproval}
+              getEffectiveToolApproval={getEffectiveToolApproval}
+              isToolApprovalEnforced={isToolApprovalEnforced}
               onApprovalChange={setToolApproval}
               disabled={isDisabled}
             />

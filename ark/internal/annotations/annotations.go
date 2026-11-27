@@ -69,6 +69,11 @@ const (
 	StreamingSupported = ARKPrefix + "streaming-supported"
 )
 
+const (
+	TraceParent = ARKPrefix + "traceparent"
+	TraceState  = ARKPrefix + "tracestate"
+)
+
 // Migration annotations - used by mutating webhooks to record deprecation warnings.
 // The validating webhook collects annotations matching this prefix and returns them
 // as admission warnings.

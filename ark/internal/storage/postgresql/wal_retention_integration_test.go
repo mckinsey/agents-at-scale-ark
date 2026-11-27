@@ -6,6 +6,7 @@
 package postgresql
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -94,7 +95,7 @@ func TestWALSlotResumesFromConfirmedPoint_Integration(t *testing.T) {
 
 	// The slot exists and is idle, so ensureReplicationSlot never needs the
 	// replication connection it would use to create one.
-	startLSN, resumeLSN, err := backend.ensureReplicationSlot(nil, slotName)
+	startLSN, resumeLSN, err := backend.ensureReplicationSlot(context.Background(), nil, slotName)
 	if err != nil {
 		t.Fatalf("ensureReplicationSlot: %v", err)
 	}
