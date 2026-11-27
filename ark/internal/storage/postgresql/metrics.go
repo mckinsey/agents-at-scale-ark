@@ -86,29 +86,7 @@ var (
 	replicationSlotLagBytes = prometheus.NewGauge(
 		prometheus.GaugeOpts{
 			Name: "ark_apiserver_replication_slot_lag_bytes",
-			Help: "WAL bytes between pg_current_wal_lsn() and the ark_cdc slot's confirmed_flush_lsn; NaN on replicas not running the WAL consumer",
-		},
-	)
-
-	notifyReceivedTotal = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "ark_apiserver_notify_received_total",
-			Help: "Number of cross-replica change notifications received by the LISTEN loop",
-		},
-		[]string{"kind"},
-	)
-
-	notifyListenerConnected = prometheus.NewGauge(
-		prometheus.GaugeOpts{
-			Name: "ark_apiserver_notify_listener_connected",
-			Help: "1 while the cross-replica notify listener holds an active LISTEN connection, 0 otherwise",
-		},
-	)
-
-	notifyListenerReconnectsTotal = prometheus.NewCounter(
-		prometheus.CounterOpts{
-			Name: "ark_apiserver_notify_listener_reconnects_total",
-			Help: "Number of times the notify listener lost its connection and retried",
+			Help: "WAL bytes between pg_current_wal_lsn() and this replica's temporary replication slot confirmed_flush_lsn; NaN while the replica is not streaming",
 		},
 	)
 )
@@ -150,7 +128,7 @@ func (p *PostgreSQLBackend) querySlotLag(ctx context.Context) (float64, error) {
 	err := p.db.QueryRowContext(ctx, `
 		SELECT pg_wal_lsn_diff(pg_current_wal_lsn(), confirmed_flush_lsn)
 		FROM pg_replication_slots
-		WHERE slot_name = $1`, walSlotName).Scan(&lag)
+		WHERE slot_name = $1`, p.currentSlotName()).Scan(&lag)
 	if err != nil {
 		return 0, err
 	}
@@ -226,9 +204,6 @@ func init() {
 		walConsumerActive,
 		walLastMessageTimestamp,
 		replicationSlotLagBytes,
-		notifyReceivedTotal,
-		notifyListenerConnected,
-		notifyListenerReconnectsTotal,
 		dbPoolCollector{},
 	)
 }

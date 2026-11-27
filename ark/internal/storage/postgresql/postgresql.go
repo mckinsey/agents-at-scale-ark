@@ -196,7 +196,7 @@ type PostgreSQLBackend struct {
 	// schema is initialized, so an empty store still hands out a resourceVersion.
 	headRevisionBase int64
 	walOnce          sync.Once
-	notifyOnce       sync.Once
+	slotName         atomic.Value
 }
 
 var connValueEscaper = strings.NewReplacer(`\`, `\\`, `'`, `\'`)
@@ -521,6 +521,7 @@ func (p *PostgreSQLBackend) cleanupLoop() {
 			return
 		case <-ticker.C:
 			p.purgeExpired()
+			p.dropLegacySlot(p.ctx)
 		}
 	}
 }
@@ -654,13 +655,10 @@ func (p *PostgreSQLBackend) Create(ctx context.Context, kind, namespace, name st
 	var rv, generation int64
 	var createdAt time.Time
 	err = p.db.QueryRowContext(ctx, `
-		WITH ins AS (
-			INSERT INTO resources (kind, namespace, name, uid, spec, status, labels, annotations, finalizers, owner_references)
-			VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb)
-			RETURNING resource_version, generation, created_at
-		)
-		SELECT resource_version, generation, created_at, pg_notify($11, $1) FROM ins
-	`, kind, namespace, name, resource.Metadata.UID, specJSON, statusJSON, string(labelsJSON), string(annotationsJSON), string(finalizersJSON), ownerRefsJSON, notifyChannel).Scan(&rv, &generation, &createdAt, new(sql.NullString))
+		INSERT INTO resources (kind, namespace, name, uid, spec, status, labels, annotations, finalizers, owner_references)
+		VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb)
+		RETURNING resource_version, generation, created_at
+	`, kind, namespace, name, resource.Metadata.UID, specJSON, statusJSON, string(labelsJSON), string(annotationsJSON), string(finalizersJSON), ownerRefsJSON).Scan(&rv, &generation, &createdAt)
 	if err != nil {
 		if pgErr, ok := err.(*pq.Error); ok && pgErr.Code == "23505" {
 			return storage.ErrAlreadyExists
@@ -941,7 +939,6 @@ func (p *PostgreSQLBackend) Update(ctx context.Context, kind, namespace, name st
 	var newRV, newGen int64
 	var uid string
 	var createdAt time.Time
-	var updated bool
 	// generation bumps on the two transitions upstream Kubernetes bumps on: a
 	// spec change, and the first time deletionTimestamp is set (rest.BeforeDelete).
 	// The CASE reads OLD row values on the RHS (per PostgreSQL SET semantics),
@@ -949,27 +946,22 @@ func (p *PostgreSQLBackend) Update(ctx context.Context, kind, namespace, name st
 	// that re-sends an existing timestamp does not bump. jsonb equality is
 	// structural, so re-marshalled specs with reordered keys don't false-bump.
 	err = p.db.QueryRowContext(ctx, `
-		WITH upd AS (
-			UPDATE resources
-			SET spec = $1::jsonb, status = $2::jsonb, labels = $3::jsonb, annotations = $4::jsonb,
-			    finalizers = $5::jsonb, owner_references = $6::jsonb,
-			    deletion_timestamp = COALESCE($7::timestamptz, deletion_timestamp),
-			    generation = CASE WHEN spec IS DISTINCT FROM $1::jsonb
-			                       OR ($7::timestamptz IS NOT NULL AND deletion_timestamp IS NULL)
-			                      THEN generation + 1 ELSE generation END,
-			    resource_version = nextval('resources_resource_version_seq'), updated_at = NOW()
-			WHERE kind = $8 AND namespace = $9 AND name = $10 AND resource_version = $11 AND deleted_at IS NULL
-			RETURNING resource_version, generation, uid, created_at
-		)
-		SELECT resource_version, generation, uid, created_at, true, pg_notify($12, $8) FROM upd
-		UNION ALL
-		SELECT 0, 0, '', NOW(), false, NULL WHERE NOT EXISTS (SELECT 1 FROM upd)
-	`, specJSON, statusJSON, string(labelsJSON), string(annotationsJSON), string(finalizersJSON), ownerRefsJSON, deletionTS, kind, namespace, name, rv, notifyChannel).Scan(&newRV, &newGen, &uid, &createdAt, &updated, new(sql.NullString))
-	if err != nil {
+		UPDATE resources
+		SET spec = $1::jsonb, status = $2::jsonb, labels = $3::jsonb, annotations = $4::jsonb,
+		    finalizers = $5::jsonb, owner_references = $6::jsonb,
+		    deletion_timestamp = COALESCE($7::timestamptz, deletion_timestamp),
+		    generation = CASE WHEN spec IS DISTINCT FROM $1::jsonb
+		                       OR ($7::timestamptz IS NOT NULL AND deletion_timestamp IS NULL)
+		                      THEN generation + 1 ELSE generation END,
+		    resource_version = nextval('resources_resource_version_seq'), updated_at = NOW()
+		WHERE kind = $8 AND namespace = $9 AND name = $10 AND resource_version = $11 AND deleted_at IS NULL
+		RETURNING resource_version, generation, uid, created_at
+	`, specJSON, statusJSON, string(labelsJSON), string(annotationsJSON), string(finalizersJSON), ownerRefsJSON, deletionTS, kind, namespace, name, rv).Scan(&newRV, &newGen, &uid, &createdAt)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("failed to update resource: %w", err)
 	}
 
-	if !updated {
+	if errors.Is(err, sql.ErrNoRows) {
 		var exists bool
 		_ = p.db.QueryRowContext(ctx, `SELECT COUNT(*) > 0 FROM resources WHERE kind = $1 AND namespace = $2 AND name = $3 AND deleted_at IS NULL`, kind, namespace, name).Scan(&exists)
 		if exists {
@@ -1013,23 +1005,17 @@ func (p *PostgreSQLBackend) UpdateStatus(ctx context.Context, kind, namespace, n
 	}
 
 	var newRV int64
-	var updated bool
 	err = p.db.QueryRowContext(ctx, `
-		WITH upd AS (
-			UPDATE resources
-			SET status = $1::jsonb, resource_version = nextval('resources_resource_version_seq'), updated_at = NOW()
-			WHERE kind = $2 AND namespace = $3 AND name = $4 AND resource_version = $5 AND deleted_at IS NULL
-			RETURNING resource_version
-		)
-		SELECT resource_version, true, pg_notify($6, $2) FROM upd
-		UNION ALL
-		SELECT 0, false, NULL WHERE NOT EXISTS (SELECT 1 FROM upd)
-	`, statusJSON, kind, namespace, name, rv, notifyChannel).Scan(&newRV, &updated, new(sql.NullString))
-	if err != nil {
+		UPDATE resources
+		SET status = $1::jsonb, resource_version = nextval('resources_resource_version_seq'), updated_at = NOW()
+		WHERE kind = $2 AND namespace = $3 AND name = $4 AND resource_version = $5 AND deleted_at IS NULL
+		RETURNING resource_version
+	`, statusJSON, kind, namespace, name, rv).Scan(&newRV)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("failed to update resource status: %w", err)
 	}
 
-	if !updated {
+	if errors.Is(err, sql.ErrNoRows) {
 		var exists bool
 		_ = p.db.QueryRowContext(ctx, `SELECT COUNT(*) > 0 FROM resources WHERE kind = $1 AND namespace = $2 AND name = $3 AND deleted_at IS NULL`, kind, namespace, name).Scan(&exists)
 		if exists {
@@ -1042,17 +1028,15 @@ func (p *PostgreSQLBackend) UpdateStatus(ctx context.Context, kind, namespace, n
 }
 
 func (p *PostgreSQLBackend) Delete(ctx context.Context, kind, namespace, name string) error {
+	var rv int64
 	err := p.db.QueryRowContext(ctx, `
-		WITH del AS (
-			UPDATE resources
-			SET deleted_at = NOW(), resource_version = nextval('resources_resource_version_seq'), updated_at = NOW()
-			WHERE kind = $1 AND namespace = $2 AND name = $3 AND deleted_at IS NULL
-			RETURNING resource_version
-		)
-		SELECT pg_notify($4, $1) FROM del
-	`, kind, namespace, name, notifyChannel).Scan(new(sql.NullString))
+		UPDATE resources
+		SET deleted_at = NOW(), resource_version = nextval('resources_resource_version_seq'), updated_at = NOW()
+		WHERE kind = $1 AND namespace = $2 AND name = $3 AND deleted_at IS NULL
+		RETURNING resource_version
+	`, kind, namespace, name).Scan(&rv)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return storage.ErrNotFound
 		}
 		return fmt.Errorf("failed to delete resource: %w", err)
