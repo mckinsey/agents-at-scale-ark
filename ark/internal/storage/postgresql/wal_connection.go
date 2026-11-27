@@ -14,7 +14,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-func (p *PostgreSQLBackend) startWALConsumer() {
+func (p *PostgreSQLBackend) startWALConsumer(ctx context.Context) {
 	walConsumerActive.Set(1)
 	defer walConsumerActive.Set(0)
 	defer walLastMessageTimestamp.Set(math.NaN())
@@ -24,19 +24,19 @@ func (p *PostgreSQLBackend) startWALConsumer() {
 
 	for {
 		select {
-		case <-p.ctx.Done():
+		case <-ctx.Done():
 			return
 		default:
 		}
 
-		err := p.runWALConsumer(walSlotName)
-		if p.ctx.Err() != nil {
+		err := p.runWALConsumer(ctx, walSlotName)
+		if ctx.Err() != nil {
 			return
 		}
 
 		klog.Errorf("WAL consumer disconnected, retrying in %v: %v", backoff, err)
 		select {
-		case <-p.ctx.Done():
+		case <-ctx.Done():
 			return
 		case <-time.After(backoff):
 		}
@@ -44,25 +44,25 @@ func (p *PostgreSQLBackend) startWALConsumer() {
 	}
 }
 
-func (p *PostgreSQLBackend) runWALConsumer(slotName string) error {
+func (p *PostgreSQLBackend) runWALConsumer(ctx context.Context, slotName string) error {
 	cfg, err := pgconn.ParseConfig(p.connStr)
 	if err != nil {
 		return fmt.Errorf("parse config: %w", err)
 	}
 	cfg.RuntimeParams["replication"] = "database"
 
-	conn, err := pgconn.ConnectConfig(p.ctx, cfg)
+	conn, err := pgconn.ConnectConfig(ctx, cfg)
 	if err != nil {
 		return fmt.Errorf("connect: %w", err)
 	}
-	defer func() { _ = conn.Close(p.ctx) }()
+	defer func() { _ = conn.Close(ctx) }()
 
-	startLSN, resumeLSN, err := p.ensureReplicationSlot(conn, slotName)
+	startLSN, resumeLSN, err := p.ensureReplicationSlot(ctx, conn, slotName)
 	if err != nil {
 		return fmt.Errorf("ensure slot: %w", err)
 	}
 
-	err = pglogrepl.StartReplication(p.ctx, conn, slotName, startLSN, pglogrepl.StartReplicationOptions{
+	err = pglogrepl.StartReplication(ctx, conn, slotName, startLSN, pglogrepl.StartReplicationOptions{
 		PluginArgs: []string{
 			"proto_version '1'",
 			fmt.Sprintf("publication_names '%s'", walPublicationName),
@@ -75,18 +75,18 @@ func (p *PostgreSQLBackend) runWALConsumer(slotName string) error {
 	klog.Infof("WAL consumer started from LSN %s", startLSN)
 	p.nudgeAllWatchers()
 
-	return p.streamWAL(conn, resumeLSN)
+	return p.streamWAL(ctx, conn, resumeLSN)
 }
 
-func (p *PostgreSQLBackend) streamWAL(conn *pgconn.PgConn, resumeLSN pglogrepl.LSN) error {
+func (p *PostgreSQLBackend) streamWAL(ctx context.Context, conn *pgconn.PgConn, resumeLSN pglogrepl.LSN) error {
 	state := newWALStreamState(resumeLSN)
 
 	for {
-		if p.ctx.Err() != nil {
+		if ctx.Err() != nil {
 			return nil
 		}
 
-		rawMsg, err := p.receiveWALMessage(conn, state)
+		rawMsg, err := p.receiveWALMessage(ctx, conn, state)
 		if err != nil {
 			return err
 		}
@@ -94,12 +94,12 @@ func (p *PostgreSQLBackend) streamWAL(conn *pgconn.PgConn, resumeLSN pglogrepl.L
 			continue
 		}
 
-		if err := p.handleWALMessage(conn, rawMsg, state); err != nil {
+		if err := p.handleWALMessage(ctx, conn, rawMsg, state); err != nil {
 			return err
 		}
 
 		if time.Since(state.lastStatusUpdate) > walKeepaliveInterval {
-			if err := p.sendStandbyStatus(conn, state.ackLSN()); err != nil {
+			if err := p.sendStandbyStatus(ctx, conn, state.ackLSN()); err != nil {
 				return fmt.Errorf("periodic standby status: %w", err)
 			}
 			state.lastStatusUpdate = time.Now()
@@ -107,20 +107,20 @@ func (p *PostgreSQLBackend) streamWAL(conn *pgconn.PgConn, resumeLSN pglogrepl.L
 	}
 }
 
-func (p *PostgreSQLBackend) receiveWALMessage(conn *pgconn.PgConn, state *walStreamState) (pgproto3.BackendMessage, error) {
+func (p *PostgreSQLBackend) receiveWALMessage(ctx context.Context, conn *pgconn.PgConn, state *walStreamState) (pgproto3.BackendMessage, error) {
 	deadline := time.Now().Add(walStandbyTimeout)
-	ctx, cancel := context.WithDeadline(p.ctx, deadline)
-	rawMsg, err := conn.ReceiveMessage(ctx)
+	recvCtx, cancel := context.WithDeadline(ctx, deadline)
+	rawMsg, err := conn.ReceiveMessage(recvCtx)
 	cancel()
 
 	if err == nil {
 		return rawMsg, nil
 	}
-	if p.ctx.Err() != nil {
+	if ctx.Err() != nil {
 		return nil, nil
 	}
 	if pgconn.Timeout(err) {
-		if err := p.sendStandbyStatus(conn, state.ackLSN()); err != nil {
+		if err := p.sendStandbyStatus(ctx, conn, state.ackLSN()); err != nil {
 			return nil, fmt.Errorf("standby status: %w", err)
 		}
 		state.lastStatusUpdate = time.Now()
@@ -142,14 +142,14 @@ func (p *PostgreSQLBackend) receiveWALMessage(conn *pgconn.PgConn, state *walStr
 //
 // If the slot is currently active (held by another session), we return an error so the
 // caller's backoff loop retries; the active holder will eventually drop the connection.
-func (p *PostgreSQLBackend) ensureReplicationSlot(conn *pgconn.PgConn, slotName string) (pglogrepl.LSN, pglogrepl.LSN, error) {
+func (p *PostgreSQLBackend) ensureReplicationSlot(ctx context.Context, conn *pgconn.PgConn, slotName string) (pglogrepl.LSN, pglogrepl.LSN, error) {
 	var (
 		exists         bool
 		active         bool
 		walStatus      string
 		confirmedFlush string
 	)
-	err := p.db.QueryRowContext(p.ctx, `
+	err := p.db.QueryRowContext(ctx, `
 		SELECT true, active, COALESCE(wal_status, ''), COALESCE(confirmed_flush_lsn::text, '0/0')
 		FROM pg_replication_slots
 		WHERE slot_name = $1`, slotName).Scan(&exists, &active, &walStatus, &confirmedFlush)
@@ -161,7 +161,7 @@ func (p *PostgreSQLBackend) ensureReplicationSlot(conn *pgconn.PgConn, slotName 
 	// but keeps wal_status, so this check works on both.
 	if exists && walStatus == "lost" {
 		klog.Warningf("Replication slot %s invalidated (wal_status=lost); dropping and recreating", slotName)
-		if _, dropErr := p.db.ExecContext(p.ctx, `SELECT pg_drop_replication_slot($1)`, slotName); dropErr != nil {
+		if _, dropErr := p.db.ExecContext(ctx, `SELECT pg_drop_replication_slot($1)`, slotName); dropErr != nil {
 			return 0, 0, fmt.Errorf("drop invalidated slot: %w", dropErr)
 		}
 		exists = false
@@ -179,7 +179,7 @@ func (p *PostgreSQLBackend) ensureReplicationSlot(conn *pgconn.PgConn, slotName 
 		return pglogrepl.LSN(0), resumeLSN, nil
 	}
 
-	res, err := pglogrepl.CreateReplicationSlot(p.ctx, conn, slotName, "pgoutput",
+	res, err := pglogrepl.CreateReplicationSlot(ctx, conn, slotName, "pgoutput",
 		pglogrepl.CreateReplicationSlotOptions{Temporary: false})
 	if err != nil {
 		return 0, 0, fmt.Errorf("create replication slot: %w", err)
@@ -192,8 +192,8 @@ func (p *PostgreSQLBackend) ensureReplicationSlot(conn *pgconn.PgConn, slotName 
 	return lsn, lsn, nil
 }
 
-func (p *PostgreSQLBackend) sendStandbyStatus(conn *pgconn.PgConn, lsn pglogrepl.LSN) error {
-	return pglogrepl.SendStandbyStatusUpdate(p.ctx, conn, pglogrepl.StandbyStatusUpdate{
+func (p *PostgreSQLBackend) sendStandbyStatus(ctx context.Context, conn *pgconn.PgConn, lsn pglogrepl.LSN) error {
+	return pglogrepl.SendStandbyStatusUpdate(ctx, conn, pglogrepl.StandbyStatusUpdate{
 		WALWritePosition: lsn,
 		WALFlushPosition: lsn,
 		WALApplyPosition: lsn,

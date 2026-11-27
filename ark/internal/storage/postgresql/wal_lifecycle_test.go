@@ -5,6 +5,7 @@ package postgresql
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 )
@@ -21,6 +22,31 @@ func TestStartWALConsumer_ConsumesOnce(t *testing.T) {
 	p.walOnce.Do(func() { ran = true })
 	if ran {
 		t.Error("StartWALConsumer did not consume walOnce")
+	}
+}
+
+func TestRunWALConsumer_RestartsAfterItsContextIsCancelled(t *testing.T) {
+	backendCtx, backendCancel := context.WithCancel(context.Background())
+	defer backendCancel()
+	p := &PostgreSQLBackend{ctx: backendCtx, cancel: backendCancel, connStr: "host=127.0.0.1 port=1 user=ark connect_timeout=1"}
+
+	for round := range 2 {
+		runCtx, stop := context.WithCancel(context.Background())
+		done := make(chan struct{})
+		go func() {
+			p.RunWALConsumer(runCtx)
+			close(done)
+		}()
+		time.Sleep(50 * time.Millisecond)
+		stop()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("round %d: RunWALConsumer did not return after its context was cancelled", round)
+		}
+		if backendCtx.Err() != nil {
+			t.Fatalf("round %d: cancelling the run context cancelled the backend context", round)
+		}
 	}
 }
 
