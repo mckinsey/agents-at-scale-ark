@@ -231,7 +231,10 @@ func extractQueryAttributesFromContext(ctx context.Context) []attribute.KeyValue
 	if sessionID == "" {
 		sessionID = string(query.UID)
 	}
-	attrs = append(attrs, attribute.String(telemetry.AttrSessionID, sessionID))
+	attrs = append(attrs,
+		attribute.String(telemetry.AttrSessionID, sessionID),
+		attribute.String(telemetry.AttrStandardSessionID, sessionID),
+	)
 
 	if conversationID := query.Status.ConversationId; conversationID != "" {
 		attrs = append(attrs, attribute.String(telemetry.AttrConversationID, conversationID))
