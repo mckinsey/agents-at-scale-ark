@@ -36,6 +36,22 @@ var (
 		},
 		[]string{"namespace"},
 	)
+
+	queryFairnessWaitExpiredTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "ark_query_fairness_wait_expired_total",
+			Help: "Queued Query keys dropped because they did not retry within the safety expiry, by namespace. A non-zero rate means a queued Query was missed by every removal path, or the controller is retrying far slower than expected.",
+		},
+		[]string{"namespace"},
+	)
+
+	queryFairnessRetryGapSeconds = prometheus.NewHistogram(
+		prometheus.HistogramOpts{
+			Name:    "ark_query_fairness_retry_gap_seconds",
+			Help:    "Time between consecutive slot acquire attempts by a namespace with queued Queries. Long gaps delay how quickly a freed slot reaches the namespace it is reserved for.",
+			Buckets: []float64{0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 5, 10},
+		},
+	)
 )
 
 func init() {
@@ -43,5 +59,7 @@ func init() {
 		queryInflightGauge,
 		queryActiveTenantsGauge,
 		queryFairnessDeniedTotal,
+		queryFairnessWaitExpiredTotal,
+		queryFairnessRetryGapSeconds,
 	)
 }

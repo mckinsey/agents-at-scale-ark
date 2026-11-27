@@ -90,12 +90,8 @@ const (
 	// queryCapacityRequeueDelay is how long Reconcile waits before retrying
 	// when MaxConcurrentQueries is reached. Short enough to be responsive,
 	// long enough to avoid a busy-loop while in-flight queries drain.
-	queryCapacityRequeueDelay = 250 * time.Millisecond
-	// queryFairnessWaitWindow is how long a namespace denied a slot stays in
-	// the fair-share divisor after its last attempt. A few requeue cycles, so
-	// a still-competing tenant keeps its share while one that stops requeuing
-	// ages out and lets the remaining tenants expand.
-	queryFairnessWaitWindow = 4 * queryCapacityRequeueDelay
+	queryCapacityRequeueDelay    = 250 * time.Millisecond
+	queryFairnessQueuedKeyExpiry = 5 * time.Minute
 	// queryRunningSafetyRequeue re-reconciles a running Query whose execution
 	// goroutine died so it converges to a terminal phase instead of stranding.
 	// Delayed, not immediate, to avoid the requeue storm of #2198/#2362.
@@ -183,8 +179,14 @@ func (r *QueryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	if err != nil {
 		if client.IgnoreNotFound(err) != nil {
 			log.Error(err, "unable to fetch Query")
+		} else {
+			r.forgetQueued(req.NamespacedName)
 		}
 		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
+	if !isPreExecutionPhase(obj.Status.Phase) || !obj.DeletionTimestamp.IsZero() {
+		r.forgetQueued(req.NamespacedName)
 	}
 
 	// Garbage-collect the Query once it has been in a terminal phase for
@@ -404,7 +406,7 @@ func (r *QueryReconciler) handleRunningPhase(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{RequeueAfter: queryRunningSafetyRequeue}, nil
 	}
 
-	if r.sched != nil && !r.sched.tryAcquire(req.Namespace) {
+	if r.sched != nil && !r.sched.tryAcquire(req.NamespacedName) {
 		log.V(1).Info("query execution capacity reached, requeuing", "query", req.String(), "cap", r.MaxConcurrentQueries)
 		if obj.Status.Phase != statusQueued {
 			if err := r.updateStatus(ctx, &obj, statusQueued); err != nil {
@@ -1617,6 +1619,12 @@ func (r *QueryReconciler) removeApprovalCascadeAnnotation(ctx context.Context, q
 	return nil
 }
 
+func (r *QueryReconciler) forgetQueued(namespacedName types.NamespacedName) {
+	if r.sched != nil {
+		r.sched.forget(namespacedName)
+	}
+}
+
 func (r *QueryReconciler) cleanupExistingOperation(namespacedName types.NamespacedName) {
 	if existingOp, exists := r.operations.Load(namespacedName); exists {
 		logf.Log.Info("Found existing operation, clearing due to cancel", "query", namespacedName.String())
@@ -1839,7 +1847,7 @@ func (r *QueryReconciler) handleQueryDispatch(
 
 func (r *QueryReconciler) initSemaphore() {
 	if r.MaxConcurrentQueries > 0 {
-		r.sched = newFairScheduler(r.MaxConcurrentQueries, queryFairnessWaitWindow)
+		r.sched = newFairScheduler(r.MaxConcurrentQueries, queryFairnessQueuedKeyExpiry)
 	}
 	r.requeueCh = make(chan event.GenericEvent, requeueChannelBufferSize)
 }
