@@ -1,0 +1,21 @@
+{{- if and .Values.httpRoute.enabled .Values.httpRoute.proxyBuffers.enabled -}}
+apiVersion: gateway.nginx.org/v1alpha1
+kind: SnippetsFilter
+metadata:
+  name: {{ .Values.app.name }}-proxy-buffers
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Values.app.name }}
+    {{- with .Values.global.annotations }}
+    {{- range $key, $value := . }}
+    {{ $key }}: {{ $value | quote }}
+    {{- end }}
+    {{- end }}
+spec:
+  snippets:
+    - context: http.server.location
+      value: |
+        proxy_buffer_size {{ .Values.httpRoute.proxyBuffers.bufferSize }};
+        proxy_buffers {{ .Values.httpRoute.proxyBuffers.buffers }};
+        proxy_busy_buffers_size {{ .Values.httpRoute.proxyBuffers.busyBuffersSize }};
+{{- end }}

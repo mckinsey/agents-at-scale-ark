@@ -1,10 +1,9 @@
 'use client';
 
 import { useSession } from 'next-auth/react';
-import { RedirectType, redirect } from 'next/navigation';
 import { useCallback, useRef, useState } from 'react';
 
-import { SIGNIN_PATH } from '@/lib/constants/auth';
+import { redirectToSignIn } from '@/lib/auth/signin';
 
 import { useConditionalInterval } from './useConditionalInterval';
 import { useWindowFocus } from './useWindowFocus';
@@ -52,11 +51,10 @@ export function useRefreshAccessToken() {
           '[useRefreshAccessToken] Session update failed:',
           result.error,
         );
-        redirect(SIGNIN_PATH, RedirectType.replace);
+        redirectToSignIn();
       }
     } catch (error) {
       console.error('[useRefreshAccessToken] Session update error:', error);
-      redirect(SIGNIN_PATH, RedirectType.replace);
     } finally {
       isUpdatingRef.current = false;
       setIsUpdating(false);
