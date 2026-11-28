@@ -30,8 +30,9 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 
 from .broker import BrokerClient, discover_broker_url
-from .executor import BaseExecutor, begin_request_state
+from .executor import BaseExecutor, TokenUsage, begin_request_state
 from .extensions.query import (
+    QUERY_EXTENSION_METADATA_KEY,
     QUERY_EXTENSION_URI,
     extract_query_ref,
     resolve_query,
@@ -195,6 +196,20 @@ def _get_tracer():
         return None
 
 
+def _build_response_meta(
+    response_messages: list[dict],
+    conversation_id: str,
+    token_usage: TokenUsage | None,
+) -> dict[str, Any]:
+    """Build the query extension metadata the controller reads from an engine response."""
+    meta: dict[str, Any] = {"messages": response_messages}
+    if conversation_id:
+        meta["conversationId"] = conversation_id
+    if token_usage:
+        meta["tokenUsage"] = token_usage.to_engine_metadata()
+    return meta
+
+
 class A2AExecutorAdapter(AgentExecutor):
     def __init__(self, executor: BaseExecutor):
         self.executor = executor
@@ -255,12 +270,15 @@ class A2AExecutorAdapter(AgentExecutor):
                 ] + response_dicts
                 await broker.send_messages(conversation_id, all_messages)
 
+            token_usage = self._reported_token_usage()
+
             if broker:
                 if not self.executor._streamed:
                     await broker.send_chunk(response_text, finish_reason="stop")
                 await broker.send_final_chunk(
                     response_text=response_text,
                     response_messages=response_dicts,
+                    token_usage=token_usage.model_dump() if token_usage else None,
                 )
                 await broker.complete()
 
@@ -271,21 +289,37 @@ class A2AExecutorAdapter(AgentExecutor):
             )
             if conversation_id:
                 response_msg.context_id = conversation_id
+            response_msg.metadata.update({
+                QUERY_EXTENSION_METADATA_KEY: _build_response_meta(
+                    response_dicts, conversation_id, token_usage
+                ),
+            })
             await event_queue.enqueue_event(response_msg)
         except Exception as e:
             logger.error(f"Execution failed: {e}", exc_info=True)
-            await event_queue.enqueue_event(
-                A2AMessage(
-                    role=Role.ROLE_AGENT,
-                    parts=[Part(text=f"Execution error: {e}")],
-                    message_id="error-response",
-                )
+            error_msg = A2AMessage(
+                role=Role.ROLE_AGENT,
+                parts=[Part(text=f"Execution error: {e}")],
+                message_id="error-response",
             )
+            token_usage = self._reported_token_usage()
+            if token_usage:
+                error_msg.metadata.update({
+                    QUERY_EXTENSION_METADATA_KEY: {"tokenUsage": token_usage.to_engine_metadata()},
+                })
+            await event_queue.enqueue_event(error_msg)
         finally:
             self.executor._broker_client = None
             self.executor._query_status_updater = None
             self.executor._streamed = False
             self.executor._tool_call_index = 0
+            self.executor._token_usage = None
+
+    def _reported_token_usage(self) -> TokenUsage | None:
+        token_usage = self.executor._token_usage
+        if token_usage and token_usage.totalTokens <= 0:
+            return None
+        return token_usage
 
     async def cancel(self, context: Any, event_queue: EventQueue) -> None:
         pass

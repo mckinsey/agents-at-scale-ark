@@ -113,6 +113,8 @@ const (
 	// callers without an explicit value get the same budget the apiserver's
 	// mutating admission would compute.
 	defaultQueryTimeout = 30 * time.Minute
+
+	maxResponseRawBytes = 512 * 1024
 )
 
 type QueryReconciler struct {
@@ -760,10 +762,11 @@ func (r *QueryReconciler) sendQueryA2A(ctx context.Context, address string, quer
 
 	log.V(1).Info("query A2A call completed", "query", query.Name, "target", target.Name, "address", address)
 
-	rawJSON := engineMeta.MessagesRaw
-	if rawJSON == "" {
-		rawJSON = buildFallbackRaw(responseText)
+	if len(engineMeta.MessagesRaw) > maxResponseRawBytes {
+		log.Info("engine response messages exceed size limit, storing assistant text only",
+			"query", query.Name, "bytes", len(engineMeta.MessagesRaw), "limit", maxResponseRawBytes)
 	}
+	rawJSON := buildResponseRaw(engineMeta.MessagesRaw, responseText)
 
 	response := &arkv1alpha1.Response{
 		Target:  target,
@@ -788,6 +791,13 @@ func extractUserInput(ctx context.Context, query arkv1alpha1.Query, k8sClient cl
 		return ""
 	}
 	return text
+}
+
+func buildResponseRaw(messagesRaw, responseText string) string {
+	if messagesRaw == "" || len(messagesRaw) > maxResponseRawBytes {
+		return buildFallbackRaw(responseText)
+	}
+	return messagesRaw
 }
 
 func buildFallbackRaw(responseText string) string {
