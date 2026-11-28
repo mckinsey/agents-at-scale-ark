@@ -60,6 +60,10 @@ spec:
               value: {{ .Values.impersonation.prefix | quote }}
             {{- end }}
             {{- end }}
+            {{- with (dig "argoServer" "tokenFile" "" .Values.AsMap) }}
+            - name: ARGO_SERVER_TOKEN_FILE
+              value: {{ . | quote }}
+            {{- end }}
           {{- if .Values.app.envFrom }}
           envFrom:
             {{- toYaml .Values.app.envFrom | nindent 12 }}
