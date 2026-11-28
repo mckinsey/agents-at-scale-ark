@@ -3,7 +3,7 @@ from typing import Optional
 
 from ark_sdk import versions
 from ark_sdk.k8s import get_context, release_api_client
-from ark_sdk.impersonation import ImpersonationConfig
+from ark_sdk.impersonation import ImpersonationConfig, encode_impersonation_header_value
 from ark_sdk.executor import (
     Parameter,
     Model,
@@ -41,11 +41,11 @@ def _build_headers(impersonation: Optional[ImpersonationConfig] = None) -> Optio
         return None
     if not impersonation.username or not impersonation.username.strip():
         raise ValueError("Impersonation requires a non-empty username")
-    headers = {"Impersonate-User": impersonation.username}
+    headers = {"Impersonate-User": encode_impersonation_header_value(impersonation.username)}
     if impersonation.groups:
         # impersonation_patch turns this list into one Impersonate-Group header
         # per group at the transport layer.
-        headers["Impersonate-Group"] = list(impersonation.groups)
+        headers["Impersonate-Group"] = [encode_impersonation_header_value(group) for group in impersonation.groups]
     return headers
 
 def get_client(namespace: Optional[str], version: str, impersonation: Optional[ImpersonationConfig] = None, user_agent: Optional[str] = None):
