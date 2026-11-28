@@ -1,12 +1,15 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { resetAppRouterMock } from '@/__tests__/setup/mock-app-router';
 import { SessionsTable } from '@/components/sessions-conversations/sessions-table';
-import { useListSessions } from '@/lib/services/broker-sessions-hooks';
-import type { PaginatedSessions } from '@/lib/services/broker-sessions';
 import { toast } from '@/components/ui/sonner';
+import { brokerSessionsService } from '@/lib/services/broker-sessions';
+import type { PaginatedSessions } from '@/lib/services/broker-sessions';
+import { useListSessions } from '@/lib/services/broker-sessions-hooks';
+import type * as BrokerSessionsHooks from '@/lib/services/broker-sessions-hooks';
 
 vi.mock('next/navigation', async () => {
   const { createAppRouterMock } =
@@ -313,6 +316,49 @@ describe('SessionsTable', () => {
 
     // Input should reflect typed value immediately
     expect(searchInput.value).toBe('test');
+  });
+
+  it('keeps the search input mounted and focused while a new search term is loading', async () => {
+    const actual = await vi.importActual<typeof BrokerSessionsHooks>(
+      '@/lib/services/broker-sessions-hooks',
+    );
+    vi.mocked(useListSessions).mockImplementation(actual.useListSessions);
+    vi.mocked(brokerSessionsService.getSessions).mockImplementation(params =>
+      params?.search
+        ? new Promise<PaginatedSessions>(() => {})
+        : Promise.resolve(mockSessionsData),
+    );
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, refetchInterval: false } },
+    });
+    const user = userEvent.setup();
+    render(
+      <QueryClientProvider client={queryClient}>
+        <SessionsTable
+          onSelectSession={mockOnSelectSession}
+          selectedSessionId={null}
+        />
+      </QueryClientProvider>,
+    );
+
+    const searchInput = await screen.findByPlaceholderText('Search');
+    await user.click(searchInput);
+    await user.type(searchInput, 'se');
+
+    await waitFor(() =>
+      expect(brokerSessionsService.getSessions).toHaveBeenCalledWith(
+        expect.objectContaining({ search: 'se' }),
+      ),
+    );
+
+    expect(screen.getByPlaceholderText('Search')).toBe(searchInput);
+    expect(document.activeElement).toBe(searchInput);
+
+    await user.type(searchInput, 'ssion');
+
+    expect(searchInput).toHaveValue('session');
+    expect(document.activeElement).toBe(searchInput);
   });
 
   it('should call useListSessions with correct params', () => {
