@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Pod
+metadata: {name: uses-installer}
+spec:
+  serviceAccountName: ark-marketplace-installer
+  restartPolicy: Never
+  containers:
+  - name: c
+    image: curlimages/curl:8.11.1
+    command: ["true"]

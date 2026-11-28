@@ -1,0 +1,13 @@
+# Test chart for marketplace installs. It is not a real marketplace item.
+#
+# One chart covers every case the preview and the install flow must handle.
+# The `variant` value in values.yaml picks which extra objects are rendered,
+# and package.sh publishes one copy per variant, renamed to fixture-<variant>.
+apiVersion: v2
+name: mkt-fixture
+version: 0.1.0
+appVersion: "1.29"
+annotations:
+  # The dashboard links an installed release back to its catalogue item
+  # through this annotation. package.sh rewrites it with the chart name.
+  ark.mckinsey.com/marketplace-item-name: mkt-fixture

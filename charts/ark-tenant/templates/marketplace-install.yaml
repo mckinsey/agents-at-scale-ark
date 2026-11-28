@@ -1,0 +1,177 @@
+{{- $mi := .Values.marketplaceInstall | default dict }}
+{{- if $mi.enabled }}
+{{- if not (or $mi.assumeAdmissionPolicyApi (.Capabilities.APIVersions.Has "admissionregistration.k8s.io/v1/ValidatingAdmissionPolicy")) }}
+{{- fail "marketplaceInstall.enabled needs the admissionregistration.k8s.io/v1 ValidatingAdmissionPolicy API (Kubernetes 1.31+). For offline renders pass --api-versions admissionregistration.k8s.io/v1/ValidatingAdmissionPolicy or set marketplaceInstall.assumeAdmissionPolicyApi=true" }}
+{{- end }}
+{{- if eq (toString $mi.arkApiServiceAccount.namespace) .Release.Namespace }}
+{{- fail (printf "marketplaceInstall.arkApiServiceAccount must live outside the tenant namespace %q: tenant users can run pods as any service account of their namespace, and this one may impersonate the installer" .Release.Namespace) }}
+{{- end }}
+{{- if not (lookup "admissionregistration.k8s.io/v1" "ValidatingAdmissionPolicy" "" (include "ark-tenant.marketplaceInstall.policyName" .)) }}
+{{- $sa := include "ark-tenant.marketplaceInstaller.serviceAccount" . }}
+{{- $found := list }}
+{{- range $k := list (list "v1" "Pod" (list "spec")) (list "v1" "ReplicationController" (list "spec" "template" "spec")) (list "batch/v1" "Job" (list "spec" "template" "spec")) (list "batch/v1" "CronJob" (list "spec" "jobTemplate" "spec" "template" "spec")) (list "apps/v1" "Deployment" (list "spec" "template" "spec")) (list "apps/v1" "ReplicaSet" (list "spec" "template" "spec")) (list "apps/v1" "StatefulSet" (list "spec" "template" "spec")) (list "apps/v1" "DaemonSet" (list "spec" "template" "spec")) }}
+{{- range $obj := (lookup (index $k 0) (index $k 1) $.Release.Namespace "").items | default list }}
+{{- $spec := $obj }}
+{{- range $key := index $k 2 }}
+{{- $spec = get $spec $key | default dict }}
+{{- end }}
+{{- if or (eq (get $spec "serviceAccountName" | toString) $sa) (eq (get $spec "serviceAccount" | toString) $sa) }}
+{{- $found = append $found (printf "%s/%s" (index $k 1) $obj.metadata.name) }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- with $found }}
+{{- fail (printf "marketplaceInstall.enabled: these objects in namespace %q already use the service account %s and would run with its permissions: %s. Delete them before turning the flag on" $.Release.Namespace $sa (join ", " .)) }}
+{{- end }}
+{{- end }}
+{{ include "ark-tenant.marketplaceInstall.policy" (dict "root" . "suffix" "") }}
+---
+{{ include "ark-tenant.marketplaceInstall.policy" (dict "root" . "suffix" "-bootstrap" "policyAnnotations" (dict "helm.sh/hook" "pre-install,pre-upgrade" "helm.sh/hook-weight" "-10") "bindingAnnotations" (dict "helm.sh/hook" "pre-install,pre-upgrade" "helm.sh/hook-weight" "-9")) }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "ark-tenant.marketplaceInstaller.serviceAccount" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ark-tenant.labels" . | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "ark-tenant.fullname" . }}-marketplace-installer-admin
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ark-tenant.labels" . | nindent 4 }}
+subjects:
+- kind: ServiceAccount
+  name: {{ include "ark-tenant.marketplaceInstaller.serviceAccount" . }}
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: admin
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "ark-tenant.fullname" . }}-marketplace-installer-extra
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ark-tenant.labels" . | nindent 4 }}
+rules:
+- apiGroups: [ark.mckinsey.com]
+  resources: ["*"]
+  verbs: ["*"]
+- apiGroups: [""]
+  resources: [events]
+  verbs: [create, patch]
+{{- with $mi.extraRules }}
+{{ toYaml . }}
+{{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "ark-tenant.fullname" . }}-marketplace-installer-extra
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ark-tenant.labels" . | nindent 4 }}
+subjects:
+- kind: ServiceAccount
+  name: {{ include "ark-tenant.marketplaceInstaller.serviceAccount" . }}
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "ark-tenant.fullname" . }}-marketplace-installer-extra
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "ark-tenant.fullname" . }}-marketplace-impersonate
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ark-tenant.labels" . | nindent 4 }}
+rules:
+- apiGroups: [""]
+  resources: [serviceaccounts]
+  verbs: [impersonate]
+  resourceNames: [{{ include "ark-tenant.marketplaceInstaller.serviceAccount" . }}]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "ark-tenant.fullname" . }}-marketplace-impersonate
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ark-tenant.labels" . | nindent 4 }}
+subjects:
+- kind: ServiceAccount
+  name: {{ $mi.arkApiServiceAccount.name }}
+  namespace: {{ $mi.arkApiServiceAccount.namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "ark-tenant.fullname" . }}-marketplace-impersonate
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "ark-tenant.fullname" . }}-marketplace-lock
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ark-tenant.labels" . | nindent 4 }}
+rules:
+- apiGroups: [coordination.k8s.io]
+  resources: [leases]
+  verbs: [create]
+- apiGroups: [coordination.k8s.io]
+  resources: [leases]
+  verbs: [get, update, delete]
+  resourceNames: [{{ include "ark-tenant.marketplaceInstall.lockName" . }}]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "ark-tenant.fullname" . }}-marketplace-lock
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ark-tenant.labels" . | nindent 4 }}
+subjects:
+- kind: ServiceAccount
+  name: {{ $mi.arkApiServiceAccount.name }}
+  namespace: {{ $mi.arkApiServiceAccount.namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "ark-tenant.fullname" . }}-marketplace-lock
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "ark-tenant.fullname" . }}-marketplace-installer
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ark-tenant.labels" . | nindent 4 }}
+rules:
+- apiGroups: [ark.mckinsey.com]
+  resources: [marketplaceinstalls]
+  verbs: [create]
+{{- with $mi.installers }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "ark-tenant.fullname" $ }}-marketplace-installer
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "ark-tenant.labels" $ | nindent 4 }}
+subjects:
+{{- toYaml . | nindent 0 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "ark-tenant.fullname" $ }}-marketplace-installer
+{{- end }}
+{{- end }}

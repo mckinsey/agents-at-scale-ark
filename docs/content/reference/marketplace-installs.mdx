@@ -1,0 +1,169 @@
+---
+title: Marketplace Installs
+description: The ark-api endpoints that let the dashboard install marketplace items, and who may use them
+---
+
+# Marketplace Installs
+
+ark-api can install a marketplace item into the current namespace on behalf of the dashboard user. The install runs as a dedicated `ark-marketplace-installer` ServiceAccount, which exists only in namespaces where the platform team has enabled the feature through the `marketplaceInstall` values of the `ark-tenant` chart.
+
+The installer ServiceAccount is a namespace admin. Anyone allowed to start an install can make a chart grant them lasting permissions in the namespace, so treat the permission below as namespace admin.
+
+## Who may install
+
+Installing requires `create` on the `marketplaceinstalls` resource in the `ark.mckinsey.com` API group, in the target namespace. There is no `marketplaceinstalls` CRD: the name exists only for RBAC, and ark-api checks it with a SelfSubjectAccessReview made as the signed-in user.
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: marketplace-installer
+  namespace: team-a
+rules:
+  - apiGroups: ["ark.mckinsey.com"]
+    resources: ["marketplaceinstalls"]
+    verbs: ["create"]
+```
+
+Reading install state requires `list` on `jobs` or the `create` permission above. Install logs additionally require `get` on `pods/log`.
+
+Installs need a user identity:
+
+| Authentication | Behaviour |
+| --- | --- |
+| `AUTH_MODE=open` (or unset) | No user check. |
+| API key | Refused with `api-key-not-supported`. |
+| `sso` or `hybrid` with impersonation disabled | Refused with `impersonation-disabled`. |
+| `sso` or `hybrid` with impersonation enabled | SelfSubjectAccessReview as the user. Any error during the review counts as a deny. |
+
+## ark-api endpoints
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/v1/namespaces/{namespace}/marketplace-installs/capability` | Whether the current user can install in the namespace, and why not. |
+| `POST` | `/api/v1/namespaces/{namespace}/marketplace-installs/{item}/preview` | What installing an item would create, and whether anything blocks it. |
+
+### Capability
+
+The response is always HTTP 200:
+
+```json
+{"enabled": false, "reason": "namespace-not-enabled"}
+```
+
+`reason` is `null` when `enabled` is `true`. Otherwise it is the first of these that applies:
+
+| Reason | Meaning |
+| --- | --- |
+| `read-only` | ark-api runs with `READ_ONLY_MODE=true`. |
+| `api-key-not-supported` | The request was authenticated with an API key. |
+| `impersonation-disabled` | User impersonation is disabled on ark-api. |
+| `namespace-not-enabled` | The installer ServiceAccount is missing, ark-api cannot impersonate it, or it cannot create Jobs. |
+| `policy-missing` | Neither `ark-marketplace-installer-sa-<namespace>` nor its `-bootstrap` copy is a ValidatingAdmissionPolicy and binding pair that protects the installer ServiceAccount. A pair counts when the binding is in `Deny` mode, points at the policy of the same name, and has no resource rules, exclusions or object selector. The policy must have `failurePolicy: Fail` and no exclusions or object selector, and both namespace selectors must cover the namespace. |
+| `not-permitted` | The request has no user identity, or the user lacks `create` on `marketplaceinstalls`. |
+
+A request without a user identity gets `not-permitted` right after the API key and impersonation checks, before the namespace checks. In open mode, `read-only`, `namespace-not-enabled` and `policy-missing` still apply.
+
+The `policy-missing` check reads how the policy and binding are matched, not their `validations` or `matchConditions`. Creating or changing a ValidatingAdmissionPolicy needs cluster admin rights, so only a cluster admin can weaken it. When a pair does not count, ark-api logs the reason at info level.
+
+The namespace must be a valid Kubernetes namespace name. Any other value returns HTTP 422.
+
+The capability only tells the dashboard what to show. Every install endpoint repeats the user check.
+
+### Preview
+
+```json
+POST /api/v1/namespaces/team-a/marketplace-installs/phoenix/preview
+{"source": "official"}
+```
+
+`source` is the name of an entry in the namespace's `marketplace-sources` ConfigMap and `item` is the `name` of an item in that source's catalogue. The request never carries a chart reference: ark-api resolves it from the catalogue, so editing the catalogue is the only way to change what gets installed. Anyone who can edit the namespace's marketplace sources therefore decides what installers are offered, which is why the preview shows the source, the chart reference and the digest.
+
+An `item` or `source` that is not a valid name returns HTTP 422 with FastAPI's validation error body, before any check.
+
+A preview runs these steps and stops at the first failure:
+
+1. The user check above.
+2. The installer ServiceAccount and its admission policy must be in place, as for `namespace-not-enabled` and `policy-missing` in the capability.
+3. ark-api reads the source and its credential as the signed-in user, fetches the catalogue (always fresh, never from the items cache) and finds the item. In open mode it reads them with its own ServiceAccount, so previews only work in namespaces where that ServiceAccount can read the `marketplace-sources` ConfigMap and the sources' credential Secrets. Since the tenant chart refuses to enable installs in ark-api's own namespace, that takes extra RBAC in the tenant namespace.
+4. Installing is opt-in: the item must set `ark.installable: true` (a boolean), and an `ark.chartPath` that starts with an allowed registry prefix (see Configuration), followed by a single chart name. Items without `ark.installable: true` stay on the copy-the-command path. The release name is `ark.helmReleaseName`, or the item name when it is missing, and must be a valid Helm release name. `installArgs` and `ark.namespace` are ignored.
+5. ark-api runs `helm pull` for the latest chart version, which pins the digest, then `helm template --include-crds`. The chart must be downloadable without credentials.
+6. Every rendered object, hooks included, gets one verdict.
+
+The whole preview must finish within `MARKETPLACE_INSTALL_PREVIEW_TIMEOUT_SECONDS` (25 by default), otherwise it fails with `preview-timeout` and helm is stopped. ark-api runs at most two helm processes at a time.
+
+Each object gets the first verdict that applies. Every verdict except `free` blocks the install.
+
+| Verdict | Meaning |
+| --- | --- |
+| `crd` | The object is a CustomResourceDefinition. |
+| `cluster-scoped` | The object is cluster-scoped. Installs are limited to the namespace. |
+| `namespace-mismatch` | The object names a namespace other than the target. |
+| `skip-webhook-label` | The object carries `ark.mckinsey.com/skip-webhook-validation`. |
+| `rbac-escalation` | A Role with rules on `rbac.authorization.k8s.io`, a `*` group, verb or resource, a wildcard subresource (`*/exec`, `pods/*`), any access to Secrets, `pods/exec`, `pods/attach`, `pods/ephemeralcontainers`, `serviceaccounts/token`, `impersonate`, `escalate` or `bind`; a RoleBinding to anything but a Role rendered by the same chart, or to a subject outside the namespace, a Group or a `system:` user; or any use of the `ark-marketplace-installer` ServiceAccount. |
+| `reserved-secret` | A Secret with a name reserved for personal Secrets (`u-<16 hex>-…`) or an `ark.mckinsey.com/scope` label other than `shared`. |
+| `personal-secret-ref` | The object references a Secret with a reserved name, or an existing Secret labelled as personal, through `secretKeyRef`, any field ending in `secretRef` (such as `envFrom`, `tokenSecretRef` or a CSI `nodePublishSecretRef`), `secretName`, a projected volume or `imagePullSecrets`. |
+| `unverifiable` | The cluster has no single resource for the kind (not served, ambiguous, or a `List`), the object has no fixed name, the API server could not be reached, the installer ServiceAccount cannot read it, a referenced Secret could not be checked, or the API server rejected the dry run for a reason other than Pod Security. |
+| `conflict-release` | The object already exists and belongs to a Helm release, named in `ownedByRelease`. An item that is already installed shows its own release here. |
+| `conflict-unmanaged` | The object already exists and no Helm release owns it. |
+| `psa-violation` | A server-side dry run of the object reports a Pod Security warning or rejection for the namespace. |
+| `free` | The object does not exist yet and passed every check. |
+
+The existence checks and dry runs run as the installer ServiceAccount. Objects in the `ark.mckinsey.com` group are never dry run, because Ark's API server stores objects even when a dry run is requested. Other aggregated API servers are dry run like any other kind, so a chart should not include kinds from an aggregated API that ignores `dryRun`.
+
+```json
+{
+  "source": "official",
+  "itemName": "phoenix",
+  "chartName": "phoenix",
+  "chartRef": "oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts/phoenix",
+  "chartVersion": "0.1.12",
+  "digest": "sha256:…",
+  "releaseName": "phoenix",
+  "namespace": "team-a",
+  "blocked": false,
+  "expiresAt": "2026-11-19T12:10:00Z",
+  "resources": [
+    {"apiVersion": "apps/v1", "kind": "Deployment", "name": "phoenix", "namespace": null, "state": "free", "ownedByRelease": null, "hook": false, "message": null}
+  ]
+}
+```
+
+ark-api keeps the result in memory until `expiresAt`, keyed by namespace, source, item and digest. It stores only the identity of each object and the outcome, never the rendered manifest. The cache lives in the ark-api pod, so a restart clears it.
+
+## Configuration
+
+These ark-api environment variables are set in `services/ark-api/chart/values.yaml`.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `MARKETPLACE_INSTALL_REGISTRY_ALLOWLIST` | `oci://ghcr.io/mckinsey/agents-at-scale-marketplace/charts/` | Comma-separated chart registry prefixes. Each must start with `oci://` and end with `/`; entries that don't are ignored with a warning. An empty list allows nothing. |
+| `MARKETPLACE_INSTALL_PLAIN_HTTP_REGISTRIES` | empty | Comma-separated `host:port` registries reached over plain HTTP, for test registries. |
+| `MARKETPLACE_INSTALL_PREVIEW_TIMEOUT_SECONDS` | `25` | Limit for a whole preview. |
+| `MARKETPLACE_INSTALL_PREVIEW_CACHE_SECONDS` | `600` | How long a preview stays valid. |
+| `MARKETPLACE_INSTALL_PREVIEW_CACHE_MAX_ENTRIES` | `256` | Previews kept in memory; the oldest goes first. |
+
+ark-api needs network access to the allowed registries. The chart download is capped at 10 MiB and the rendered output at 2 MiB, 300 objects and 64 levels of nesting; the size of the download is checked once it has finished, so the timeout is what bounds a slow or oversized download.
+
+## Errors
+
+Install endpoints return errors in this shape:
+
+```json
+{"detail": {"code": "not-permitted", "message": "You are not permitted to install marketplace items in this namespace"}}
+```
+
+The user check returns HTTP 403 with `code` set to `api-key-not-supported`, `impersonation-disabled` or `not-permitted`. The preview can also return:
+
+| Status | Code | Meaning |
+| --- | --- | --- |
+| 404 | `source-not-found` | The namespace has no marketplace sources, or none with that name. |
+| 404 | `item-not-found` | The source's catalogue has no item with that name. |
+| 409 | `namespace-not-enabled` | Installs are not enabled in the namespace. |
+| 409 | `policy-missing` | The admission policy that protects the installer ServiceAccount is missing. |
+| 422 | `not-installable` | The item does not set `ark.installable: true`, has no chart, or has an invalid release name. |
+| 422 | `registry-not-allowed` | The item's chart is not on an allowed registry. |
+| 422 | `render-failed` | `helm template` failed or its output exceeded the limits. |
+| 502 | `catalog-unavailable` | The marketplace sources or the source's credential cannot be read, or the catalogue could not be fetched. |
+| 502 | `chart-unavailable` | `helm pull` failed. The message names the registry. |
+| 504 | `preview-timeout` | The preview did not finish in time. |

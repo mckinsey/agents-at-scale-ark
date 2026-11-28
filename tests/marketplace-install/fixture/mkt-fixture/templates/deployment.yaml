@@ -1,0 +1,53 @@
+{{/*
+The workload of every variant. A few variants change it:
+- slow: readiness probe on a path nginx does not serve, so the pod never
+  turns ready;
+- nosc: no securityContext, which violates restricted Pod Security;
+- rbac-installer-sa: runs as the installer ServiceAccount, which would make the
+  workload admin of the namespace;
+- personal-ref: mounts a personal Secret as a volume, loads one with envFrom and
+  reads a key with secretKeyRef, the three ways a pod can reach a Secret.
+*/}}
+{{- include "fx.checkVariant" . }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}
+  labels: {{- include "fx.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app.kubernetes.io/instance: {{ .Release.Name }}}
+  template:
+    metadata:
+      labels: {{- include "fx.labels" . | nindent 8 }}
+    spec:
+      {{- if eq .Values.variant "rbac-installer-sa" }}
+      serviceAccountName: ark-marketplace-installer
+      {{- end }}
+      containers:
+      - name: web
+        image: nginxinc/nginx-unprivileged:1.29-alpine
+        imagePullPolicy: IfNotPresent
+        ports: [{containerPort: 8080}]
+        readinessProbe:
+          httpGet: {path: {{ if eq .Values.variant "slow" }}/never-ready{{ else }}/{{ end }}, port: 8080}
+          periodSeconds: 2
+        {{- if eq .Values.variant "personal-ref" }}
+        env:
+        - name: API_KEY
+          valueFrom:
+            secretKeyRef: {name: {{ include "fx.personalSecret" . }}, key: token}
+        envFrom:
+        - secretRef: {name: {{ include "fx.personalSecret" . }}}
+        volumeMounts:
+        - {name: personal, mountPath: /var/run/personal, readOnly: true}
+        {{- end }}
+        {{- if ne .Values.variant "nosc" }}
+        {{- include "fx.sc" . | nindent 8 }}
+        {{- end }}
+      {{- if eq .Values.variant "personal-ref" }}
+      volumes:
+      - name: personal
+        secret: {secretName: {{ include "fx.personalSecret" . }}}
+      {{- end }}
