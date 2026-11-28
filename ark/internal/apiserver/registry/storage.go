@@ -21,6 +21,7 @@ import (
 	genericrequest "k8s.io/apiserver/pkg/endpoints/request"
 	"k8s.io/apiserver/pkg/registry/rest"
 	"k8s.io/apiserver/pkg/storage/names"
+	"k8s.io/apiserver/pkg/util/dryrun"
 
 	arkv1alpha1 "mckinsey.com/ark/api/v1alpha1"
 	"mckinsey.com/ark/internal/apiserver/metrics"
@@ -192,6 +193,7 @@ func PrepareForCreate(ctx context.Context, obj runtime.Object) error {
 
 func (s *GenericStorage) Create(ctx context.Context, obj runtime.Object, createValidation rest.ValidateObjectFunc, options *metav1.CreateOptions) (runtime.Object, error) {
 	start := time.Now()
+	dryRun := options != nil && dryrun.IsDryRun(options.DryRun)
 
 	// Mirrors upstream registry.Store.Create, which runs rest.BeforeCreate before
 	// createValidation so admission sees a fully formed object.
@@ -224,12 +226,18 @@ func (s *GenericStorage) Create(ctx context.Context, obj runtime.Object, createV
 	// Handle generateName: if name is empty but generateName is set, generate a unique name
 	// Retry on name collisions up to maxGenerateNameAttempts
 	if accessor.GetName() == "" && accessor.GetGenerateName() != "" {
-		return s.createWithGeneratedName(ctx, obj, accessor, admit, start)
+		return s.createWithGeneratedName(ctx, obj, accessor, admit, dryRun, start)
 	}
 
 	if err := admit(); err != nil {
 		metrics.RecordStorageLatency("create", s.config.Kind, start)
 		return nil, err
+	}
+
+	if dryRun {
+		metrics.RecordStorageOperation("create", s.config.Kind, "dry_run")
+		metrics.RecordStorageLatency("create", s.config.Kind, start)
+		return obj, nil
 	}
 
 	sctx, cancel := storageContext(ctx)
@@ -252,13 +260,19 @@ func (s *GenericStorage) Create(ctx context.Context, obj runtime.Object, createV
 
 // createWithGeneratedName resolves a generateName request. Each attempt picks a fresh name and
 // re-runs admission for it, since policy may key on the name; only a collision is retried.
-func (s *GenericStorage) createWithGeneratedName(ctx context.Context, obj runtime.Object, accessor metav1.Object, admit func() error, start time.Time) (runtime.Object, error) {
+func (s *GenericStorage) createWithGeneratedName(ctx context.Context, obj runtime.Object, accessor metav1.Object, admit func() error, dryRun bool, start time.Time) (runtime.Object, error) {
 	for attempt := 0; attempt < maxGenerateNameAttempts; attempt++ {
 		accessor.SetName(names.SimpleNameGenerator.GenerateName(accessor.GetGenerateName()))
 
 		if err := admit(); err != nil {
 			metrics.RecordStorageLatency("create", s.config.Kind, start)
 			return nil, err
+		}
+
+		if dryRun {
+			metrics.RecordStorageOperation("create", s.config.Kind, "dry_run")
+			metrics.RecordStorageLatency("create", s.config.Kind, start)
+			return obj, nil
 		}
 
 		sctx, cancel := storageContext(ctx)
@@ -287,6 +301,12 @@ func (s *GenericStorage) Update(ctx context.Context, name string, objInfo rest.U
 	start := time.Now()
 	namespace := s.config.namespace(ctx)
 
+	var dryRunStrategy []string
+	if options != nil {
+		dryRunStrategy = options.DryRun
+	}
+	dryRun := dryrun.IsDryRun(dryRunStrategy)
+
 	sctx, cancel := storageContext(ctx)
 	defer cancel()
 	existing, err := s.backend.Get(sctx, s.config.Kind, namespace, name)
@@ -296,7 +316,9 @@ func (s *GenericStorage) Update(ctx context.Context, name string, objInfo rest.U
 			if err != nil {
 				return nil, false, err
 			}
-			created, err := s.Create(ctx, obj, createValidation, &metav1.CreateOptions{})
+			// This update is an upsert: propagate the dry-run strategy so a
+			// dry-run request does not persist via the create path.
+			created, err := s.Create(ctx, obj, createValidation, &metav1.CreateOptions{DryRun: dryRunStrategy})
 			return created, true, err
 		}
 		metrics.RecordStorageOperation("update", s.config.Kind, "not_found")
@@ -342,6 +364,12 @@ func (s *GenericStorage) Update(ctx context.Context, name string, objInfo rest.U
 		}
 	}
 
+	if dryRun {
+		metrics.RecordStorageOperation("update", s.config.Kind, "dry_run")
+		metrics.RecordStorageLatency("update", s.config.Kind, start)
+		return updated, false, nil
+	}
+
 	if err := s.backend.Update(sctx, s.config.Kind, namespace, name, updated); err != nil {
 		return nil, false, handleUpdateError(err, s.config, "update", name, start)
 	}
@@ -366,6 +394,7 @@ func (s *GenericStorage) Update(ctx context.Context, name string, objInfo rest.U
 func (s *GenericStorage) Delete(ctx context.Context, name string, deleteValidation rest.ValidateObjectFunc, options *metav1.DeleteOptions) (runtime.Object, bool, error) {
 	start := time.Now()
 	namespace := s.config.namespace(ctx)
+	dryRun := options != nil && dryrun.IsDryRun(options.DryRun)
 
 	sctx, cancel := storageContext(ctx)
 	defer cancel()
@@ -399,6 +428,22 @@ func (s *GenericStorage) Delete(ctx context.Context, name string, deleteValidati
 			return nil, false, apierrors.NewConflict(gr, name,
 				fmt.Errorf("the ResourceVersion in the precondition (%v) does not match the ResourceVersion in record (%v)", *pc.ResourceVersion, accessor.GetResourceVersion()))
 		}
+	}
+
+	if dryRun {
+		if len(accessor.GetFinalizers()) > 0 {
+			marked := existing.DeepCopyObject()
+			if markedAccessor, mErr := meta.Accessor(marked); mErr == nil {
+				now := metav1.NewTime(time.Now())
+				markedAccessor.SetDeletionTimestamp(&now)
+			}
+			metrics.RecordStorageOperation("delete", s.config.Kind, "dry_run")
+			metrics.RecordStorageLatency("delete", s.config.Kind, start)
+			return marked, false, nil
+		}
+		metrics.RecordStorageOperation("delete", s.config.Kind, "dry_run")
+		metrics.RecordStorageLatency("delete", s.config.Kind, start)
+		return existing, true, nil
 	}
 
 	// Graceful deletion: an object with finalizers is not removed yet. Mark it by

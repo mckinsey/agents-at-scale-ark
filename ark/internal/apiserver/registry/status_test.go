@@ -233,6 +233,35 @@ func TestCopyStatusOnly(t *testing.T) {
 	}
 }
 
+func TestStatusStorage_Update_DryRunDoesNotPersist(t *testing.T) {
+	t.Parallel()
+	storage, backend := newTestStatusStorage()
+	ctx := contextWithNamespace(testNS())
+
+	agent := &arkv1alpha1.Agent{}
+	agent.Name = testAgentName
+	agent.Namespace = testNS()
+	backend.objects["Agent/default/test-agent"] = agent
+
+	updatedAgent := agent.DeepCopy()
+	updatedAgent.Status.Conditions = append(updatedAgent.Status.Conditions, metav1.Condition{
+		Type:   "Ready",
+		Status: metav1.ConditionTrue,
+	})
+
+	updater := &simpleUpdatedObjectInfo{obj: updatedAgent}
+	result, _, err := storage.Update(ctx, testAgentName, updater, nil, nil, false, &metav1.UpdateOptions{DryRun: []string{metav1.DryRunAll}})
+	if err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if backend.updateStatusCalls != 0 {
+		t.Errorf("expected UpdateStatus not to be called on dry-run, got %d calls", backend.updateStatusCalls)
+	}
+}
+
 func TestCopyStatusOnly_ClearsFieldsTheUpdateOmits(t *testing.T) {
 	t.Parallel()
 	src := &arkv1alpha1.MCPServer{}

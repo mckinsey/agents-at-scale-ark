@@ -1350,3 +1350,185 @@ func TestGenericStorage_Create_GenerateNameStopsWhenAdmissionRejects(t *testing.
 		t.Errorf("backend creates = %d, want 0 (nothing may be persisted after a rejection)", backend.creates)
 	}
 }
+
+func TestGenericStorage_Create_DryRunDoesNotPersist(t *testing.T) {
+	t.Parallel()
+	gs, backend := newTestStorage()
+	ctx := contextWithNamespace(testNS())
+
+	agent := &arkv1alpha1.Agent{}
+	agent.Name = testAgentName
+
+	result, err := gs.Create(ctx, agent, nil, &metav1.CreateOptions{DryRun: []string{metav1.DryRunAll}})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if len(backend.objects) != 0 {
+		t.Errorf("expected nothing persisted on dry-run create, backend has %d objects", len(backend.objects))
+	}
+}
+
+func TestGenericStorage_Create_DryRunStillValidates(t *testing.T) {
+	t.Parallel()
+	gs, backend := newTestStorage()
+	ctx := contextWithNamespace(testNS())
+
+	agent := &arkv1alpha1.Agent{}
+	agent.Name = testAgentName
+
+	validationErr := errors.New("rejected")
+	validator := func(ctx context.Context, obj runtime.Object) error {
+		return validationErr
+	}
+
+	_, err := gs.Create(ctx, agent, validator, &metav1.CreateOptions{DryRun: []string{metav1.DryRunAll}})
+	if !errors.Is(err, validationErr) {
+		t.Errorf("expected validation error on dry-run, got %v", err)
+	}
+	if len(backend.objects) != 0 {
+		t.Errorf("expected nothing persisted, backend has %d objects", len(backend.objects))
+	}
+}
+
+func TestGenericStorage_Create_DryRunGenerateNameDoesNotPersist(t *testing.T) {
+	t.Parallel()
+	gs, backend := newTestStorage()
+	ctx := contextWithNamespace(testNS())
+
+	agent := &arkv1alpha1.Agent{}
+	agent.GenerateName = "gen-"
+
+	result, err := gs.Create(ctx, agent, nil, &metav1.CreateOptions{DryRun: []string{metav1.DryRunAll}})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	resultAgent, ok := result.(*arkv1alpha1.Agent)
+	if !ok {
+		t.Fatalf("expected *Agent, got %T", result)
+	}
+	if resultAgent.Name == "" {
+		t.Error("expected a generated name on the returned object")
+	}
+	if len(backend.objects) != 0 {
+		t.Errorf("expected nothing persisted on dry-run generateName create, backend has %d objects", len(backend.objects))
+	}
+}
+
+func TestGenericStorage_Update_DryRunDoesNotPersist(t *testing.T) {
+	t.Parallel()
+	gs, backend := newTestStorage()
+	ctx := contextWithNamespace(testNS())
+
+	original := &arkv1alpha1.Agent{}
+	original.Name = testAgentName
+	original.Namespace = testNS()
+	original.ResourceVersion = "1"
+	original.Spec.Prompt = "original"
+	backend.objects["Agent/default/test-agent"] = original
+
+	changed := &arkv1alpha1.Agent{}
+	changed.Name = testAgentName
+	changed.Namespace = testNS()
+	changed.ResourceVersion = "1"
+	changed.Spec.Prompt = "changed"
+
+	updater := &simpleUpdatedObjectInfo{obj: changed}
+	result, _, err := gs.Update(ctx, testAgentName, updater, nil, nil, false, &metav1.UpdateOptions{DryRun: []string{metav1.DryRunAll}})
+	if err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	resultAgent, ok := result.(*arkv1alpha1.Agent)
+	if !ok {
+		t.Fatalf("expected *Agent, got %T", result)
+	}
+	if resultAgent.Spec.Prompt != "changed" {
+		t.Errorf("expected returned object to reflect the dry-run change, got prompt %q", resultAgent.Spec.Prompt)
+	}
+	stored := backend.objects["Agent/default/test-agent"].(*arkv1alpha1.Agent)
+	if stored.Spec.Prompt != "original" {
+		t.Errorf("expected stored object unchanged on dry-run, got prompt %q", stored.Spec.Prompt)
+	}
+}
+
+func TestGenericStorage_Delete_DryRunDoesNotPersist(t *testing.T) {
+	t.Parallel()
+	gs, backend := newTestStorage()
+	ctx := contextWithNamespace(testNS())
+
+	agent := &arkv1alpha1.Agent{}
+	agent.Name = testAgentName
+	agent.Namespace = testNS()
+	backend.objects["Agent/default/test-agent"] = agent
+
+	result, deleted, err := gs.Delete(ctx, testAgentName, nil, &metav1.DeleteOptions{DryRun: []string{metav1.DryRunAll}})
+	if err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	if !deleted {
+		t.Error("expected deleted to be true for a dry-run delete of an object without finalizers")
+	}
+	if result == nil {
+		t.Error("expected non-nil result")
+	}
+	if _, ok := backend.objects["Agent/default/test-agent"]; !ok {
+		t.Error("expected object to remain in backend after dry-run delete")
+	}
+}
+
+func TestGenericStorage_Delete_DryRunStillValidates(t *testing.T) {
+	t.Parallel()
+	gs, backend := newTestStorage()
+	ctx := contextWithNamespace(testNS())
+
+	agent := &arkv1alpha1.Agent{}
+	agent.Name = testAgentName
+	agent.Namespace = testNS()
+	backend.objects["Agent/default/test-agent"] = agent
+
+	validationErr := errors.New("cannot delete")
+	validator := func(ctx context.Context, obj runtime.Object) error {
+		return validationErr
+	}
+
+	_, _, err := gs.Delete(ctx, testAgentName, validator, &metav1.DeleteOptions{DryRun: []string{metav1.DryRunAll}})
+	if err != validationErr {
+		t.Errorf("expected validation error on dry-run delete, got %v", err)
+	}
+	if _, ok := backend.objects["Agent/default/test-agent"]; !ok {
+		t.Error("expected object to remain in backend")
+	}
+}
+
+func TestGenericStorage_Delete_DryRunWithFinalizersDoesNotPersist(t *testing.T) {
+	t.Parallel()
+	gs, backend := newTestStorage()
+	ctx := contextWithNamespace(testNS())
+
+	agent := &arkv1alpha1.Agent{}
+	agent.Name = testAgentName
+	agent.Namespace = testNS()
+	agent.Finalizers = []string{"ark.mckinsey.com/finalizer"}
+	backend.objects["Agent/default/test-agent"] = agent
+
+	result, deleted, err := gs.Delete(ctx, testAgentName, nil, &metav1.DeleteOptions{DryRun: []string{metav1.DryRunAll}})
+	if err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	if deleted {
+		t.Error("expected deleted to be false while finalizers are present")
+	}
+	resultAgent, ok := result.(*arkv1alpha1.Agent)
+	if !ok {
+		t.Fatalf("expected *Agent, got %T", result)
+	}
+	if resultAgent.DeletionTimestamp == nil {
+		t.Error("expected deletionTimestamp on the returned object")
+	}
+	stored := backend.objects["Agent/default/test-agent"].(*arkv1alpha1.Agent)
+	if stored.DeletionTimestamp != nil {
+		t.Error("expected stored object to carry no deletionTimestamp after dry-run delete")
+	}
+}
