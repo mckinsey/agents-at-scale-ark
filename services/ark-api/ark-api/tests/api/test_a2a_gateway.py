@@ -1,12 +1,28 @@
 """Tests for the A2A gateway agent-listing route."""
+import asyncio
 import os
 import unittest
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import uuid4
 
-from a2a.types import AgentCard, AgentSkill
+from a2a.server.context import ServerCallContext
+from a2a.server.request_handlers import DefaultRequestHandler
+from a2a.server.tasks import InMemoryTaskStore
+from a2a.types import (
+    AgentCapabilities,
+    AgentCard,
+    AgentSkill,
+    GetTaskRequest,
+    Message,
+    Part,
+    Role,
+    SendMessageRequest,
+    TaskState,
+)
 from ark_api.api.v1 import a2a_gateway
 from ark_api.api.v1.a2a_gateway import get_a2a_manager
+from ark_api.api.v1.a2agw.execution import ARKAgentExecutor
 from ark_api.main import app
 from fastapi.testclient import TestClient
 
@@ -145,6 +161,49 @@ class TestA2AManagerSingleton(unittest.TestCase):
 
         self.assertIs(first, second)
         manager_class.assert_called_once_with()
+
+
+class TestMessageSend(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        query_patcher = patch(
+            "ark_api.api.v1.a2agw.execution.post_query_and_wait",
+            AsyncMock(return_value="pong"),
+        )
+        query_patcher.start()
+        self.addCleanup(query_patcher.stop)
+        card = AgentCard(
+            name="agent-x", description="x", version="1",
+            capabilities=AgentCapabilities(streaming=True),
+        )
+        self.handler = DefaultRequestHandler(
+            agent_executor=ARKAgentExecutor("agent-x", "default"),
+            task_store=InMemoryTaskStore(),
+            agent_card=card,
+        )
+        self.context = ServerCallContext()
+
+    def request(self, return_immediately):
+        message = Message(role=Role.ROLE_USER, parts=[Part(text="ping")], message_id=str(uuid4()))
+        request = SendMessageRequest(message=message)
+        request.configuration.return_immediately = return_immediately
+        return request
+
+    async def test_blocking_send_returns_completed_task_with_result(self):
+        task = await self.handler.on_message_send(self.request(False), self.context)
+
+        self.assertEqual(task.status.state, TaskState.TASK_STATE_COMPLETED)
+        self.assertEqual(task.status.message.parts[0].text, "pong")
+
+    async def test_non_blocking_send_returns_task_that_completes(self):
+        task = await self.handler.on_message_send(self.request(True), self.context)
+
+        for _ in range(50):
+            stored = await self.handler.on_get_task(GetTaskRequest(id=task.id), self.context)
+            if stored.status.state == TaskState.TASK_STATE_COMPLETED:
+                break
+            await asyncio.sleep(0.01)
+        self.assertEqual(stored.status.state, TaskState.TASK_STATE_COMPLETED)
+        self.assertEqual(stored.status.message.parts[0].text, "pong")
 
 
 if __name__ == "__main__":
