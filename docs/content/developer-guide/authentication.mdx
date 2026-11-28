@@ -402,7 +402,7 @@ API keys use HTTP Basic Authentication where:
 GET /v1/api-keys
 ```
 
-The list response includes `last_used_at`. Ark updates this timestamp after successful API-key authentication, so operators can monitor for unexpected use of issued keys.
+The list response includes `last_used_at`. Ark updates this timestamp after successful API-key authentication, so operators can monitor for unexpected use of issued keys. To avoid a read and a patch on every authenticated request, writes are coalesced per key: the timestamp is only persisted when more than `API_KEY_LAST_USED_INTERVAL_SECONDS` (default 300) has passed since the last recorded write, so `last_used_at` has that resolution. Set the interval to `0` to persist on every authentication.
 
 When impersonation is enabled, listing and revoking API keys is scoped to the keys created by the requesting user.
 

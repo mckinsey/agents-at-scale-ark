@@ -41,6 +41,7 @@ BCRYPT_MAX_INPUT_BYTES = 72
 
 DEFAULT_API_KEY_RETENTION_SECONDS = 90 * 24 * 60 * 60
 DEFAULT_API_KEY_REAPER_INTERVAL_SECONDS = 60 * 60
+DEFAULT_API_KEY_LAST_USED_INTERVAL_SECONDS = 5 * 60
 
 
 def _is_active(data: Dict[str, str]) -> bool:
@@ -66,7 +67,13 @@ def _parse_utc_timestamp(value: Any) -> Optional[datetime]:
 
 class APIKeyService:
     """Service for managing API keys stored as Kubernetes secrets."""
-    
+
+    _last_used_cache: Dict[Tuple[str, str], datetime] = {}
+
+    @classmethod
+    def _reset_last_used_cache(cls) -> None:
+        cls._last_used_cache.clear()
+
     def __init__(self):
         """Initialize API key service.
         
@@ -470,13 +477,32 @@ class APIKeyService:
     
     async def _update_last_used(self, secret_name: str) -> None:
         """Update the last used timestamp for an API key.
-        
+
+        Writes are coalesced per key: a successful authentication only patches
+        the Secret when more than API_KEY_LAST_USED_INTERVAL_SECONDS has passed
+        since the last recorded write, so sustained request volume no longer
+        drives one read and one patch per request. Set the interval to 0 to
+        patch on every authentication.
+
         Args:
             secret_name: The Kubernetes secret name
         """
+        now = datetime.now(timezone.utc)
+        cache_key = (self.namespace, secret_name)
         try:
-            now = datetime.now(timezone.utc)
-            
+            interval = _int_env(
+                "API_KEY_LAST_USED_INTERVAL_SECONDS",
+                DEFAULT_API_KEY_LAST_USED_INTERVAL_SECONDS,
+            )
+            if interval < 0:
+                raise ValueError("API_KEY_LAST_USED_INTERVAL_SECONDS must be 0 or greater")
+
+            if interval > 0:
+                last_written = self._last_used_cache.get(cache_key)
+                if last_written is not None and now - last_written < timedelta(seconds=interval):
+                    return
+                self._last_used_cache[cache_key] = now
+
             async with create_api_client() as api:
                 v1 = client.CoreV1Api(api)
                 
@@ -513,10 +539,12 @@ class APIKeyService:
                     namespace=self.namespace,
                     body=secret
                 )
-                
+
         except Exception as e:
+            if self._last_used_cache.get(cache_key) == now:
+                del self._last_used_cache[cache_key]
             logger.error(f"Error updating last used timestamp for {secret_name}: {e}")
-    
+
     async def delete_api_key(
         self, public_key: str, created_by: Optional[str] = None
     ) -> bool:

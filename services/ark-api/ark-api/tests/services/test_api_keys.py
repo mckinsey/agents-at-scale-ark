@@ -16,6 +16,7 @@ from ark_api.services.api_keys import (
     BCRYPT_MAX_INPUT_BYTES,
     DEFAULT_API_KEY_RETENTION_SECONDS,
     DEFAULT_API_KEY_REAPER_INTERVAL_SECONDS,
+    DEFAULT_API_KEY_LAST_USED_INTERVAL_SECONDS,
     run_api_key_reaper,
     start_api_key_reaper,
 )
@@ -125,8 +126,9 @@ class TestAPIKeyServiceIntegration(unittest.IsolatedAsyncioTestCase):
     def setUp(self, mock_get_context):
         """Set up test fixtures."""
         mock_get_context.return_value = {"namespace": "test-namespace", "cluster": "test"}
+        APIKeyService._reset_last_used_cache()
         self.service = APIKeyService()
-    
+
     @patch('ark_api.services.api_keys.create_api_client')
     @patch('ark_api.services.api_keys.client.CoreV1Api')
     async def test_create_api_key(self, mock_v1_api, mock_api_client):
@@ -481,6 +483,7 @@ class TestAPIKeyOwnershipScoping(unittest.IsolatedAsyncioTestCase):
     @patch('ark_api.services.api_keys.get_context')
     def setUp(self, mock_get_context):
         mock_get_context.return_value = {"namespace": "test-namespace", "cluster": "test"}
+        APIKeyService._reset_last_used_cache()
         self.service = APIKeyService()
 
     @patch('ark_api.services.api_keys.create_api_client')
@@ -710,6 +713,7 @@ class TestAPIKeyRetention(unittest.IsolatedAsyncioTestCase):
     @patch('ark_api.services.api_keys.get_context')
     def setUp(self, mock_get_context):
         mock_get_context.return_value = {"namespace": "test-namespace", "cluster": "test"}
+        APIKeyService._reset_last_used_cache()
         self.service = APIKeyService()
         self.now = datetime.now(timezone.utc)
 
@@ -997,6 +1001,7 @@ class TestAPIKeyRevocationAndVerification(unittest.IsolatedAsyncioTestCase):
     @patch('ark_api.services.api_keys.get_context')
     def setUp(self, mock_get_context):
         mock_get_context.return_value = {"namespace": "test-namespace", "cluster": "test"}
+        APIKeyService._reset_last_used_cache()
         self.service = APIKeyService()
         self.now = datetime.now(timezone.utc)
 
@@ -1075,6 +1080,88 @@ class TestAPIKeyRevocationAndVerification(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(result)
         mock_checkpw.assert_not_called()
         mock_logger.error.assert_not_called()
+
+
+class TestAPIKeyLastUsedCoalescing(unittest.IsolatedAsyncioTestCase):
+    """Writes recording last_used_at are coalesced per key over an interval."""
+
+    @patch('ark_api.services.api_keys.get_context')
+    def setUp(self, mock_get_context):
+        mock_get_context.return_value = {"namespace": "test-namespace", "cluster": "test"}
+        APIKeyService._reset_last_used_cache()
+        self.service = APIKeyService()
+
+        client_patch = patch('ark_api.services.api_keys.create_api_client')
+        v1_patch = patch('ark_api.services.api_keys.client.CoreV1Api')
+        mock_api_client = client_patch.start()
+        mock_v1_api = v1_patch.start()
+        self.addCleanup(client_patch.stop)
+        self.addCleanup(v1_patch.stop)
+        mock_api_client.return_value.__aenter__.return_value = AsyncMock()
+        self.v1 = mock_v1_api.return_value
+        self.v1.read_namespaced_secret = AsyncMock(return_value=_api_key_secret("test"))
+        self.v1.patch_namespaced_secret = AsyncMock(return_value=_api_key_secret("test"))
+
+    def _cache_key(self):
+        return (self.service.namespace, "api-key-test")
+
+    async def test_timestamp_is_still_recorded(self):
+        await self.service._update_last_used("api-key-test")
+
+        self.v1.patch_namespaced_secret.assert_awaited_once()
+        patched = self.v1.patch_namespaced_secret.call_args.kwargs["body"]
+        annotation = json.loads(patched.metadata.annotations[API_KEY_ANNOTATION])
+        self.assertIsNotNone(parse_iso_timestamp(annotation["lastUsedAt"]))
+
+    async def test_repeated_updates_within_interval_collapse_to_single_write(self):
+        await self.service._update_last_used("api-key-test")
+        await self.service._update_last_used("api-key-test")
+        await self.service._update_last_used("api-key-test")
+
+        self.v1.patch_namespaced_secret.assert_awaited_once()
+
+    async def test_update_after_interval_writes_again(self):
+        await self.service._update_last_used("api-key-test")
+
+        APIKeyService._last_used_cache[self._cache_key()] = (
+            datetime.now(timezone.utc) - timedelta(seconds=DEFAULT_API_KEY_LAST_USED_INTERVAL_SECONDS + 1)
+        )
+        await self.service._update_last_used("api-key-test")
+
+        self.assertEqual(self.v1.patch_namespaced_secret.await_count, 2)
+
+    async def test_interval_zero_writes_every_time(self):
+        with patch.dict('os.environ', {"API_KEY_LAST_USED_INTERVAL_SECONDS": "0"}):
+            await self.service._update_last_used("api-key-test")
+            await self.service._update_last_used("api-key-test")
+
+        self.assertEqual(self.v1.patch_namespaced_secret.await_count, 2)
+
+    async def test_concurrent_updates_collapse_to_single_write(self):
+        await asyncio.gather(*(self.service._update_last_used("api-key-test") for _ in range(5)))
+
+        self.v1.patch_namespaced_secret.assert_awaited_once()
+
+    async def test_failed_write_rolls_back_reservation(self):
+        self.v1.patch_namespaced_secret = AsyncMock(side_effect=RuntimeError("boom"))
+        await self.service._update_last_used("api-key-test")
+        self.assertNotIn(self._cache_key(), APIKeyService._last_used_cache)
+
+        self.v1.patch_namespaced_secret = AsyncMock(return_value=_api_key_secret("test"))
+        await self.service._update_last_used("api-key-test")
+        self.v1.patch_namespaced_secret.assert_awaited_once()
+
+    async def test_cache_is_scoped_per_namespace(self):
+        with patch(
+            'ark_api.services.api_keys.get_context',
+            return_value={"namespace": "other-namespace", "cluster": "test"},
+        ):
+            other = APIKeyService()
+
+        await self.service._update_last_used("api-key-test")
+        await other._update_last_used("api-key-test")
+
+        self.assertEqual(self.v1.patch_namespaced_secret.await_count, 2)
 
 
 if __name__ == '__main__':

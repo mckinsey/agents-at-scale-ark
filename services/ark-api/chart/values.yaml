@@ -91,6 +91,8 @@ app:
       value: "7776000"
     - name: API_KEY_REAPER_INTERVAL_SECONDS
       value: "3600"
+    - name: API_KEY_LAST_USED_INTERVAL_SECONDS
+      value: "300"
     # MCP authorization endpoints. Leave ARK_API_PUBLIC_CALLBACK_URL unset to
     # disable the four /api/v1/mcp-servers/{name}/auth/* endpoints (they will
     # return 503). When set, the URL MUST be https unless the host is a
